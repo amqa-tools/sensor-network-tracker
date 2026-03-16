@@ -18,34 +18,27 @@ CREATE TABLE profiles (
     created_at timestamptz DEFAULT now()
 );
 
--- Auto-create profile on signup
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
+-- Function to check if email is allowed (called from frontend before signup)
+CREATE OR REPLACE FUNCTION public.is_email_allowed(check_email text)
+RETURNS boolean AS $$
+BEGIN
+    RETURN EXISTS (SELECT 1 FROM public.allowed_emails WHERE lower(email) = lower(check_email));
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant anon access so it can be called before login
+GRANT EXECUTE ON FUNCTION public.is_email_allowed(text) TO anon;
+GRANT SELECT ON public.allowed_emails TO postgres;
+
+-- Function to create/update profile (called after signup from frontend)
+CREATE OR REPLACE FUNCTION public.upsert_profile(user_id uuid, user_email text, user_name text)
+RETURNS void AS $$
 BEGIN
     INSERT INTO public.profiles (id, email, name)
-    VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)));
-    RETURN NEW;
+    VALUES (user_id, user_email, user_name)
+    ON CONFLICT (id) DO UPDATE SET name = user_name;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Block signups from emails not in allowed_emails
-CREATE OR REPLACE FUNCTION public.check_allowed_email()
-RETURNS trigger AS $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.allowed_emails WHERE lower(email) = lower(NEW.email)) THEN
-        RAISE EXCEPTION 'Email not authorized. Contact your administrator.';
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER check_email_before_signup
-    BEFORE INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.check_allowed_email();
 
 -- ===== COMMUNITIES =====
 CREATE TABLE communities (

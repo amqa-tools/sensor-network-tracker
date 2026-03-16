@@ -8,12 +8,27 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const db = {
     // --- Auth ---
     async signUp(email, password, name) {
+        // Check allowed list first
+        const { data: allowed, error: checkErr } = await supabase.rpc('is_email_allowed', { check_email: email });
+        if (checkErr) throw checkErr;
+        if (!allowed) throw new Error('Email not authorized. Contact your administrator.');
+
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: { data: { name } }
         });
         if (error) throw error;
+
+        // Create profile
+        if (data.user) {
+            await supabase.rpc('upsert_profile', {
+                user_id: data.user.id,
+                user_email: email,
+                user_name: name,
+            });
+        }
+
         return data;
     },
 
