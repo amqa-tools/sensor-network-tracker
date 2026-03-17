@@ -155,7 +155,7 @@ const db = {
     async getNotes() {
         const { data, error } = await supa
             .from('notes')
-            .select('*, note_tags(*)')
+            .select('*, note_tags(*), profiles(name)')
             .order('date', { ascending: false });
         if (error) throw error;
 
@@ -167,7 +167,8 @@ const db = {
                 type: note.type,
                 text: note.text,
                 additionalInfo: note.additional_info || '',
-                createdBy: note.created_by,
+                createdBy: note.profiles?.name || '',
+                createdById: note.created_by,
                 createdAt: note.created_at,
                 taggedSensors: tags.filter(t => t.tag_type === 'sensor').map(t => t.tag_id),
                 taggedCommunities: tags.filter(t => t.tag_type === 'community').map(t => t.tag_id),
@@ -182,7 +183,7 @@ const db = {
             type: note.type,
             text: note.text,
             additional_info: note.additionalInfo || '',
-            created_by: note.createdBy || null,
+            created_by: note.createdById || null,
         }).select();
         if (error) throw error;
 
@@ -206,7 +207,7 @@ const db = {
     async getComms() {
         const { data, error } = await supa
             .from('comms')
-            .select('*, comm_tags(*)')
+            .select('*, comm_tags(*), profiles(name)')
             .order('date', { ascending: false });
         if (error) throw error;
 
@@ -220,7 +221,8 @@ const db = {
                 text: comm.text,
                 subject: comm.subject || '',
                 fullBody: comm.full_body || '',
-                createdBy: comm.created_by,
+                createdBy: comm.profiles?.name || '',
+                createdById: comm.created_by,
                 createdAt: comm.created_at,
                 community: comm.community_id || '',
                 taggedContacts: tags.filter(t => t.tag_type === 'contact').map(t => t.tag_id),
@@ -236,7 +238,7 @@ const db = {
             text: comm.text,
             subject: comm.subject || '',
             full_body: comm.fullBody || '',
-            created_by: comm.createdBy || null,
+            created_by: comm.createdById || null,
             community_id: comm.community || null,
         }).select();
         if (error) throw error;

@@ -97,12 +97,21 @@ async function loadAllData() {
 
 // ===== PERSISTENCE LAYER =====
 // Fire-and-forget writes to Supabase. UI updates immediately from in-memory arrays.
-function persistSensor(s) { db.upsertSensor(s).catch(err => console.error('Save error:', err)); }
-function persistContact(c) { return db.upsertContact(c).catch(err => console.error('Save error:', err)); }
-function persistNote(n) { return db.insertNote(n).catch(err => console.error('Save error:', err)); }
-function persistComm(c) { return db.insertComm(c).catch(err => console.error('Save error:', err)); }
-function persistCommunityTags(id, tags) { db.setCommunityTags(id, tags).catch(err => console.error('Save error:', err)); }
-function persistCommunity(c) { db.insertCommunity(c).catch(err => console.error('Save error:', err)); }
+function handleSaveError(err) {
+    console.error('Save error:', err);
+    const msg = document.createElement('div');
+    msg.className = 'save-error-toast';
+    msg.textContent = 'Save failed — check your connection';
+    document.body.appendChild(msg);
+    setTimeout(() => msg.remove(), 4000);
+}
+
+function persistSensor(s) { db.upsertSensor(s).catch(handleSaveError); }
+function persistContact(c) { return db.upsertContact(c).catch(handleSaveError); }
+function persistNote(n) { return db.insertNote(n).catch(handleSaveError); }
+function persistComm(c) { return db.insertComm(c).catch(handleSaveError); }
+function persistCommunityTags(id, tags) { db.setCommunityTags(id, tags).catch(handleSaveError); }
+function persistCommunity(c) { db.insertCommunity(c).catch(handleSaveError); }
 
 // ===== UTILITIES =====
 function generateId(prefix) {
@@ -116,7 +125,8 @@ function createNote(type, text, tags, additionalInfo) {
         type,
         text,
         additionalInfo: additionalInfo || '',
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
+        createdById: currentUserId,
         createdAt: new Date().toISOString(),
         taggedSensors: tags?.sensors || [],
         taggedCommunities: tags?.communities || [],
@@ -1006,7 +1016,7 @@ function inlineSaveContact(el) {
             date: nowDatetime(),
             type: 'Info Edit',
             text: `${c.name} ${label.toLowerCase()} changed from "${oldVal || '(empty)'}" to "${newVal || '(empty)'}".`,
-            createdBy: getCurrentUserName(),
+            createdBy: getCurrentUserName(), createdById: currentUserId,
             taggedSensors: [],
             taggedCommunities: c.community ? [c.community] : [],
             taggedContacts: [contactId],
@@ -1166,7 +1176,7 @@ function buildAnnotationNote(annotation, additionalInfo, date) {
         type: noteType,
         text: noteText,
         additionalInfo: additionalInfo || '',
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
         taggedSensors: [annotation.sensorId],
         taggedCommunities: taggedCommunities,
         taggedContacts: additionalInfo ? parseMentionedContacts(additionalInfo) : [],
@@ -1239,7 +1249,7 @@ function saveStatusChange(e) {
         type: 'Status Change',
         text: noteText,
         additionalInfo: additionalInfo || '',
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
         taggedSensors: [sensorId],
         taggedCommunities: s.community ? [s.community] : [],
         taggedContacts: mentionedContacts,
@@ -1297,7 +1307,7 @@ function moveSensor(e) {
         type: 'Movement',
         text: noteText,
         additionalInfo: additionalInfo || '',
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
         taggedSensors: [sensorId],
         taggedCommunities: taggedCommunities,
         taggedContacts: mentionedContacts,
@@ -1866,7 +1876,7 @@ function saveContact(e) {
                 date: nowDatetime(),
                 type: 'Info Edit',
                 text: `${data.name} added as a contact for ${getCommunityName(data.community)}.`,
-                createdBy: getCurrentUserName(),
+                createdBy: getCurrentUserName(), createdById: currentUserId,
                 taggedSensors: [],
                 taggedCommunities: [data.community],
                 taggedContacts: [data.id],
@@ -1884,13 +1894,13 @@ function saveContact(e) {
         if (emailChanged) {
             const note = { id: generateId('n'), date: nowDatetime(), type: 'Info Edit',
                 text: `${data.name} email changed from "${oldEmail || '(empty)'}" to "${data.email || '(empty)'}".`,
-                createdBy: getCurrentUserName(), taggedSensors: [], taggedCommunities: data.community ? [data.community] : [], taggedContacts: [data.id] };
+                createdBy: getCurrentUserName(), createdById: currentUserId, taggedSensors: [], taggedCommunities: data.community ? [data.community] : [], taggedContacts: [data.id] };
             notes.push(note); persistNote(note);
         }
         if (phoneChanged) {
             const note = { id: generateId('n'), date: nowDatetime(), type: 'Info Edit',
                 text: `${data.name} phone changed from "${oldPhone || '(empty)'}" to "${data.phone || '(empty)'}".`,
-                createdBy: getCurrentUserName(), taggedSensors: [], taggedCommunities: data.community ? [data.community] : [], taggedContacts: [data.id] };
+                createdBy: getCurrentUserName(), createdById: currentUserId, taggedSensors: [], taggedCommunities: data.community ? [data.community] : [], taggedContacts: [data.id] };
             notes.push(note); persistNote(note);
         }
     }
@@ -1940,7 +1950,7 @@ function saveContactStatusNote() {
         type: 'Info Edit',
         text: noteText,
         additionalInfo: additionalInfo,
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
         taggedSensors: [],
         taggedCommunities: p.community ? [p.community] : [],
         taggedContacts: [p.contactId],
@@ -1968,7 +1978,7 @@ function skipContactStatusNote() {
         date: date,
         type: 'Info Edit',
         text: noteText,
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
         taggedSensors: [],
         taggedCommunities: p.community ? [p.community] : [],
         taggedContacts: [p.contactId],
@@ -2221,7 +2231,7 @@ function sendEmail() {
         subject: subject,
         fullBody: body,
         text: `[Email] Subject: ${subject}`,
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
         community: involvedCommunities[0] || '',
         taggedContacts: selectedContactIds,
         taggedCommunities: involvedCommunities,
@@ -2335,7 +2345,7 @@ function saveNote(e) {
         date: noteDate,
         type: type,
         text: text,
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
         createdAt: new Date().toISOString(),
         taggedSensors: sensorTags,
         taggedCommunities: communityTags,
@@ -2361,7 +2371,7 @@ function saveNote(e) {
                     date: noteDate,
                     type: 'Status Change',
                     text: `${s.id} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`,
-                    createdBy: getCurrentUserName(),
+                    createdBy: getCurrentUserName(), createdById: currentUserId,
                     taggedSensors: [s.id],
                     taggedCommunities: s.community ? [s.community] : [],
                     taggedContacts: [],
@@ -2406,7 +2416,7 @@ function saveComm(e) {
         type: 'Communication',
         commType: commType,
         text: `[${commType}] ${text}`,
-        createdBy: getCurrentUserName(),
+        createdBy: getCurrentUserName(), createdById: currentUserId,
         community: communityId,
         taggedContacts: taggedContacts,
         taggedCommunities: [communityId],
@@ -2763,7 +2773,7 @@ function saveCommunity(e) {
             date: nowDatetime(),
             type: 'Info Edit',
             text: `Sub-community "${name}" added under ${getCommunityName(parentId)}.`,
-            createdBy: getCurrentUserName(),
+            createdBy: getCurrentUserName(), createdById: currentUserId,
             taggedSensors: [],
             taggedCommunities: [parentId, id],
             taggedContacts: [],
@@ -2814,7 +2824,7 @@ function toggleCommunityTag(tag) {
             date: nowDatetime(),
             type: 'Info Edit',
             text: `Tag "${tag}" removed from ${community.name}.`,
-            createdBy: getCurrentUserName(),
+            createdBy: getCurrentUserName(), createdById: currentUserId,
             taggedSensors: [],
             taggedCommunities: [editingTagsCommunity],
             taggedContacts: [],
@@ -2830,7 +2840,7 @@ function toggleCommunityTag(tag) {
             date: nowDatetime(),
             type: 'Info Edit',
             text: `Tag "${tag}" added to ${community.name}.`,
-            createdBy: getCurrentUserName(),
+            createdBy: getCurrentUserName(), createdById: currentUserId,
             taggedSensors: [],
             taggedCommunities: [editingTagsCommunity],
             taggedContacts: [],
@@ -2865,7 +2875,7 @@ function addCustomTag() {
             date: nowDatetime(),
             type: 'Info Edit',
             text: `Tag "${tag}" added to ${community.name}.`,
-            createdBy: getCurrentUserName(),
+            createdBy: getCurrentUserName(), createdById: currentUserId,
             taggedSensors: [],
             taggedCommunities: [editingTagsCommunity],
             taggedContacts: [],
@@ -3499,7 +3509,7 @@ function executeBulkAction() {
             date: now,
             type: doMove ? 'Movement' : 'Status Change',
             text: noteText,
-            createdBy: getCurrentUserName(),
+            createdBy: getCurrentUserName(), createdById: currentUserId,
             taggedSensors: sensorIds,
             taggedCommunities: toCommunityId ? [toCommunityId] : [],
             taggedContacts: [],
@@ -3617,7 +3627,7 @@ function editCommunityName() {
             date: nowDatetime(),
             type: 'Info Edit',
             text: `Community renamed from "${oldName}" to "${c.name}".`,
-            createdBy: getCurrentUserName(),
+            createdBy: getCurrentUserName(), createdById: currentUserId,
             taggedSensors: [],
             taggedCommunities: [currentCommunity],
             taggedContacts: [],
