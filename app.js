@@ -2846,17 +2846,32 @@ async function renderAllowedUsers(currentEmail) {
     const { data, error } = await supa.from('allowed_emails').select('*').order('email');
     if (error) { console.error(error); return; }
 
-    const container = document.getElementById('settings-users-list');
-    container.innerHTML = (data || []).map(row => {
+    const active = (data || []).filter(r => r.status !== 'revoked');
+    const revoked = (data || []).filter(r => r.status === 'revoked');
+
+    document.getElementById('settings-active-users').innerHTML = active.map(row => {
         const isYou = row.email.toLowerCase() === currentEmail.toLowerCase();
         return `<div class="settings-user-row">
             <span>
                 <span class="settings-user-email">${row.email}</span>
                 ${isYou ? '<span class="settings-user-you">(you)</span>' : ''}
             </span>
-            ${!isYou ? `<button class="btn btn-sm btn-danger" onclick="removeAllowedEmail('${row.id}')">Remove</button>` : ''}
+            ${!isYou ? `<button class="btn btn-sm btn-danger" onclick="revokeUser('${row.id}')">Revoke Access</button>` : ''}
         </div>`;
-    }).join('');
+    }).join('') || '<p style="color:var(--slate-400);font-size:13px">No active users.</p>';
+
+    const revokedSection = document.getElementById('settings-revoked-section');
+    if (revoked.length > 0) {
+        revokedSection.style.display = '';
+        document.getElementById('settings-revoked-users').innerHTML = revoked.map(row => {
+            return `<div class="settings-user-row">
+                <span class="settings-user-email" style="color:var(--slate-400)">${row.email}</span>
+                <button class="btn btn-sm" onclick="reactivateUser('${row.id}')">Reactivate</button>
+            </div>`;
+        }).join('');
+    } else {
+        revokedSection.style.display = 'none';
+    }
 }
 
 async function addAllowedEmail() {
@@ -2864,10 +2879,15 @@ async function addAllowedEmail() {
     const email = input.value.trim().toLowerCase();
     if (!email) return;
 
-    const { error } = await supa.from('allowed_emails').insert({ email });
-    if (error) {
-        alert(error.message.includes('duplicate') ? 'That email is already added.' : error.message);
-        return;
+    const { data: existing } = await supa.from('allowed_emails').select('*').eq('email', email).single();
+    if (existing && existing.status === 'revoked') {
+        await supa.from('allowed_emails').update({ status: 'active' }).eq('id', existing.id);
+    } else {
+        const { error } = await supa.from('allowed_emails').insert({ email, status: 'active' });
+        if (error) {
+            alert(error.message.includes('duplicate') ? 'That email is already added.' : error.message);
+            return;
+        }
     }
 
     input.value = '';
@@ -2875,10 +2895,18 @@ async function addAllowedEmail() {
     await renderAllowedUsers(session?.user?.email || '');
 }
 
-async function removeAllowedEmail(id) {
-    if (!confirm('Remove this email? They will no longer be able to sign in.')) return;
+async function revokeUser(id) {
+    if (!confirm('Revoke access for this user? They will no longer be able to sign in. Their history will be preserved.')) return;
 
-    const { error } = await supa.from('allowed_emails').delete().eq('id', id);
+    const { error } = await supa.from('allowed_emails').update({ status: 'revoked' }).eq('id', id);
+    if (error) { alert(error.message); return; }
+
+    const session = await db.getSession();
+    await renderAllowedUsers(session?.user?.email || '');
+}
+
+async function reactivateUser(id) {
+    const { error } = await supa.from('allowed_emails').update({ status: 'active' }).eq('id', id);
     if (error) { alert(error.message); return; }
 
     const session = await db.getSession();
