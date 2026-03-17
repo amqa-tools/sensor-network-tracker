@@ -11,11 +11,11 @@
     <div id="login-screen" class="login-screen">
         <div class="login-card">
             <h2>ADEC Sensor Network Tracker</h2>
-            <p>Sign in with your @alaska.gov email</p>
+            <p>Sign in to continue</p>
             <div id="login-error" class="login-error"></div>
             <form id="login-form-section" onsubmit="handleSignIn(); return false;" autocomplete="on">
                 <div class="login-field">
-                    <input type="email" id="login-email" placeholder="you@alaska.gov" autocomplete="email" name="email">
+                    <input type="email" id="login-email" placeholder="Email" autocomplete="email" name="email">
                 </div>
                 <div class="login-field">
                     <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" name="password">
@@ -28,7 +28,7 @@
                     <input type="text" id="signup-name" placeholder="Your full name" autocomplete="name" name="name">
                 </div>
                 <div class="login-field">
-                    <input type="email" id="signup-email" placeholder="you@alaska.gov" autocomplete="email" name="email">
+                    <input type="email" id="signup-email" placeholder="Email" autocomplete="email" name="email">
                 </div>
                 <div class="login-field">
                     <input type="password" id="signup-password" placeholder="Create a password (min 6 characters)" autocomplete="new-password" name="password">
@@ -301,7 +301,7 @@
                     <p class="settings-description">Only these email addresses can create accounts and access the app.</p>
                     <div id="settings-users-list"></div>
                     <div class="settings-add-user">
-                        <input type="email" id="settings-add-email" placeholder="email@alaska.gov">
+                        <input type="email" id="settings-add-email" placeholder="Email address">
                         <button class="btn btn-primary" onclick="addAllowedEmail()">Add Email</button>
                     </div>
                 </div>
