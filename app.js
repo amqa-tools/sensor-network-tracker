@@ -1295,6 +1295,7 @@ function moveSensor(e) {
     if (!setupMode) { notes.push(note); persistNote(note); }
     closeModal('modal-move-sensor');
     renderSensors();
+    if (currentSensor === sensorId) showSensorView(sensorId);
     if (currentCommunity) showCommunityView(currentCommunity);
 }
 
@@ -1355,7 +1356,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
             <div class="info-item"><label>Community</label><p>${getCommunityName(s.community)} <a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move &rarr;</a></p></div>
             <div class="info-item"><label>Location</label><p class="hover-edit-field">${s.location ? s.location : '<span class="field-placeholder">Address or GPS coordinates</span>'} <span class="hover-edit-icon hover-edit-icon-always" onclick="inlineEditSensor('${s.id}', 'location')">&#9998;</span></p></div>
-            <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'} <a class="move-sensor-link" onclick="viewInstallHistory()">View history &rarr;</a></p></div>
+            <div class="info-item"><label>Install Date</label><p class="hover-edit-field">${s.dateInstalled || '—'} <span class="hover-edit-icon" onclick="inlineEditSensor('${s.id}', 'dateInstalled')">&#9998;</span> <a class="move-sensor-link" onclick="viewInstallHistory()">View history &rarr;</a></p></div>
             <div class="info-item"><label>Purchase Date</label><p class="hover-edit-field">${s.datePurchased || '—'} <span class="hover-edit-icon" onclick="inlineEditSensor('${s.id}', 'datePurchased')">&#9998;</span></p></div>
             <div class="info-item"><label>Collocation Dates</label><p class="hover-edit-field">${s.collocationDates || '—'} <span class="hover-edit-icon" onclick="inlineEditSensor('${s.id}', 'collocationDates')">&#9998;</span></p></div>
         `;
@@ -1378,7 +1379,7 @@ function inlineEditSensor(sensorId, field) {
     const s = sensors.find(x => x.id === sensorId);
     if (!s) return;
 
-    const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date', collocationDates: 'Collocation Dates' };
+    const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date', collocationDates: 'Collocation Dates', dateInstalled: 'Install Date' };
     const label = labels[field] || field;
     const oldVal = s[field] || '';
     const promptMsg = field === 'location' ? `Edit ${label} (enter an address or GPS coordinates):` : `Edit ${label}:`;
@@ -1595,8 +1596,18 @@ function showCommunityView(communityId) {
         </tbody></table></div>
     ` : '<div class="empty-state">No contacts for this community.</div>';
 
-    // History
-    const commNotes = notes.filter(n => n.taggedCommunities && n.taggedCommunities.includes(communityId));
+    // History — include notes tagged to this community, its children, or sensors in this community
+    const childIds = children.map(c => c.id);
+    const allCommunityIds = [communityId, ...childIds];
+    const sensorIdsInCommunity = sensors.filter(s => allCommunityIds.includes(s.community)).map(s => s.id);
+    const contactIdsInCommunity = contacts.filter(c => allCommunityIds.includes(c.community)).map(c => c.id);
+
+    const commNotes = notes.filter(n => {
+        if (n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id))) return true;
+        if (n.taggedSensors && n.taggedSensors.some(id => sensorIdsInCommunity.includes(id))) return true;
+        if (n.taggedContacts && n.taggedContacts.some(id => contactIdsInCommunity.includes(id))) return true;
+        return false;
+    });
     renderTimeline('community-history-timeline', commNotes);
 
     // Comms
@@ -1836,6 +1847,21 @@ function saveContact(e) {
     } else {
         contacts.push(data);
         trackRecent('contacts', data.id, 'edited');
+
+        // Log new contact added
+        if (!setupMode && data.community) {
+            const note = {
+                id: 'n' + Date.now() + 'nc',
+                date: nowDatetime(),
+                type: 'Info Edit',
+                text: `${data.name} added as a contact for ${getCommunityName(data.community)}.`,
+                createdBy: getCurrentUserName(),
+                taggedSensors: [],
+                taggedCommunities: [data.community],
+                taggedContacts: [data.id],
+            };
+            notes.push(note); persistNote(note);
+        }
     }
 
     persistContact(data);
@@ -2649,6 +2675,22 @@ function saveCommunity(e) {
     if (newCommunitySelectedTags.length > 0) {
         persistCommunityTags(id, newCommunitySelectedTags);
     }
+
+    // Log sub-community creation
+    if (!setupMode && parentId) {
+        const note = {
+            id: 'n' + Date.now() + 'sc',
+            date: nowDatetime(),
+            type: 'Info Edit',
+            text: `Sub-community "${name}" added under ${getCommunityName(parentId)}.`,
+            createdBy: getCurrentUserName(),
+            taggedSensors: [],
+            taggedCommunities: [parentId, id],
+            taggedContacts: [],
+        };
+        notes.push(note); persistNote(note);
+    }
+
     buildSidebar();
     closeModal('modal-add-community');
     renderCommunitiesList();
