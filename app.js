@@ -101,9 +101,9 @@ function handleSaveError(err) {
     console.error('Save error:', err);
     const msg = document.createElement('div');
     msg.className = 'save-error-toast';
-    msg.textContent = 'Save failed — check your connection';
+    msg.textContent = 'Save failed: ' + (err?.message || err || 'Unknown error');
     document.body.appendChild(msg);
-    setTimeout(() => msg.remove(), 4000);
+    setTimeout(() => msg.remove(), 6000);
 }
 
 function persistSensor(s) { db.upsertSensor(s).catch(handleSaveError); }
