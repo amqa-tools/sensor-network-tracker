@@ -313,7 +313,7 @@ async function handleSignUp() {
 
     try {
         await db.signUp(email, password, name);
-        showLoginError('');
+        hideLoginError();
         alert('Account created! Check your email to confirm, then sign in.');
         showSignInForm();
     } catch (err) {
@@ -347,13 +347,17 @@ async function enterApp() {
 
 // ===== INACTIVITY TIMER (1 hour) =====
 let inactivityTimeout = null;
+let inactivityListenersAdded = false;
 const INACTIVITY_LIMIT = 60 * 60 * 1000; // 1 hour in ms
 
 function startInactivityTimer() {
     resetInactivityTimer();
-    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(event => {
-        document.addEventListener(event, resetInactivityTimer, { passive: true });
-    });
+    if (!inactivityListenersAdded) {
+        ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(event => {
+            document.addEventListener(event, resetInactivityTimer, { passive: true });
+        });
+        inactivityListenersAdded = true;
+    }
 }
 
 function resetInactivityTimer() {
@@ -369,6 +373,9 @@ async function logoutUser() {
     await db.signOut();
     currentUser = null;
     currentUserId = null;
+    selectedSensors.clear();
+    viewHistory = [];
+    if (inactivityTimeout) clearTimeout(inactivityTimeout);
     showLoginScreen();
 }
 
@@ -2463,41 +2470,42 @@ function renderTimeline(containerId, items) {
 
 function editTimelineItem(id, isNote) {
     if (isNote) {
-        const note = notes.find(n => n.id === id);
-        if (!note) return;
-        const newText = prompt('Edit note text:', note.text);
-        if (newText === null || newText.trim() === note.text) return;
-        note.text = newText.trim();
-        supa.from('notes').update({ text: note.text }).eq('id', id).catch(err => console.error(err));
+        const idx = notes.findIndex(n => n.id === id);
+        if (idx < 0) return;
+        const newText = prompt('Edit note text:', notes[idx].text);
+        if (newText === null || newText.trim() === notes[idx].text) return;
+        notes[idx].text = newText.trim();
+        supa.from('notes').update({ text: notes[idx].text }).eq('id', id).catch(err => console.error('Edit note error:', err));
     } else {
-        const comm = comms.find(c => c.id === id);
-        if (!comm) return;
-        const newText = prompt('Edit communication text:', comm.text);
-        if (newText === null || newText.trim() === comm.text) return;
-        comm.text = newText.trim();
-        supa.from('comms').update({ text: comm.text }).eq('id', id).catch(err => console.error(err));
+        const idx = comms.findIndex(c => c.id === id);
+        if (idx < 0) return;
+        const newText = prompt('Edit communication text:', comms[idx].text);
+        if (newText === null || newText.trim() === comms[idx].text) return;
+        comms[idx].text = newText.trim();
+        supa.from('comms').update({ text: comms[idx].text }).eq('id', id).catch(err => console.error('Edit comm error:', err));
     }
-
-    if (currentSensor) showSensorView(currentSensor);
-    if (currentCommunity) showCommunityView(currentCommunity);
-    if (currentContact) showContactView(currentContact);
+    refreshCurrentView();
 }
 
 async function deleteTimelineItem(id, isNote) {
     if (!confirm('Are you sure? Only delete events that were created by accident.')) return;
-
-    if (isNote) {
-        notes = notes.filter(n => n.id !== id);
-        supa.from('note_tags').delete().eq('note_id', id).then(() => {
-            supa.from('notes').delete().eq('id', id);
-        });
-    } else {
-        comms = comms.filter(c => c.id !== id);
-        supa.from('comm_tags').delete().eq('comm_id', id).then(() => {
-            supa.from('comms').delete().eq('id', id);
-        });
+    try {
+        if (isNote) {
+            notes = notes.filter(n => n.id !== id);
+            await supa.from('note_tags').delete().eq('note_id', id);
+            await supa.from('notes').delete().eq('id', id);
+        } else {
+            comms = comms.filter(c => c.id !== id);
+            await supa.from('comm_tags').delete().eq('comm_id', id);
+            await supa.from('comms').delete().eq('id', id);
+        }
+    } catch (err) {
+        console.error('Delete error:', err);
     }
+    refreshCurrentView();
+}
 
+function refreshCurrentView() {
     if (currentSensor) showSensorView(currentSensor);
     if (currentCommunity) showCommunityView(currentCommunity);
     if (currentContact) showContactView(currentContact);
@@ -2555,6 +2563,7 @@ function nowDatetime() {
 
 function formatDate(dateStr) {
     if (!dateStr) return '';
+    if (typeof dateStr !== 'string') dateStr = String(dateStr);
     // Handle both "2026-03-14" and "2026-03-14T10:30" formats
     const hasTime = dateStr.includes('T') && dateStr.split('T')[1];
     let d;
