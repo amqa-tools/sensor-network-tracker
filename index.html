@@ -270,15 +270,9 @@
                         <button class="btn btn-primary" onclick="openAddNoteModal(currentSensor, 'sensor')">+ Add Note</button>
                         <select id="sensor-history-filter" onchange="filterSensorHistory()">
                             <option value="">All History</option>
-                            <option value="Info Edit">Info Edits</option>
-                            <option value="Status Change">Status Changes</option>
-                            <option value="Movement">Movements</option>
-                            <option value="Audit">Audits</option>
+                            <option value="_notes">Field Notes</option>
+                            <option value="_changes">Changes</option>
                             <option value="Communication">Communications</option>
-                            <option value="Installation">Installations</option>
-                            <option value="Maintenance">Maintenance</option>
-                            <option value="Issue">Issues</option>
-                            <option value="General">General</option>
                         </select>
                     </div>
                     <div id="sensor-history-timeline" class="timeline"></div>
@@ -519,10 +513,8 @@
                     <label>Note Type</label>
                     <select id="note-type-input">
                         <option value="General">General</option>
-                        <option value="Audit">Audit</option>
-                        <option value="Installation">Installation</option>
-                        <option value="Removal">Removal</option>
-                        <option value="Maintenance">Maintenance</option>
+                        <option value="Audit">Audit / Collocation</option>
+                        <option value="Field Work">Field Work</option>
                         <option value="Issue">Issue</option>
                     </select>
                 </div>

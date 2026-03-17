@@ -1,7 +1,7 @@
 /* =============================================
    ADEC SENSOR NETWORK TRACKER
-   Design: "Arctic Observatory"
-   Navy blue + gold + white
+   Design: Clean Professional
+   Navy + slate + white
    ============================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -29,12 +29,12 @@
     --navy-200: #b3d0f5;
     --navy-100: #dce9f8;
 
-    --gold-600: #b8860b;
-    --gold-500: #d4a017;
-    --gold-400: #e8b82f;
-    --gold-300: #f0cc5b;
-    --gold-200: #f5dfa0;
-    --gold-100: #faf0d4;
+    --gold-600: #475569;
+    --gold-500: #64748b;
+    --gold-400: #94a3b8;
+    --gold-300: #cbd5e1;
+    --gold-200: #e2e8f0;
+    --gold-100: #f1f5f9;
 
     --aurora-green: #22c55e;
     --aurora-blue: #38bdf8;
@@ -112,7 +112,7 @@ body {
     right: 0;
     width: 1px;
     height: 100%;
-    background: linear-gradient(180deg, var(--gold-500) 0%, transparent 40%, transparent 60%, var(--navy-500) 100%);
+    background: linear-gradient(180deg, var(--navy-400) 0%, transparent 40%, transparent 60%, var(--navy-600) 100%);
     opacity: 0.3;
 }
 
@@ -1155,7 +1155,7 @@ tr:last-child td {
 }
 
 .btn-primary:hover {
-    background: linear-gradient(135deg, var(--gold-400), var(--navy-500));
+    background: linear-gradient(135deg, var(--navy-400), var(--navy-600));
     box-shadow: 0 4px 12px rgba(30, 74, 140, 0.3);
     transform: translateY(-1px);
 }
@@ -1437,7 +1437,7 @@ tr:last-child td {
     left: 0;
     width: 3px;
     height: 100%;
-    background: linear-gradient(180deg, var(--gold-400), var(--navy-400));
+    background: linear-gradient(180deg, var(--navy-300), var(--navy-500));
     opacity: 0;
     transition: opacity 0.2s var(--ease-out);
 }
@@ -1541,22 +1541,21 @@ tr:last-child td {
 }
 
 .move-sensor-link {
-    display: inline-block;
-    margin-top: 6px;
+    display: inline;
     font-size: 11.5px;
     font-weight: 600;
     letter-spacing: 0.03em;
-    color: var(--gold-600);
+    color: var(--navy-500);
     cursor: pointer;
     text-decoration: none;
-    transition: all 0.2s var(--ease-out);
-    padding: 3px 0;
-    border-bottom: 1px solid transparent;
+    transition: all 0.15s ease;
+    margin-left: 8px;
 }
 
 .move-sensor-link:hover {
-    color: var(--gold-500);
-    border-bottom-color: var(--gold-400);
+    color: var(--navy-400);
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
 /* ===== FILES GRID ===== */

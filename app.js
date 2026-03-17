@@ -1314,7 +1314,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${s.type}</p></div>
             <div class="info-item"><label>SOA Tag ID</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'soaTagId')">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
-            <div class="info-item"><label>Community</label><p><span class="editable-field" onclick="openInlineCommunityChange('${s.id}')">${getCommunityName(s.community)}</span></p><a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move Sensor &rarr;</a></div>
+            <div class="info-item"><label>Community</label><p><span class="editable-field" onclick="openInlineCommunityChange('${s.id}')">${getCommunityName(s.community)}</span> <a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move &rarr;</a></p></div>
             <div class="info-item"><label>Location</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             <div class="info-item"><label>Collocation Dates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'collocationDates')">${s.collocationDates || '—'}</p></div>
@@ -2318,6 +2318,10 @@ function getTimelineTypeClass(type) {
         'Communication': 'type-comm',
         'Status Change': 'type-status',
         'Info Edit': 'type-edit',
+        'Field Work': 'type-audit',
+        'Installation': 'type-audit',
+        'Removal': 'type-movement',
+        'Maintenance': 'type-audit',
     };
     return map[type] || '';
 }
@@ -2685,13 +2689,20 @@ function getSelectedStatuses(containerId) {
     return Array.from(container.querySelectorAll('.status-toggle-option.active')).map(el => el.dataset.status);
 }
 
+const FILTER_GROUPS = {
+    '_notes': ['General', 'Audit', 'Field Work', 'Issue', 'Installation', 'Removal', 'Maintenance'],
+    '_changes': ['Info Edit', 'Status Change', 'Movement'],
+};
+
 function filterSensorHistory() {
     if (!currentSensor) return;
     const filterVal = document.getElementById('sensor-history-filter')?.value || '';
 
     let sensorNotes = notes.filter(n => n.taggedSensors && n.taggedSensors.includes(currentSensor));
 
-    if (filterVal) {
+    if (filterVal && FILTER_GROUPS[filterVal]) {
+        sensorNotes = sensorNotes.filter(n => FILTER_GROUPS[filterVal].includes(n.type));
+    } else if (filterVal) {
         sensorNotes = sensorNotes.filter(n => n.type === filterVal);
     }
 
