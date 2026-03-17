@@ -971,6 +971,7 @@ function inlineSaveSensor(el) {
 
     if (field === 'status') {
         s.status = Array.from(el.selectedOptions).map(o => o.value);
+        buildSensorSidebar();
     } else {
         s[field] = el.value.trim();
     }
@@ -1257,6 +1258,7 @@ function saveStatusChange(e) {
 
     if (!setupMode) { notes.push(note); persistNote(note); }
     closeModal('modal-status-change');
+    buildSensorSidebar();
     renderSensors();
     if (currentSensor === sensorId) showSensorView(sensorId);
     if (currentCommunity) showCommunityView(currentCommunity);
@@ -2516,6 +2518,7 @@ async function deleteTimelineItem(id, isNote) {
 }
 
 function refreshCurrentView() {
+    buildSensorSidebar();
     if (currentSensor) showSensorView(currentSensor);
     if (currentCommunity) showCommunityView(currentCommunity);
     if (currentContact) showContactView(currentContact);
@@ -3260,15 +3263,18 @@ async function disableMfa(factorId) {
 // ===== SENSOR TAGS & SIDEBAR =====
 const SENSOR_ISSUE_STATUSES = ['PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue', 'Needs Repair', 'Power Failure', 'Lost Connection'];
 
+function getIssueSensorCount() {
+    return sensors.filter(s => getStatusArray(s).some(st => SENSOR_ISSUE_STATUSES.includes(st))).length;
+}
+
 function getSensorTags() {
-    const tags = [];
-    const hasIssue = sensors.some(s => getStatusArray(s).some(st => SENSOR_ISSUE_STATUSES.includes(st)));
-    if (hasIssue) tags.push('Issue Sensors');
-    tags.push('Community Pod');
-    tags.push('Audit & Permanent Pods');
-    tags.push('Collocation/Health Check');
-    tags.push('Not Assigned');
-    return tags;
+    return [
+        { label: 'Issue Sensors', id: 'Issue Sensors', count: getIssueSensorCount() },
+        { label: 'Community Pod', id: 'Community Pod', count: sensors.filter(s => s.type === 'Community Pod').length },
+        { label: 'Audit & Permanent Pods', id: 'Audit & Permanent Pods', count: sensors.filter(s => s.type === 'Audit Pod' || s.type === 'Permanent Pod').length },
+        { label: 'Collocation/Health Check', id: 'Collocation/Health Check', count: sensors.filter(s => s.type === 'Collocation/Health Check').length },
+        { label: 'Not Assigned', id: 'Not Assigned', count: sensors.filter(s => s.type === 'Not Assigned').length },
+    ];
 }
 
 let sensorTagFilter = '';
@@ -3277,7 +3283,7 @@ function buildSensorSidebar() {
     const list = document.getElementById('sensor-tag-list');
     const tags = getSensorTags();
     list.innerHTML = tags.map(tag =>
-        `<li><a href="#" data-sensor-tag="${tag}" onclick="event.preventDefault(); filterSensorsByTag('${tag.replace(/'/g, "\\'")}')">${tag}</a></li>`
+        `<li><a href="#" data-sensor-tag="${tag.id}" onclick="event.preventDefault(); filterSensorsByTag('${tag.id.replace(/'/g, "\\'")}')">${tag.label} <span style="opacity:0.5">(${tag.count})</span></a></li>`
     ).join('');
 }
 
@@ -3520,6 +3526,7 @@ function executeBulkAction() {
     selectedSensors.clear();
     document.getElementById('select-all-sensors').checked = false;
     closeModal('modal-bulk-action');
+    buildSensorSidebar();
     renderSensors();
     updateBulkActionButton();
 }
