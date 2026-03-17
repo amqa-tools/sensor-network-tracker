@@ -1352,14 +1352,14 @@ function showSensorView(sensorId) {
         `;
     } else {
         document.getElementById('sensor-info-card').innerHTML = `
-            <div class="info-item"><label>Type</label><p class="hover-edit-field">${s.type} <span class="hover-edit-icon" onclick="inlineEditSensorType('${s.id}')">&#9998;</span></p></div>
-            <div class="info-item"><label>SOA Tag ID</label><p class="hover-edit-field">${s.soaTagId || '—'} <span class="hover-edit-icon" onclick="inlineEditSensor('${s.id}', 'soaTagId')">&#9998;</span></p></div>
+            <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${s.type}</p></div>
+            <div class="info-item"><label>SOA Tag ID</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'soaTagId')">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
             <div class="info-item"><label>Community</label><p>${getCommunityName(s.community)} <a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move &rarr;</a></p></div>
-            <div class="info-item"><label>Location</label><p class="hover-edit-field">${s.location ? s.location : '<span class="field-placeholder">Address or GPS coordinates</span>'} <span class="hover-edit-icon hover-edit-icon-always" onclick="inlineEditSensor('${s.id}', 'location')">&#9998;</span></p></div>
-            <div class="info-item"><label>Install Date</label><p class="hover-edit-field">${s.dateInstalled || '—'} <span class="hover-edit-icon" onclick="inlineEditSensor('${s.id}', 'dateInstalled')">&#9998;</span> <a class="move-sensor-link" onclick="viewInstallHistory()">View history &rarr;</a></p></div>
-            <div class="info-item"><label>Purchase Date</label><p class="hover-edit-field">${s.datePurchased || '—'} <span class="hover-edit-icon" onclick="inlineEditSensor('${s.id}', 'datePurchased')">&#9998;</span></p></div>
-            <div class="info-item"><label>Collocation Dates</label><p class="hover-edit-field">${s.collocationDates || '—'} <span class="hover-edit-icon" onclick="inlineEditSensor('${s.id}', 'collocationDates')">&#9998;</span></p></div>
+            <div class="info-item"><label>Location</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
+            <div class="info-item"><label>Install Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'dateInstalled')">${s.dateInstalled || '—'}</p> <a class="move-sensor-link" onclick="viewInstallHistory()">View history &rarr;</a></div>
+            <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
+            <div class="info-item"><label>Collocation Dates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'collocationDates')">${s.collocationDates || '—'}</p></div>
         `;
     }
 
@@ -2276,6 +2276,20 @@ function openAddNoteModal(contextId, contextType) {
         c => c.name
     );
 
+    // Show status change option only when on a sensor page
+    const statusGroup = document.getElementById('note-status-change-group');
+    const statusCheckbox = document.getElementById('note-change-status');
+    const statusList = document.getElementById('note-status-list');
+    if (contextType === 'sensor') {
+        statusGroup.style.display = '';
+        statusCheckbox.checked = false;
+        statusList.style.display = 'none';
+        const s = sensors.find(x => x.id === contextId);
+        renderStatusToggleList('note-status-list', s ? getStatusArray(s) : []);
+    } else {
+        statusGroup.style.display = 'none';
+    }
+
     openModal('modal-add-note');
 }
 
@@ -2312,12 +2326,41 @@ function saveNote(e) {
         type: type,
         text: text,
         createdBy: getCurrentUserName(),
+        createdAt: new Date().toISOString(),
         taggedSensors: sensorTags,
         taggedCommunities: communityTags,
         taggedContacts: contactTags,
     };
 
     notes.push(note); persistNote(note);
+
+    // Apply status change if checked
+    const contextType = document.getElementById('note-context-type').value;
+    const contextId = document.getElementById('note-context-id').value;
+    if (contextType === 'sensor' && document.getElementById('note-change-status').checked) {
+        const newStatuses = getSelectedStatuses('note-status-list');
+        const s = sensors.find(x => x.id === contextId);
+        if (s && newStatuses.length > 0) {
+            const oldStatuses = getStatusArray(s);
+            s.status = newStatuses;
+            persistSensor(s);
+
+            if (!setupMode) {
+                const statusNote = {
+                    id: 'n' + Date.now() + 'st',
+                    date: noteDate,
+                    type: 'Status Change',
+                    text: `${s.id} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`,
+                    createdBy: getCurrentUserName(),
+                    taggedSensors: [s.id],
+                    taggedCommunities: s.community ? [s.community] : [],
+                    taggedContacts: [],
+                };
+                notes.push(statusNote); persistNote(statusNote);
+            }
+        }
+    }
+
     closeModal('modal-add-note');
 
     if (currentCommunity) showCommunityView(currentCommunity);
@@ -2385,12 +2428,14 @@ function renderTimeline(containerId, items) {
             ? `<div class="timeline-additional-info"><em>${highlightMentions(item.additionalInfo)}</em></div>`
             : '';
 
+        const createdAt = item.createdAt || item.created_at || '';
         const attribution = item.createdBy
-            ? `<div class="timeline-attribution">Changed by ${item.createdBy}, ${formatDate(item.date)}</div>`
+            ? `<div class="timeline-attribution">Logged by ${item.createdBy}${createdAt ? ', ' + formatDate(createdAt) : ''}</div>`
             : '';
 
         const isNote = !item.commType;
         const actions = `<div class="timeline-actions" onclick="event.stopPropagation()">
+            <span class="timeline-action-btn" onclick="editTimelineItem('${item.id}', ${isNote})" title="Edit">&#9998;</span>
             <span class="timeline-action-btn" onclick="deleteTimelineItem('${item.id}', ${isNote})" title="Delete">&#128465;</span>
         </div>`;
 
@@ -2411,6 +2456,28 @@ function renderTimeline(containerId, items) {
             </div>
         `;
     }).join('');
+}
+
+function editTimelineItem(id, isNote) {
+    if (isNote) {
+        const note = notes.find(n => n.id === id);
+        if (!note) return;
+        const newText = prompt('Edit note text:', note.text);
+        if (newText === null || newText.trim() === note.text) return;
+        note.text = newText.trim();
+        supa.from('notes').update({ text: note.text }).eq('id', id).catch(err => console.error(err));
+    } else {
+        const comm = comms.find(c => c.id === id);
+        if (!comm) return;
+        const newText = prompt('Edit communication text:', comm.text);
+        if (newText === null || newText.trim() === comm.text) return;
+        comm.text = newText.trim();
+        supa.from('comms').update({ text: comm.text }).eq('id', id).catch(err => console.error(err));
+    }
+
+    if (currentSensor) showSensorView(currentSensor);
+    if (currentCommunity) showCommunityView(currentCommunity);
+    if (currentContact) showContactView(currentContact);
 }
 
 async function deleteTimelineItem(id, isNote) {
