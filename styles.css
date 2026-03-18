@@ -771,24 +771,9 @@ body {
     background: var(--slate-800);
 }
 
-.mobile-title {
-    display: none;
-}
 
 .dark-mode-btn {
-    background: var(--slate-900);
-    border: none;
-    color: var(--slate-400);
-    font-size: 16px;
-    cursor: pointer;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-md);
-    line-height: 1;
-}
-
-.dark-mode-btn:active {
-    background: var(--slate-800);
+    display: none;
 }
 
 .sidebar-overlay {
