@@ -61,7 +61,14 @@ async function loadAllData() {
         datePurchased: s.date_purchased || '',
         collocationDates: s.collocation_dates || '',
         dateInstalled: s.date_installed || '',
+        customFields: {},
     }));
+
+    // Load custom field values from localStorage
+    const savedCustomData = loadData('sensorCustomData', {});
+    sensors.forEach(s => {
+        if (savedCustomData[s.id]) s.customFields = savedCustomData[s.id];
+    });
 
     // Contacts — map DB columns to app format
     contacts = contactsData.map(c => ({
@@ -1418,6 +1425,8 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'} <a class="move-sensor-link" onclick="viewInstallHistory()">View history &rarr;</a></p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             <div class="info-item"><label>Collocation Dates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'collocationDates')">${s.collocationDates || '—'}</p></div>
+            ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
+            <div class="info-item"><button class="btn btn-sm" onclick="openAddFieldModal()" style="margin-top:18px">+ Add Field</button></div>
         `;
     }
 
@@ -3424,6 +3433,11 @@ document.addEventListener('click', (e) => {
 });
 
 // ===== EXPORT SPREADSHEET =====
+function localDate() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function exportSpreadsheet(headers, rows, filename) {
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
@@ -3432,24 +3446,83 @@ function exportSpreadsheet(headers, rows, filename) {
     XLSX.writeFile(wb, filename);
 }
 
-function exportSensors() {
-    const headers = ['Sensor ID', 'SOA Tag ID', 'Type', 'Status', 'Community', 'Location', 'Install Date', 'Purchase Date', 'Collocation Dates'];
-    const rows = sensors.sort((a, b) => a.id.localeCompare(b.id)).map(s => [
-        s.id, s.soaTagId || '', s.type, getStatusArray(s).join('; '),
-        getCommunityName(s.community), s.location || '', s.dateInstalled || '',
-        s.datePurchased || '', s.collocationDates || '',
-    ]);
-    exportSpreadsheet(headers, rows, `sensors_${new Date().toISOString().split('T')[0]}.xlsx`);
+const SENSOR_EXPORT_FIELDS = [
+    { key: 'id', label: 'Sensor ID', get: s => s.id },
+    { key: 'soaTagId', label: 'SOA Tag ID', get: s => s.soaTagId || '' },
+    { key: 'type', label: 'Type', get: s => s.type },
+    { key: 'status', label: 'Status', get: s => getStatusArray(s).join('; ') },
+    { key: 'community', label: 'Community', get: s => getCommunityName(s.community) },
+    { key: 'location', label: 'Location', get: s => s.location || '' },
+    { key: 'dateInstalled', label: 'Install Date', get: s => s.dateInstalled || '' },
+    { key: 'datePurchased', label: 'Purchase Date', get: s => s.datePurchased || '' },
+    { key: 'collocationDates', label: 'Collocation Dates', get: s => s.collocationDates || '' },
+];
+
+const CONTACT_EXPORT_FIELDS = [
+    { key: 'name', label: 'Name', get: c => c.name },
+    { key: 'role', label: 'Role', get: c => c.role || '' },
+    { key: 'community', label: 'Community', get: c => getCommunityName(c.community) },
+    { key: 'org', label: 'Organization', get: c => c.org || '' },
+    { key: 'email', label: 'Email', get: c => c.email || '' },
+    { key: 'phone', label: 'Phone', get: c => c.phone || '' },
+    { key: 'active', label: 'Status', get: c => c.active === false ? 'Inactive' : 'Active' },
+];
+
+function openExportModal(type) {
+    const fields = type === 'sensors' ? SENSOR_EXPORT_FIELDS : CONTACT_EXPORT_FIELDS;
+    const container = document.getElementById('export-fields-list');
+    container.innerHTML = fields.map(f =>
+        `<label class="export-field-option"><input type="checkbox" checked data-key="${f.key}"> ${f.label}</label>`
+    ).join('');
+    document.getElementById('export-type').value = type;
+
+    // Add custom fields
+    const customFields = loadData('customSensorFields', []);
+    if (type === 'sensors' && customFields.length > 0) {
+        customFields.forEach(cf => {
+            container.innerHTML += `<label class="export-field-option"><input type="checkbox" checked data-key="custom_${cf.key}"> ${cf.label}</label>`;
+        });
+    }
+
+    openModal('modal-export');
 }
 
-function exportContacts() {
-    const headers = ['Name', 'Role', 'Community', 'Organization', 'Email', 'Phone', 'Status'];
-    const rows = contacts.sort((a, b) => a.name.localeCompare(b.name)).map(c => [
-        c.name, c.role || '', getCommunityName(c.community), c.org || '',
-        c.email || '', c.phone || '', c.active === false ? 'Inactive' : 'Active',
-    ]);
-    exportSpreadsheet(headers, rows, `contacts_${new Date().toISOString().split('T')[0]}.xlsx`);
+function executeExport() {
+    const type = document.getElementById('export-type').value;
+    const checkboxes = document.querySelectorAll('#export-fields-list input[type="checkbox"]:checked');
+    const selectedKeys = Array.from(checkboxes).map(cb => cb.dataset.key);
+
+    const fields = type === 'sensors' ? SENSOR_EXPORT_FIELDS : CONTACT_EXPORT_FIELDS;
+    const customFields = loadData('customSensorFields', []);
+    const data = type === 'sensors' ? [...sensors].sort((a, b) => a.id.localeCompare(b.id)) : [...contacts].sort((a, b) => a.name.localeCompare(b.name));
+
+    const headers = [];
+    const getters = [];
+
+    selectedKeys.forEach(key => {
+        if (key.startsWith('custom_')) {
+            const cfKey = key.replace('custom_', '');
+            const cf = customFields.find(f => f.key === cfKey);
+            if (cf) {
+                headers.push(cf.label);
+                getters.push(item => (item.customFields || {})[cfKey] || '');
+            }
+        } else {
+            const field = fields.find(f => f.key === key);
+            if (field) {
+                headers.push(field.label);
+                getters.push(field.get);
+            }
+        }
+    });
+
+    const rows = data.map(item => getters.map(get => get(item)));
+    exportSpreadsheet(headers, rows, `${type}_${localDate()}.xlsx`);
+    closeModal('modal-export');
 }
+
+function exportSensors() { openExportModal('sensors'); }
+function exportContacts() { openExportModal('contacts'); }
 
 // ===== BULK ACTIONS =====
 let selectedSensors = new Set();
@@ -3735,6 +3808,79 @@ function addNewCommunityCustomTag() {
     if (!newCommunitySelectedTags.includes(tag)) newCommunitySelectedTags.push(tag);
     input.value = '';
     renderNewCommunityTags();
+}
+
+// ===== CUSTOM SENSOR FIELDS =====
+let customSensorFields = loadData('customSensorFields', []);
+
+function openAddFieldModal() {
+    const name = prompt('Enter the new field name (e.g. "Serial Number", "Firmware Version"):');
+    if (!name || !name.trim()) return;
+
+    const key = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (customSensorFields.find(f => f.key === key)) {
+        alert('A field with that name already exists.');
+        return;
+    }
+
+    customSensorFields.push({ key, label: name.trim() });
+    saveData('customSensorFields', customSensorFields);
+
+    // Ask user if they want to fill in values now
+    if (confirm(`Field "${name.trim()}" added. Would you like to go through each sensor and fill in this field now?`)) {
+        fillCustomFieldWizard(key, name.trim(), 0);
+    } else {
+        if (currentSensor) showSensorView(currentSensor);
+    }
+}
+
+function fillCustomFieldWizard(fieldKey, fieldLabel, index) {
+    if (index >= sensors.length) {
+        alert(`Done! "${fieldLabel}" has been filled in for all sensors.`);
+        if (currentSensor) showSensorView(currentSensor);
+        return;
+    }
+
+    const s = sensors[index];
+    const val = prompt(`${s.id} — Enter ${fieldLabel} (${index + 1} of ${sensors.length}, leave blank to skip):`);
+
+    if (val === null) {
+        // User hit Cancel — stop wizard
+        if (currentSensor) showSensorView(currentSensor);
+        return;
+    }
+
+    if (val.trim()) {
+        if (!s.customFields) s.customFields = {};
+        s.customFields[fieldKey] = val.trim();
+        saveCustomFieldData();
+    }
+
+    fillCustomFieldWizard(fieldKey, fieldLabel, index + 1);
+}
+
+function editCustomField(sensorId, fieldKey) {
+    const s = sensors.find(x => x.id === sensorId);
+    if (!s) return;
+    const cf = customSensorFields.find(f => f.key === fieldKey);
+    const currentVal = (s.customFields || {})[fieldKey] || '';
+    const newVal = prompt(`Edit ${cf?.label || fieldKey}:`, currentVal);
+    if (newVal === null) return;
+
+    if (!s.customFields) s.customFields = {};
+    s.customFields[fieldKey] = newVal.trim();
+    saveCustomFieldData();
+    if (currentSensor) showSensorView(currentSensor);
+}
+
+function saveCustomFieldData() {
+    const data = {};
+    sensors.forEach(s => {
+        if (s.customFields && Object.keys(s.customFields).length > 0) {
+            data[s.id] = s.customFields;
+        }
+    });
+    saveData('sensorCustomData', data);
 }
 
 // ===== DARK MODE =====

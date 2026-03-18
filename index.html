@@ -787,6 +787,25 @@
         </div>
     </div>
 
+    <!-- Export Modal -->
+    <div id="modal-export" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2>Export Spreadsheet</h2>
+                <button class="modal-close" onclick="closeModal('modal-export')">&times;</button>
+            </div>
+            <input type="hidden" id="export-type">
+            <div class="form-group" style="margin-top:16px">
+                <label>Select fields to include:</label>
+                <div id="export-fields-list" class="export-fields-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('modal-export')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="executeExport()">Download</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Bulk Action Modal -->
     <div id="modal-bulk-action" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content">

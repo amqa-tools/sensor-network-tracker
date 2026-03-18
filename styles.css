@@ -2672,6 +2672,30 @@ tr:last-child td {
     opacity: 0.7;
 }
 
+/* ===== EXPORT FIELD SELECTION ===== */
+.export-fields-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.export-field-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    color: var(--slate-700);
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.export-field-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--navy-600);
+}
+
 /* ===== SAVE ERROR TOAST ===== */
 .save-error-toast {
     position: fixed;
