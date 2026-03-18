@@ -683,7 +683,6 @@ function renderDashboard() {
     const onlineCount = sensors.filter(s => getStatusArray(s).includes('Online')).length;
     const issueCount = getIssueSensorCount();
     const communityCount = COMMUNITIES.filter(c => !isChildCommunity(c.id) && !isCommunityDeactivated(c.id)).length;
-    const contactCount = contacts.filter(c => c.active !== false).length;
 
     document.getElementById('dashboard-summary').innerHTML = `
         <div class="dash-stat" onclick="showView('all-sensors')">
@@ -701,10 +700,6 @@ function renderDashboard() {
         <div class="dash-stat" onclick="showView('communities')">
             <div class="dash-stat-value">${communityCount}</div>
             <div class="dash-stat-label">Communities</div>
-        </div>
-        <div class="dash-stat" onclick="showView('contacts')">
-            <div class="dash-stat-value">${contactCount}</div>
-            <div class="dash-stat-label">Active Contacts</div>
         </div>
     `;
 }
@@ -3968,15 +3963,6 @@ async function importSensors(event) {
         alert('Import failed: ' + err.message);
         console.error('Import error:', err);
     }
-}
-
-// ===== PRINT =====
-function printSensorReport() {
-    window.print();
-}
-
-function printContactReport() {
-    window.print();
 }
 
 // ===== INIT =====

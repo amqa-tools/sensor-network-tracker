@@ -147,7 +147,6 @@
                     <button class="btn btn-primary" onclick="openAddSensorModal()">+ Add Sensor</button>
                     <button class="btn" onclick="exportSensors()">Export</button>
                     <label class="btn" style="cursor:pointer">Import <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importSensors(event)"></label>
-                    <button class="btn" onclick="printSensorReport()">Print</button>
                     <button class="btn btn-primary" id="bulk-action-btn" style="display:none" onclick="openBulkActionModal()">Bulk Action (<span id="bulk-count">0</span>)</button>
                     <button class="btn" id="bulk-clear-btn" style="display:none" onclick="clearSensorSelection()">Clear Selection</button>
                 </div>
@@ -270,7 +269,6 @@
                     <button class="btn btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
                     <button class="btn btn-primary" onclick="openEmailModal()">&#9993; Email</button>
                     <button class="btn" onclick="exportContacts()">Export</button>
-                    <button class="btn" onclick="printContactReport()">Print</button>
                 </div>
                 <div class="filter-bar">
                     <input type="text" id="contact-search" placeholder="Search contacts..." oninput="renderContacts()">
