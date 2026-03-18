@@ -904,7 +904,9 @@ function getStatusBadgeClass(status) {
         'Lost Connection': 'badge-issue-red',
         'Quant Ticket in Progress': 'badge-service-quant',
     };
-    return map[status] || 'badge-offline';
+    if (map[status]) return map[status];
+    if (status?.startsWith('Audit: ')) return 'badge-auditing';
+    return 'badge-offline';
 }
 
 const SENSOR_TYPES = ['Community Pod', 'Permanent Pod', 'Audit Pod', 'Collocation/Health Check', 'Not Assigned'];
@@ -4564,20 +4566,32 @@ function advanceAuditStatus(auditId) {
     if (newStatus === 'Complete' && !audit.actualEnd) { audit.actualEnd = localDate(); updates.actualEnd = audit.actualEnd; }
     persistAuditUpdate(auditId, updates);
 
-    // Update sensor statuses
-    if (newStatus === 'In Progress') {
-        [{ id: audit.auditPodId, add: 'Auditing a Community' }, { id: audit.communityPodId, add: 'Collocation' }].forEach(({ id, add }) => {
-            const s = sensors.find(x => x.id === id);
-            if (s) { const cur = getStatusArray(s).filter(st => st !== add); s.status = [...cur, add]; persistSensor(s); }
-        });
-        buildSensorSidebar();
-    } else if (newStatus === 'Complete') {
-        [{ id: audit.auditPodId, remove: 'Auditing a Community' }, { id: audit.communityPodId, remove: 'Collocation' }].forEach(({ id, remove }) => {
-            const s = sensors.find(x => x.id === id);
-            if (s) { s.status = getStatusArray(s).filter(st => st !== remove); if (s.status.length === 0) s.status = ['Online']; persistSensor(s); }
-        });
-        buildSensorSidebar();
+    // Update sensor statuses — community pod shows current audit step, audit pod shows "Auditing a Community"
+    const auditStatusPrefix = 'Audit: ';
+    const communityPod = sensors.find(x => x.id === audit.communityPodId);
+    const auditPod = sensors.find(x => x.id === audit.auditPodId);
+
+    if (communityPod) {
+        // Remove any previous audit status
+        const cleaned = getStatusArray(communityPod).filter(st => !st.startsWith(auditStatusPrefix));
+        if (newStatus !== 'Audit Complete') {
+            communityPod.status = [...cleaned, auditStatusPrefix + newStatus];
+        } else {
+            communityPod.status = cleaned.length > 0 ? cleaned : ['Online'];
+        }
+        persistSensor(communityPod);
     }
+
+    if (auditPod) {
+        const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
+        if (newStatus === 'In Progress' || newStatus === 'Complete') {
+            auditPod.status = [...cleaned, 'Auditing a Community'];
+        } else if (newStatus === 'Analysis Pending' || newStatus === 'Audit Complete') {
+            auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
+        }
+        persistSensor(auditPod);
+    }
+    buildSensorSidebar();
 
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
     createNote('Audit', `Audit advanced: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
@@ -4592,10 +4606,36 @@ function revertAuditStatus(auditId) {
     const idx = AUDIT_STATUSES.indexOf(audit.status);
     if (idx <= 0) return;
     const oldStatus = audit.status;
-    audit.status = AUDIT_STATUSES[idx - 1];
-    persistAuditUpdate(auditId, { status: audit.status });
+    const newStatus = AUDIT_STATUSES[idx - 1];
+    audit.status = newStatus;
+    persistAuditUpdate(auditId, { status: newStatus });
+
+    // Update sensor statuses to match reverted step
+    const auditStatusPrefix = 'Audit: ';
+    const communityPod = sensors.find(x => x.id === audit.communityPodId);
+    const auditPod = sensors.find(x => x.id === audit.auditPodId);
+    if (communityPod) {
+        const cleaned = getStatusArray(communityPod).filter(st => !st.startsWith(auditStatusPrefix));
+        if (newStatus === 'Scheduled') {
+            communityPod.status = cleaned.length > 0 ? cleaned : ['Online'];
+        } else {
+            communityPod.status = [...cleaned, auditStatusPrefix + newStatus];
+        }
+        persistSensor(communityPod);
+    }
+    if (auditPod) {
+        const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
+        if (newStatus === 'In Progress' || newStatus === 'Complete') {
+            auditPod.status = [...cleaned, 'Auditing a Community'];
+        } else {
+            auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
+        }
+        persistSensor(auditPod);
+    }
+    buildSensorSidebar();
+
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
-    createNote('Audit', `Audit reverted: "${oldStatus}" \u2192 "${audit.status}" for ${communityName}.`, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
+    createNote('Audit', `Audit reverted: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
     openAuditDetail(auditId);
     updateSidebarAuditCount();
     if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
