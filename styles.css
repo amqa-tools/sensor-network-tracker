@@ -1932,7 +1932,7 @@ tr:last-child td {
 }
 
 .dqo-summary-table th {
-    text-align: left;
+    text-align: right;
     padding: 10px 12px;
     font-size: 11px;
     font-weight: 600;
@@ -1941,6 +1941,26 @@ tr:last-child td {
     color: var(--slate-400);
     border-bottom: 2px solid var(--slate-100);
     white-space: nowrap;
+}
+
+.dqo-summary-table th:first-child { text-align: left; }
+.dqo-summary-table th:last-child { text-align: center; }
+
+.dqo-thresh {
+    display: block;
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--slate-300);
+    margin-top: 2px;
+}
+
+.dqo-summary-table sub {
+    font-size: 0.85em;
+    vertical-align: baseline;
+    position: relative;
+    top: 0.3em;
 }
 
 .dqo-summary-table td {
