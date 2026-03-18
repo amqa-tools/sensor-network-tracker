@@ -819,12 +819,15 @@ body {
         left: -280px;
         top: 0;
         bottom: 0;
+        width: 272px;
+        min-width: 0;
         z-index: 100;
         transition: left 0.3s var(--ease-out);
     }
     #sidebar.mobile-open { left: 0; }
     .sidebar-overlay.visible { display: block; }
-    #main-wrapper { width: 100%; }
+    #app { flex-direction: column; }
+    #main-wrapper { width: 100%; min-width: 0; }
     #main-content { padding: 16px; }
     .view-header { flex-direction: column; align-items: flex-start; gap: 8px; }
     .global-search-bar { padding: 8px 16px; }
@@ -832,6 +835,9 @@ body {
     .community-detail-toolbar { flex-wrap: wrap; }
     .analysis-chart-grid { grid-template-columns: 1fr; }
     .ticket-detail-grid { grid-template-columns: 1fr; }
+    .modal-content { max-width: 95%; }
+    .modal-content.modal-lg, .modal-content.modal-xl { max-width: 95%; }
+    .open-tabs-bar { display: none; }
 }
 
 .map-container {
