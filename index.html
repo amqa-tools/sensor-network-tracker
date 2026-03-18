@@ -146,7 +146,7 @@
                     <h1>All Sensors</h1>
                     <button class="btn btn-primary" onclick="openAddSensorModal()">+ Add Sensor</button>
                     <button class="btn" onclick="exportSensors()">Export</button>
-                    <label class="btn" style="cursor:pointer">Import <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importSensors(event)"></label>
+                    <label class="import-link">Import Data <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importSensors(event)"></label>
                     <button class="btn btn-primary" id="bulk-action-btn" style="display:none" onclick="openBulkActionModal()">Bulk Action (<span id="bulk-count">0</span>)</button>
                     <button class="btn" id="bulk-clear-btn" style="display:none" onclick="clearSensorSelection()">Clear Selection</button>
                 </div>

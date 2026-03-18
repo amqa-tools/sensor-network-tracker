@@ -2670,6 +2670,21 @@ tr:last-child td {
     opacity: 0.7;
 }
 
+/* ===== IMPORT LINK ===== */
+.import-link {
+    font-size: 12px;
+    color: var(--slate-400);
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.import-link:hover {
+    color: var(--navy-600);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 /* ===== CUSTOM FIELD DELETE ===== */
 .delete-field-btn {
     font-size: 14px;
