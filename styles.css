@@ -2672,6 +2672,24 @@ tr:last-child td {
     opacity: 0.7;
 }
 
+/* ===== CUSTOM FIELD DELETE ===== */
+.delete-field-btn {
+    font-size: 14px;
+    color: var(--slate-400);
+    cursor: pointer;
+    margin-left: 4px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+th:hover .delete-field-btn {
+    opacity: 1;
+}
+
+.delete-field-btn:hover {
+    color: var(--aurora-rose);
+}
+
 /* ===== EXPORT FIELD SELECTION ===== */
 .export-fields-list {
     display: flex;

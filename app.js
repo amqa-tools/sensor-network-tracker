@@ -893,6 +893,43 @@ function getCommunityName(id) {
     return c ? c.name : id || '—';
 }
 
+function renderSensorTableHeader() {
+    const cfHeaders = customSensorFields.map(cf =>
+        `<th>${cf.label} <span class="delete-field-btn" onclick="event.stopPropagation(); deleteCustomField('${cf.key}')" title="Delete field">&times;</span></th>`
+    ).join('');
+    document.getElementById('sensors-table-header').innerHTML = `
+        <th style="width:30px"><input type="checkbox" id="select-all-sensors" onchange="toggleAllSensorCheckboxes(this.checked)" aria-label="Select all sensors"></th>
+        <th class="sortable-th" onclick="sortSensorsBy('id')">Sensor ID</th>
+        <th class="sortable-th" onclick="sortSensorsBy('soaTagId')">SOA Tag ID</th>
+        <th class="sortable-th" onclick="sortSensorsBy('status')">Status</th>
+        <th class="sortable-th" onclick="sortSensorsBy('community')">Community</th>
+        <th class="sortable-th" onclick="sortSensorsBy('location')">Location</th>
+        <th class="sortable-th" onclick="sortSensorsBy('dateInstalled')">Install Date</th>
+        <th class="sortable-th" onclick="sortSensorsBy('datePurchased')">Purchase Date</th>
+        <th>Collocation Dates</th>
+        ${cfHeaders}
+        <th>Actions <button class="btn btn-sm" onclick="event.stopPropagation(); openAddFieldModal()" style="margin-left:4px;padding:2px 6px;font-size:10px">+ Field</button></th>
+    `;
+}
+
+function deleteCustomField(fieldKey) {
+    const cf = customSensorFields.find(f => f.key === fieldKey);
+    if (!cf) return;
+    if (!confirm(`Permanently delete the "${cf.label}" field? This will remove this field and all its data from every sensor. This cannot be undone.`)) return;
+
+    customSensorFields = customSensorFields.filter(f => f.key !== fieldKey);
+    saveData('customSensorFields', customSensorFields);
+
+    sensors.forEach(s => {
+        if (s.customFields) delete s.customFields[fieldKey];
+    });
+    saveCustomFieldData();
+
+    renderSensorTableHeader();
+    renderSensors();
+    if (currentSensor) showSensorView(currentSensor);
+}
+
 function renderSensors() {
     const search = (document.getElementById('sensor-search')?.value || '').toLowerCase();
     const statusFilter = document.getElementById('sensor-status-filter')?.value || '';
@@ -958,11 +995,12 @@ function renderSensors() {
                 <td>${s.dateInstalled || '—'}</td>
                 <td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="datePurchased" value="${s.datePurchased || ''}" onblur="inlineSaveSensor(this)"></td>
                 <td><input class="inline-edit-input" data-sensor="${s.id}" data-field="collocationDates" value="${s.collocationDates || ''}" placeholder="e.g. Mar 5-13" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
+                ${customSensorFields.map(cf => `<td><input class="inline-edit-input" value="${(s.customFields || {})[cf.key] || ''}" placeholder="${cf.label}" onblur="editCustomFieldInline('${s.id}', '${cf.key}', this.value)" onkeydown="if(event.key==='Enter')this.blur()"></td>`).join('')}
                 <td>
                     <button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button>
                 </td>
             </tr>`;
-        }).join('') || '<tr><td colspan="10" class="empty-state">No sensors found.</td></tr>';
+        }).join('') || `<tr><td colspan="${10 + customSensorFields.length}" class="empty-state">No sensors found.</td></tr>`;
 
         // Attach change listener for multi-select status fields
         document.querySelectorAll('.inline-edit-status').forEach(sel => {
@@ -980,13 +1018,16 @@ function renderSensors() {
                 <td>${s.dateInstalled || '—'}</td>
                 <td>${s.datePurchased || '—'}</td>
                 <td>${s.collocationDates || '—'}</td>
+                ${customSensorFields.map(cf => `<td>${(s.customFields || {})[cf.key] || '—'}</td>`).join('')}
                 <td>
                     <button class="btn btn-sm" onclick="openEditSensorModal('${s.id}')">Edit</button>
                     <button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button>
                 </td>
             </tr>
-        `).join('') || '<tr><td colspan="10" class="empty-state">No sensors found.</td></tr>';
+        `).join('') || `<tr><td colspan="${10 + customSensorFields.length}" class="empty-state">No sensors found.</td></tr>`;
     }
+
+    renderSensorTableHeader();
 }
 
 function inlineSaveSensor(el) {
@@ -3866,6 +3907,14 @@ function editCustomField(sensorId, fieldKey) {
     s.customFields[fieldKey] = newVal.trim();
     saveCustomFieldData();
     if (currentSensor) showSensorView(currentSensor);
+}
+
+function editCustomFieldInline(sensorId, fieldKey, value) {
+    const s = sensors.find(x => x.id === sensorId);
+    if (!s) return;
+    if (!s.customFields) s.customFields = {};
+    s.customFields[fieldKey] = value.trim();
+    saveCustomFieldData();
 }
 
 function saveCustomFieldData() {

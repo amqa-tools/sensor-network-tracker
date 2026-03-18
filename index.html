@@ -171,17 +171,8 @@
                 <div class="table-container">
                     <table id="sensors-table">
                         <thead>
-                            <tr>
-                                <th style="width:30px"><input type="checkbox" id="select-all-sensors" onchange="toggleAllSensorCheckboxes(this.checked)" aria-label="Select all sensors"></th>
-                                <th class="sortable-th" onclick="sortSensorsBy('id')">Sensor ID</th>
-                                <th class="sortable-th" onclick="sortSensorsBy('soaTagId')">SOA Tag ID</th>
-                                <th class="sortable-th" onclick="sortSensorsBy('status')">Status</th>
-                                <th class="sortable-th" onclick="sortSensorsBy('community')">Community</th>
-                                <th class="sortable-th" onclick="sortSensorsBy('location')">Location</th>
-                                <th class="sortable-th" onclick="sortSensorsBy('dateInstalled')">Install Date</th>
-                                <th class="sortable-th" onclick="sortSensorsBy('datePurchased')">Purchase Date</th>
-                                <th>Collocation Dates</th>
-                                <th>Actions</th>
+                            <tr id="sensors-table-header">
+                                <!-- Populated by JS -->
                             </tr>
                         </thead>
                         <tbody id="sensors-tbody"></tbody>
