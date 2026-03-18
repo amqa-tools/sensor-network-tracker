@@ -4119,11 +4119,20 @@ function renderServiceView() {
     }).join('');
 }
 
-function renderTicketCard(ticket) {
+const TICKET_STATUS_LABELS = {
+    'Ticket Opened': 'Opened', 'RMA Assigned': 'RMA', 'Shipped to Quant': 'Shipped',
+    'At Quant': 'At Quant', 'Shipped from Quant': 'Returning', 'Received': 'Received', 'Closed': 'Closed'
+};
+
+function renderTicketProgress(ticket) {
     const statusIndex = TICKET_STATUSES.indexOf(ticket.status);
-    const progress = TICKET_STATUSES.slice(0, -1).map((_, i) =>
-        `<div class="ticket-progress-step ${i < statusIndex ? 'completed' : i === statusIndex ? 'current' : ''}"></div>`
-    ).join('');
+    return TICKET_STATUSES.slice(0, -1).map((st, i) => {
+        const state = i < statusIndex ? 'completed' : i === statusIndex ? 'current' : 'pending';
+        return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${TICKET_STATUS_LABELS[st]}</div></div>`;
+    }).join('');
+}
+
+function renderTicketCard(ticket) {
     return `<div class="service-ticket-card ticket-type-${ticket.ticketType}" onclick="openTicketDetail('${ticket.id}')">
         <div style="display:flex;justify-content:space-between;align-items:center">
             <span class="ticket-sensor-id">${ticket.sensorId}</span>
@@ -4136,7 +4145,7 @@ function renderTicketCard(ticket) {
             ${ticket.fedexTrackingFrom ? `<span>From Quant: ${escapeHtml(ticket.fedexTrackingFrom)}</span>` : ''}
             <span>${new Date(ticket.createdAt).toLocaleDateString()}</span>
         </div>
-        <div class="ticket-progress">${progress}</div>
+        <div class="ticket-steps">${renderTicketProgress(ticket)}</div>
     </div>`;
 }
 
@@ -4162,9 +4171,14 @@ function openTicketDetail(ticketId) {
             <div class="ticket-field full-width"><label>QuantAQ Notes</label>${isOpen ? `<textarea class="ticket-edit-input" rows="3" placeholder="Notes from QuantAQ..." onblur="saveTicketField('${ticket.id}','quantNotes',this.value)">${escapeHtml(ticket.quantNotes)}</textarea>` : `<p>${escapeHtml(ticket.quantNotes) || '—'}</p>`}</div>
             <div class="ticket-field full-width"><label>Work Completed</label>${isOpen ? `<textarea class="ticket-edit-input" rows="3" placeholder="Describe work done..." onblur="saveTicketField('${ticket.id}','workCompleted',this.value)">${escapeHtml(ticket.workCompleted)}</textarea>` : `<p>${escapeHtml(ticket.workCompleted) || '—'}</p>`}</div>
         </div>
+        <div class="ticket-detail-status full-width" style="padding:0 28px 16px">
+            <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;display:block">Ticket Progress</label>
+            <div class="ticket-steps ticket-steps-detail">${renderTicketProgress(ticket)}</div>
+        </div>
         <div class="ticket-detail-actions">
+            <button class="btn" onclick="closeModal('modal-service-ticket')">Done</button>
             ${isOpen && nextStatus ? `<button class="btn btn-primary" onclick="advanceTicketStatus('${ticket.id}')">Advance to: ${nextStatus}</button>` : ''}
-            ${isOpen ? `<button class="btn btn-danger" onclick="openCloseTicketModal('${ticket.id}')">Close Ticket</button>` : ''}
+            ${isOpen ? `<button class="btn btn-danger" onclick="openCloseTicketModal('${ticket.id}')">Close Out Ticket</button>` : ''}
         </div>`;
     openModal('modal-service-ticket');
 }
