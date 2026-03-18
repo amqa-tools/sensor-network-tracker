@@ -132,7 +132,7 @@
                 <div class="view-header">
                     <h1>All Sensors</h1>
                     <button class="btn btn-primary" onclick="openAddSensorModal()">+ Add Sensor</button>
-                    <button class="btn" onclick="exportSensorsCSV()">Export Spreadsheet</button>
+                    <button class="btn" onclick="exportSensors()">Export Spreadsheet</button>
                     <button class="btn btn-primary" id="bulk-action-btn" style="display:none" onclick="openBulkActionModal()">Bulk Action (<span id="bulk-count">0</span>)</button>
                     <button class="btn" id="bulk-clear-btn" style="display:none" onclick="clearSensorSelection()">Clear Selection</button>
                 </div>
@@ -254,7 +254,7 @@
                     <h1>All Contacts</h1>
                     <button class="btn btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
                     <button class="btn btn-primary" onclick="openEmailModal()">&#9993; Email</button>
-                    <button class="btn" onclick="exportContactsCSV()">Export Spreadsheet</button>
+                    <button class="btn" onclick="exportContacts()">Export Spreadsheet</button>
                 </div>
                 <div class="filter-bar">
                     <input type="text" id="contact-search" placeholder="Search contacts..." oninput="renderContacts()">

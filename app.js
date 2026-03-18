@@ -936,7 +936,7 @@ function renderSensors() {
                     <button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button>
                 </td>
             </tr>`;
-        }).join('') || '<tr><td colspan="9" class="empty-state">No sensors found.</td></tr>';
+        }).join('') || '<tr><td colspan="10" class="empty-state">No sensors found.</td></tr>';
 
         // Attach change listener for multi-select status fields
         document.querySelectorAll('.inline-edit-status').forEach(sel => {
@@ -3396,7 +3396,7 @@ function exportSpreadsheet(headers, rows, filename) {
     XLSX.writeFile(wb, filename);
 }
 
-function exportSensorsCSV() {
+function exportSensors() {
     const headers = ['Sensor ID', 'SOA Tag ID', 'Type', 'Status', 'Community', 'Location', 'Install Date', 'Purchase Date', 'Collocation Dates'];
     const rows = sensors.sort((a, b) => a.id.localeCompare(b.id)).map(s => [
         s.id, s.soaTagId || '', s.type, getStatusArray(s).join('; '),
@@ -3406,7 +3406,7 @@ function exportSensorsCSV() {
     exportSpreadsheet(headers, rows, `sensors_${new Date().toISOString().split('T')[0]}.xlsx`);
 }
 
-function exportContactsCSV() {
+function exportContacts() {
     const headers = ['Name', 'Role', 'Community', 'Organization', 'Email', 'Phone', 'Status'];
     const rows = contacts.sort((a, b) => a.name.localeCompare(b.name)).map(c => [
         c.name, c.role || '', getCommunityName(c.community), c.org || '',
@@ -3492,9 +3492,11 @@ function executeBulkAction() {
         if (newStatuses.length === 0) { alert('Select at least one status.'); return; }
     }
 
+    const sourceCommunities = new Set();
     sensorIds.forEach(id => {
         const s = sensors.find(x => x.id === id);
         if (!s) return;
+        if (doMove && s.community) sourceCommunities.add(s.community);
         if (doMove) {
             s.community = toCommunityId;
             s.dateInstalled = now.split('T')[0];
@@ -3506,10 +3508,12 @@ function executeBulkAction() {
     });
 
     if (!setupMode) {
-        let parts = [];
+        const parts = [];
         if (doMove) parts.push(`moved to ${toName}`);
         if (doStatus) parts.push(`status set to ${newStatuses.join(', ')}`);
         const noteText = `Bulk action: ${sensorList} ${parts.join(' and ')}.${userNotes ? ' ' + userNotes : ''}`;
+        const taggedComms = [...sourceCommunities];
+        if (toCommunityId && !taggedComms.includes(toCommunityId)) taggedComms.push(toCommunityId);
         const note = {
             id: generateId('n'),
             date: now,
@@ -3517,7 +3521,7 @@ function executeBulkAction() {
             text: noteText,
             createdBy: getCurrentUserName(), createdById: currentUserId,
             taggedSensors: sensorIds,
-            taggedCommunities: toCommunityId ? [toCommunityId] : [],
+            taggedCommunities: taggedComms,
             taggedContacts: [],
         };
         notes.push(note); persistNote(note);
