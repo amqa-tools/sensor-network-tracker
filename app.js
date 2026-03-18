@@ -4352,8 +4352,8 @@ function confirmCloseTicket() {
 }
 
 // ===== AUDITS =====
-const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Complete', 'Analysis Pending', 'Verified'];
-const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Complete': 'as-complete', 'Analysis Pending': 'as-analysis', 'Verified': 'as-verified' };
+const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Complete', 'Analysis Pending', 'Audit Complete'];
+const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Complete': 'as-complete', 'Analysis Pending': 'as-analysis', 'Audit Complete': 'as-verified' };
 const AUDIT_PARAMETERS = [
     { key: 'pm25', label: 'PM\u2082.\u2085', unit: '\u00B5g/m\u00B3' },
     { key: 'pm10', label: 'PM\u2081\u2080', unit: '\u00B5g/m\u00B3' },
@@ -4491,7 +4491,7 @@ function openAuditDetail(auditId) {
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
     const idx = AUDIT_STATUSES.indexOf(audit.status);
     const nextStatus = idx < AUDIT_STATUSES.length - 1 ? AUDIT_STATUSES[idx + 1] : null;
-    const isEditable = audit.status !== 'Verified';
+    const isEditable = audit.status !== 'Audit Complete';
     const progress = AUDIT_STATUSES.map((st, i) => {
         const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
         return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
