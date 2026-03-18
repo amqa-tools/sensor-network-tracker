@@ -295,6 +295,55 @@ const db = {
         return data?.signedUrl || '';
     },
 
+    // --- Audits ---
+    async getAudits() {
+        const { data, error } = await supa.from('audits').select('*, profiles(name)').order('scheduled_start', { ascending: false });
+        if (error) throw error;
+        return (data || []).map(a => ({
+            id: a.id, auditPodId: a.audit_pod_id, communityPodId: a.community_pod_id,
+            communityId: a.community_id, status: a.status,
+            scheduledStart: a.scheduled_start, scheduledEnd: a.scheduled_end,
+            actualStart: a.actual_start, actualEnd: a.actual_end,
+            conductedBy: a.conducted_by || '', notes: a.notes || '',
+            analysisResults: a.analysis_results || {},
+            createdBy: a.profiles?.name || '', createdById: a.created_by,
+            createdAt: a.created_at, updatedAt: a.updated_at,
+        }));
+    },
+
+    async insertAudit(audit) {
+        const { data, error } = await supa.from('audits').insert({
+            audit_pod_id: audit.auditPodId, community_pod_id: audit.communityPodId,
+            community_id: audit.communityId, status: audit.status || 'Scheduled',
+            scheduled_start: audit.scheduledStart || null, scheduled_end: audit.scheduledEnd || null,
+            actual_start: audit.actualStart || null, actual_end: audit.actualEnd || null,
+            conducted_by: audit.conductedBy || '', notes: audit.notes || '',
+            analysis_results: audit.analysisResults || {}, created_by: audit.createdById || null,
+        }).select('*, profiles(name)');
+        if (error) throw error;
+        const a = data[0];
+        return {
+            id: a.id, auditPodId: a.audit_pod_id, communityPodId: a.community_pod_id,
+            communityId: a.community_id, status: a.status,
+            scheduledStart: a.scheduled_start, scheduledEnd: a.scheduled_end,
+            actualStart: a.actual_start, actualEnd: a.actual_end,
+            conductedBy: a.conducted_by || '', notes: a.notes || '',
+            analysisResults: a.analysis_results || {},
+            createdBy: a.profiles?.name || '', createdById: a.created_by,
+            createdAt: a.created_at, updatedAt: a.updated_at,
+        };
+    },
+
+    async updateAudit(id, updates) {
+        const row = { updated_at: new Date().toISOString() };
+        const map = { status: 'status', scheduledStart: 'scheduled_start', scheduledEnd: 'scheduled_end',
+            actualStart: 'actual_start', actualEnd: 'actual_end', conductedBy: 'conducted_by',
+            notes: 'notes', analysisResults: 'analysis_results' };
+        for (const [k, v] of Object.entries(updates)) { if (map[k]) row[map[k]] = v; }
+        const { error } = await supa.from('audits').update(row).eq('id', id);
+        if (error) throw error;
+    },
+
     // --- Service Tickets ---
     async getServiceTickets() {
         const { data, error } = await supa.from('service_tickets').select('*, profiles(name)').order('created_at', { ascending: false });

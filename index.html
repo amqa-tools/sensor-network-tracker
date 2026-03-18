@@ -90,6 +90,9 @@
                     </a>
                     <ul class="community-list" id="sensor-tag-list"></ul>
                     <a href="#" class="sidebar-sub-item" data-view="service" onclick="event.preventDefault(); showView('service')">
+                    <a href="#" class="sidebar-sub-item" onclick="event.preventDefault(); showView('audits')">
+                        &#128269; Audits <span style="opacity:0.5" id="sidebar-audit-count"></span>
+                    </a>
                         &#9888; Quant Service Tickets <span style="opacity:0.5" id="sidebar-service-count"></span>
                     </a>
                 </li>
@@ -200,6 +203,29 @@
                     </label>
                 </div>
                 <div id="service-pipeline" class="service-pipeline"></div>
+            </div>
+
+            <!-- Audits View -->
+            <div id="view-audits" class="view">
+                <div class="view-header">
+                    <h1>Community Audits</h1>
+                    <button class="btn btn-primary" onclick="openNewAuditModal()">+ Schedule Audit</button>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+                    <select id="audit-status-filter" onchange="renderAuditsView()" style="padding:6px 10px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-sans)">
+                        <option value="">All Statuses</option>
+                        <option value="Scheduled">Scheduled</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Complete">Complete</option>
+                        <option value="Analysis Pending">Analysis Pending</option>
+                        <option value="Verified">Verified</option>
+                    </select>
+                    <label style="font-size:13px;color:var(--slate-500);display:flex;align-items:center;gap:6px">
+                        <input type="checkbox" id="audit-show-unaudited" onchange="renderAuditsView()"> Show Unaudited Communities
+                    </label>
+                </div>
+                <div id="audit-pipeline" class="audit-pipeline"></div>
+                <div id="audit-unaudited" style="display:none"></div>
             </div>
 
             <!-- All Communities View -->
@@ -883,6 +909,41 @@
             <div class="modal-footer">
                 <button type="button" class="btn" onclick="closeModal('modal-type-change')">Cancel</button>
             </div>
+        </div>
+    </div>
+
+    <!-- New Audit Modal -->
+    <div id="modal-new-audit" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Schedule Audit</h2>
+                <button class="modal-close" onclick="closeModal('modal-new-audit')">&times;</button>
+            </div>
+            <form onsubmit="saveNewAudit(event)">
+                <div class="form-group"><label>Audit Pod</label><select id="audit-pod-input" required></select></div>
+                <div class="form-group"><label>Community</label><select id="audit-community-input" required onchange="updateAuditCommunityPods()"></select></div>
+                <div class="form-group"><label>Community Pod (being audited)</label><select id="audit-community-pod-input" required></select></div>
+                <div class="form-group"><label>Scheduled Start</label><input type="date" id="audit-start-input" required></div>
+                <div class="form-group"><label>Scheduled End</label><input type="date" id="audit-end-input" required></div>
+                <div class="form-group"><label>Install Team</label><input type="text" id="audit-install-team-input" placeholder="Names of who will install the audit pod"></div>
+                <div class="form-group"><label>Takedown Team</label><input type="text" id="audit-takedown-team-input" placeholder="Names of who will remove it (can fill in later)"></div>
+                <div class="form-group"><label>Notes</label><textarea id="audit-notes-input" rows="3" placeholder="Audit notes..."></textarea></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('modal-new-audit')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Schedule Audit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Audit Detail Modal -->
+    <div id="modal-audit-detail" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2 id="audit-detail-modal-title">Audit Detail</h2>
+                <button class="modal-close" onclick="closeModal('modal-audit-detail')">&times;</button>
+            </div>
+            <div id="audit-detail-modal-body"></div>
         </div>
     </div>
 

@@ -10,6 +10,7 @@ let comms = [];
 let communityFiles = {};
 let communityTags = {};
 let serviceTickets = [];
+let audits = [];
 let communityParents = {}; // childId -> parentId
 
 function loadData(key, fallback) {
@@ -34,6 +35,7 @@ async function loadAllData() {
         db.getComms(),
         db.getCommunityFiles(),
         db.getServiceTickets(),
+        db.getAudits(),
     ]);
     const getValue = (i) => results[i].status === 'fulfilled' ? results[i].value : [];
     const communitiesData = getValue(0);
@@ -44,6 +46,7 @@ async function loadAllData() {
     const commsData = getValue(5);
     const filesData = getValue(6);
     const ticketsData = getValue(7);
+    const auditsData = getValue(8);
     results.forEach((r, i) => { if (r.status === 'rejected') console.warn('Data load warning:', r.reason); });
 
     // Communities
@@ -115,6 +118,7 @@ async function loadAllData() {
 
     // Service tickets
     serviceTickets = ticketsData;
+    audits = auditsData;
 }
 
 // ===== PERSISTENCE LAYER =====
@@ -135,6 +139,7 @@ function persistComm(c) { return db.insertComm(c).catch(handleSaveError); }
 function persistCommunityTags(id, tags) { db.setCommunityTags(id, tags).catch(handleSaveError); }
 function persistCommunity(c) { db.insertCommunity(c).catch(handleSaveError); }
 function persistServiceTicketUpdate(id, updates) { db.updateServiceTicket(id, updates).catch(handleSaveError); }
+function persistAuditUpdate(id, updates) { db.updateAudit(id, updates).catch(handleSaveError); }
 
 // ===== UTILITIES =====
 function generateId(prefix) {
@@ -379,6 +384,7 @@ async function enterApp() {
     buildSensorSidebar();
     renderPinnedSidebar();
     updateSidebarServiceCount();
+    updateSidebarAuditCount();
     restoreLastView();
     startInactivityTimer();
     } catch (err) {
@@ -704,6 +710,7 @@ function showView(viewName) {
     if (viewName === 'communities') renderCommunitiesList();
     if (viewName === 'settings') renderSettings();
     if (viewName === 'service') renderServiceView();
+    if (viewName === 'audits') renderAuditsView();
 
     saveLastView('view', viewName);
 }
@@ -735,6 +742,10 @@ function renderDashboard() {
         <div class="dash-stat" onclick="showView('service')">
             <div class="dash-stat-value">${getActiveTicketCount()}</div>
             <div class="dash-stat-label">Service Tickets</div>
+        </div>
+        <div class="dash-stat" onclick="showView('audits')">
+            <div class="dash-stat-value">${audits.filter(a => a.status === 'Scheduled' || a.status === 'In Progress').length}</div>
+            <div class="dash-stat-label">Active Audits</div>
         </div>
     `;
 }
@@ -4314,6 +4325,260 @@ function confirmCloseTicket() {
     updateSidebarServiceCount();
     renderServiceView();
     if (currentSensor === ticket.sensorId) showSensorView(ticket.sensorId);
+}
+
+// ===== AUDITS =====
+const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Complete', 'Analysis Pending', 'Verified'];
+const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Complete': 'as-complete', 'Analysis Pending': 'as-analysis', 'Verified': 'as-verified' };
+const AUDIT_PARAMETERS = [
+    { key: 'pm25', label: 'PM\u2082.\u2085', unit: '\u00B5g/m\u00B3' },
+    { key: 'pm10', label: 'PM\u2081\u2080', unit: '\u00B5g/m\u00B3' },
+    { key: 'co', label: 'CO', unit: 'ppb' },
+    { key: 'no', label: 'NO', unit: 'ppb' },
+    { key: 'no2', label: 'NO\u2082', unit: 'ppb' },
+    { key: 'o3', label: 'O\u2083', unit: 'ppb' },
+];
+
+const NON_AUDITABLE_COMMUNITIES = ['anchorage', 'fairbanks', 'juneau', 'anc-lab', 'anc-garden', 'fbx-lab', 'fbx-ncore', 'jnu-lab', 'jnu-floyd-dryden'];
+
+function getAuditableCommunities() {
+    return COMMUNITIES.filter(c => !NON_AUDITABLE_COMMUNITIES.includes(c.id) && !isCommunityDeactivated(c.id));
+}
+
+function getUnauditedCommunities() {
+    const auditedIds = new Set(audits.map(a => a.communityId));
+    return getAuditableCommunities().filter(c => !auditedIds.has(c.id));
+}
+
+function updateSidebarAuditCount() {
+    const el = document.getElementById('sidebar-audit-count');
+    if (!el) return;
+    const count = audits.filter(a => a.status === 'Scheduled' || a.status === 'In Progress').length;
+    el.textContent = `(${count})`;
+}
+
+function renderAuditsView() {
+    updateSidebarAuditCount();
+    const statusFilter = document.getElementById('audit-status-filter')?.value || '';
+    const showUnaudited = document.getElementById('audit-show-unaudited')?.checked || false;
+    let filtered = [...audits];
+    if (statusFilter) filtered = filtered.filter(a => a.status === statusFilter);
+
+    const pipeline = document.getElementById('audit-pipeline');
+    const statusesToShow = statusFilter ? [statusFilter] : AUDIT_STATUSES;
+    pipeline.innerHTML = statusesToShow.map(status => {
+        const items = filtered.filter(a => a.status === status);
+        return `<div class="audit-pipeline-column">
+            <div class="audit-pipeline-column-header"><h3>${status}</h3><span class="audit-pipeline-count">${items.length}</span></div>
+            ${items.length === 0 ? '<p style="font-size:13px;color:var(--slate-400)">No audits</p>' : items.map(renderAuditCard).join('')}
+        </div>`;
+    }).join('');
+
+    const unauditedDiv = document.getElementById('audit-unaudited');
+    if (showUnaudited) {
+        const unaudited = getUnauditedCommunities();
+        unauditedDiv.style.display = '';
+        unauditedDiv.innerHTML = `<h3 style="margin-top:24px;font-size:14px;color:var(--slate-600)">Communities Not Yet Audited (${unaudited.length})</h3>
+            <div class="audit-unaudited-grid">${unaudited.map(c => `<div class="audit-unaudited-card" onclick="openNewAuditModal('${c.id}')">
+                <span>${escapeHtml(c.name)}</span><span class="btn btn-sm" style="font-size:11px">Schedule</span>
+            </div>`).join('')}</div>`;
+    } else { unauditedDiv.style.display = 'none'; }
+}
+
+function renderAuditCard(audit) {
+    const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
+    const dateRange = audit.scheduledStart ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString()} - ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString()}` : '—';
+    const progress = AUDIT_STATUSES.map((st, i) => {
+        const idx = AUDIT_STATUSES.indexOf(audit.status);
+        const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
+        return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
+    }).join('');
+    return `<div class="audit-card" onclick="openAuditDetail('${audit.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="audit-community-name">${escapeHtml(communityName)}</span>
+            <span class="audit-status-badge ${AUDIT_STATUS_CSS[audit.status]}">${audit.status}</span>
+        </div>
+        <div class="audit-card-sensors">
+            <span class="ticket-sensor-id">${audit.auditPodId}</span>
+            <span style="color:var(--slate-400);font-size:11px">auditing</span>
+            <span class="ticket-sensor-id">${audit.communityPodId}</span>
+        </div>
+        <div class="ticket-meta">
+            <span>${dateRange}</span>
+            ${audit.conductedBy ? `<span>${escapeHtml(audit.conductedBy)}</span>` : ''}
+        </div>
+        <div class="ticket-steps">${progress}</div>
+    </div>`;
+}
+
+function openNewAuditModal(preselectedCommunityId) {
+    const auditPods = sensors.filter(s => s.type === 'Audit Pod').sort((a, b) => a.id.localeCompare(b.id));
+    document.getElementById('audit-pod-input').innerHTML = '<option value="">— Select Audit Pod —</option>' + auditPods.map(s => `<option value="${s.id}">${s.id}</option>`).join('');
+    const auditable = getAuditableCommunities().sort((a, b) => a.name.localeCompare(b.name));
+    document.getElementById('audit-community-input').innerHTML = '<option value="">— Select Community —</option>' + auditable.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    document.getElementById('audit-community-pod-input').innerHTML = '<option value="">— Select community first —</option>';
+    document.getElementById('audit-start-input').value = '';
+    document.getElementById('audit-end-input').value = '';
+    document.getElementById('audit-install-team-input').value = '';
+    document.getElementById('audit-takedown-team-input').value = '';
+    document.getElementById('audit-notes-input').value = '';
+    if (preselectedCommunityId) { document.getElementById('audit-community-input').value = preselectedCommunityId; updateAuditCommunityPods(); }
+    openModal('modal-new-audit');
+}
+
+function updateAuditCommunityPods() {
+    const communityId = document.getElementById('audit-community-input').value;
+    const podSelect = document.getElementById('audit-community-pod-input');
+    if (!communityId) { podSelect.innerHTML = '<option value="">— Select community first —</option>'; return; }
+    const pods = sensors.filter(s => s.community === communityId && s.type !== 'Audit Pod').sort((a, b) => a.id.localeCompare(b.id));
+    podSelect.innerHTML = '<option value="">— Select Pod —</option>' + pods.map(s => `<option value="${s.id}">${s.id} (${s.type})</option>`).join('');
+}
+
+async function saveNewAudit(event) {
+    event.preventDefault();
+    const auditPodId = document.getElementById('audit-pod-input').value;
+    const communityId = document.getElementById('audit-community-input').value;
+    const communityPodId = document.getElementById('audit-community-pod-input').value;
+    const scheduledStart = document.getElementById('audit-start-input').value;
+    const scheduledEnd = document.getElementById('audit-end-input').value;
+    const installTeam = document.getElementById('audit-install-team-input').value.trim();
+    const takedownTeam = document.getElementById('audit-takedown-team-input').value.trim();
+    const notes = document.getElementById('audit-notes-input').value.trim();
+    if (!auditPodId || !communityId || !communityPodId || !scheduledStart || !scheduledEnd) return;
+
+    const conductedBy = [installTeam, takedownTeam].filter(Boolean).join(' / ');
+    const audit = { auditPodId, communityPodId, communityId, status: 'Scheduled', scheduledStart, scheduledEnd,
+        actualStart: null, actualEnd: null, conductedBy, notes, analysisResults: {},
+        createdBy: getCurrentUserName(), createdById: currentUserId };
+    try { const saved = await db.insertAudit(audit); audits.unshift(saved); }
+    catch (err) { handleSaveError(err); audit.id = generateId('aud'); audits.unshift(audit); }
+
+    const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
+    createNote('Audit', `Audit scheduled: ${auditPodId} auditing ${communityPodId} at ${communityName} (${scheduledStart} to ${scheduledEnd}).`, {
+        sensors: [auditPodId, communityPodId], communities: [communityId] });
+    closeModal('modal-new-audit');
+    updateSidebarAuditCount();
+    if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
+}
+
+function openAuditDetail(auditId) {
+    const audit = audits.find(a => a.id === auditId);
+    if (!audit) return;
+    const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
+    const idx = AUDIT_STATUSES.indexOf(audit.status);
+    const nextStatus = idx < AUDIT_STATUSES.length - 1 ? AUDIT_STATUSES[idx + 1] : null;
+    const isEditable = audit.status !== 'Verified';
+    const progress = AUDIT_STATUSES.map((st, i) => {
+        const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
+        return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
+    }).join('');
+
+    const analysisHtml = Object.keys(audit.analysisResults || {}).length > 0
+        ? `<table class="analysis-results-table"><thead><tr><th>Parameter</th><th>R\u00B2</th><th>Slope</th><th>Intercept</th><th>Result</th></tr></thead><tbody>
+            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; return `<tr><td>${p.label} (${p.unit})</td><td>${r.r2 ?? '—'}</td><td>${r.slope ?? '—'}</td><td>${r.intercept ?? '—'}</td><td>${r.pass ? '<span style="color:var(--aurora-green);font-weight:600">PASS</span>' : '<span style="color:var(--aurora-rose);font-weight:600">FAIL</span>'}</td></tr>`; }).join('')}
+           </tbody></table>`
+        : '<p style="font-size:13px;color:var(--slate-400)">No analysis results yet.</p>';
+
+    document.getElementById('audit-detail-modal-title').textContent = `Audit: ${communityName}`;
+    document.getElementById('audit-detail-modal-body').innerHTML = `
+        <div class="ticket-detail-grid">
+            <div class="ticket-field"><label>Community</label><p><a href="#" onclick="closeModal('modal-audit-detail'); showCommunity('${audit.communityId}'); return false;" style="color:var(--navy-500)">${escapeHtml(communityName)}</a></p></div>
+            <div class="ticket-field"><label>Status</label><p><span class="audit-status-badge ${AUDIT_STATUS_CSS[audit.status]}">${audit.status}</span></p></div>
+            <div class="ticket-field"><label>Audit Pod</label><p style="font-family:var(--font-mono);font-size:13px"><a href="#" onclick="closeModal('modal-audit-detail'); showSensorDetail('${audit.auditPodId}'); return false;" style="color:var(--navy-500)">${audit.auditPodId}</a></p></div>
+            <div class="ticket-field"><label>Community Pod</label><p style="font-family:var(--font-mono);font-size:13px"><a href="#" onclick="closeModal('modal-audit-detail'); showSensorDetail('${audit.communityPodId}'); return false;" style="color:var(--navy-500)">${audit.communityPodId}</a></p></div>
+            <div class="ticket-field"><label>Scheduled Start</label>${isEditable ? `<input type="date" class="ticket-edit-input" value="${audit.scheduledStart || ''}" onblur="saveAuditField('${audit.id}','scheduledStart',this.value)">` : `<p>${audit.scheduledStart || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Scheduled End</label>${isEditable ? `<input type="date" class="ticket-edit-input" value="${audit.scheduledEnd || ''}" onblur="saveAuditField('${audit.id}','scheduledEnd',this.value)">` : `<p>${audit.scheduledEnd || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Actual Start</label>${isEditable ? `<input type="date" class="ticket-edit-input" value="${audit.actualStart || ''}" onblur="saveAuditField('${audit.id}','actualStart',this.value)">` : `<p>${audit.actualStart || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Actual End</label>${isEditable ? `<input type="date" class="ticket-edit-input" value="${audit.actualEnd || ''}" onblur="saveAuditField('${audit.id}','actualEnd',this.value)">` : `<p>${audit.actualEnd || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Install Team</label>${isEditable ? `<input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[0] || '')}" placeholder="Who installed" onblur="saveAuditConductors('${audit.id}', this.value, null)">` : `<p>${escapeHtml(audit.conductedBy?.split(' / ')[0]) || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Takedown Team</label>${isEditable ? `<input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)">` : `<p>${escapeHtml(audit.conductedBy?.split(' / ')[1]) || '—'}</p>`}</div>
+            <div class="ticket-field full-width"><label>Notes</label>${isEditable ? `<textarea class="ticket-edit-input" rows="3" onblur="saveAuditField('${audit.id}','notes',this.value)">${escapeHtml(audit.notes)}</textarea>` : `<p>${escapeHtml(audit.notes) || '—'}</p>`}</div>
+        </div>
+        <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}</div>
+        <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Photos</label>
+            ${isEditable ? `<label class="btn btn-sm" style="cursor:pointer;margin-bottom:8px">Upload Photos <input type="file" accept="image/*" multiple style="display:none" onchange="uploadAuditPhotos('${audit.id}', '${audit.communityId}', this.files)"></label>` : ''}
+        </div>
+        <div style="padding:0 28px 16px"><div class="ticket-steps ticket-steps-detail">${progress}</div></div>
+        <div class="ticket-detail-actions">
+            <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
+            ${nextStatus ? `<button class="btn btn-primary" onclick="advanceAuditStatus('${audit.id}')">Advance to: ${nextStatus}</button>` : ''}
+            ${audit.status === 'Complete' || audit.status === 'Analysis Pending' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">Begin Analysis</button>` : ''}
+        </div>`;
+    openModal('modal-audit-detail');
+}
+
+function saveAuditField(auditId, field, value) {
+    const audit = audits.find(a => a.id === auditId);
+    if (!audit || audit[field] === value) return;
+    audit[field] = value;
+    persistAuditUpdate(auditId, { [field]: value });
+}
+
+function saveAuditConductors(auditId, installVal, takedownVal) {
+    const audit = audits.find(a => a.id === auditId);
+    if (!audit) return;
+    const parts = (audit.conductedBy || '').split(' / ');
+    if (installVal !== null) parts[0] = installVal.trim();
+    if (takedownVal !== null) parts[1] = takedownVal.trim();
+    audit.conductedBy = parts.filter(Boolean).join(' / ');
+    persistAuditUpdate(auditId, { conductedBy: audit.conductedBy });
+}
+
+function advanceAuditStatus(auditId) {
+    const audit = audits.find(a => a.id === auditId);
+    if (!audit) return;
+    const idx = AUDIT_STATUSES.indexOf(audit.status);
+    if (idx >= AUDIT_STATUSES.length - 1) return;
+    const oldStatus = audit.status;
+    const newStatus = AUDIT_STATUSES[idx + 1];
+    audit.status = newStatus;
+    const updates = { status: newStatus };
+
+    if (newStatus === 'In Progress' && !audit.actualStart) { audit.actualStart = localDate(); updates.actualStart = audit.actualStart; }
+    if (newStatus === 'Complete' && !audit.actualEnd) { audit.actualEnd = localDate(); updates.actualEnd = audit.actualEnd; }
+    persistAuditUpdate(auditId, updates);
+
+    // Update sensor statuses
+    if (newStatus === 'In Progress') {
+        [{ id: audit.auditPodId, add: 'Auditing a Community' }, { id: audit.communityPodId, add: 'Collocation' }].forEach(({ id, add }) => {
+            const s = sensors.find(x => x.id === id);
+            if (s) { const cur = getStatusArray(s).filter(st => st !== add); s.status = [...cur, add]; persistSensor(s); }
+        });
+        buildSensorSidebar();
+    } else if (newStatus === 'Complete') {
+        [{ id: audit.auditPodId, remove: 'Auditing a Community' }, { id: audit.communityPodId, remove: 'Collocation' }].forEach(({ id, remove }) => {
+            const s = sensors.find(x => x.id === id);
+            if (s) { s.status = getStatusArray(s).filter(st => st !== remove); if (s.status.length === 0) s.status = ['Online']; persistSensor(s); }
+        });
+        buildSensorSidebar();
+    }
+
+    const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
+    createNote('Audit', `Audit advanced: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
+    openAuditDetail(auditId);
+    updateSidebarAuditCount();
+}
+
+function beginAnalysis(auditId) {
+    alert('Analysis upload coming soon. Upload an Excel file with collocation data for PM\u2082.\u2085, PM\u2081\u2080, CO, NO, NO\u2082, and O\u2083. DQO thresholds will be applied automatically.');
+}
+
+async function uploadAuditPhotos(auditId, communityId, files) {
+    for (const file of files) {
+        try {
+            // Store in audit-specific folder
+            const path = `${auditId}/${Date.now()}_${file.name}`;
+            await supa.storage.from('community-files').upload(path, file);
+            // Also tag to the community's files
+            await supa.from('community_files').insert({
+                community_id: communityId, file_name: file.name, file_type: file.type,
+                storage_path: path, uploaded_by: currentUserId,
+            });
+            if (!communityFiles[communityId]) communityFiles[communityId] = [];
+            communityFiles[communityId].push({ id: generateId('f'), name: file.name, type: file.type, storagePath: path, date: new Date().toISOString() });
+        } catch (err) { handleSaveError(err); }
+    }
+    openAuditDetail(auditId);
 }
 
 // ===== DARK MODE =====
