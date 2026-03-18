@@ -2784,6 +2784,15 @@ tr:last-child td {
     border-color: rgba(255, 255, 255, 0.06);
 }
 
+.dark-mode .mobile-header {
+    background: #0c1220;
+}
+
+.dark-mode .hamburger-btn,
+.dark-mode .dark-mode-btn {
+    color: #94a3b8;
+}
+
 .dark-mode .dash-stat {
     background: #1e293b;
     border-color: rgba(255, 255, 255, 0.06);

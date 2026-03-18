@@ -3741,7 +3741,7 @@ function addNewCommunityCustomTag() {
 function toggleDarkMode() {
     document.documentElement.classList.toggle('dark-mode');
     const isDark = document.documentElement.classList.contains('dark-mode');
-    localStorage.setItem('snt_darkMode', isDark);
+    localStorage.setItem('snt_darkMode', isDark ? 'true' : 'false');
     const label = document.getElementById('dark-mode-label');
     if (label) label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
 }
