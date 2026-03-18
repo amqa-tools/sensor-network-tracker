@@ -825,9 +825,10 @@ function renderCommunityCard(c) {
 
 function toggleChildList(parentId) {
     const el = document.getElementById('child-list-' + parentId);
-    const arrow = el.previousElementSibling.querySelector('.parent-expand-arrow');
+    if (!el) return;
+    const arrow = el.previousElementSibling?.querySelector('.parent-expand-arrow');
     el.classList.toggle('open');
-    arrow.classList.toggle('open');
+    if (arrow) arrow.classList.toggle('open');
 }
 
 function renderCommunitiesList() {
@@ -4535,6 +4536,7 @@ function saveAuditConductors(auditId, installVal, takedownVal) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
     const parts = (audit.conductedBy || '').split(' / ');
+    while (parts.length < 2) parts.push('');
     if (installVal !== null) parts[0] = installVal.trim();
     if (takedownVal !== null) parts[1] = takedownVal.trim();
     audit.conductedBy = parts.filter(Boolean).join(' / ');
@@ -4605,12 +4607,12 @@ async function uploadAuditPhotos(auditId, communityId, files) {
             const path = `${auditId}/${Date.now()}_${file.name}`;
             await supa.storage.from('community-files').upload(path, file);
             // Also tag to the community's files
-            await supa.from('community_files').insert({
+            const { data: fileData } = await supa.from('community_files').insert({
                 community_id: communityId, file_name: file.name, file_type: file.type,
                 storage_path: path, uploaded_by: currentUserId,
-            });
+            }).select();
             if (!communityFiles[communityId]) communityFiles[communityId] = [];
-            communityFiles[communityId].push({ id: generateId('f'), name: file.name, type: file.type, storagePath: path, date: new Date().toISOString() });
+            communityFiles[communityId].push({ id: fileData?.[0]?.id || generateId('f'), name: file.name, type: file.type, storagePath: path, date: new Date().toISOString() });
         } catch (err) { handleSaveError(err); }
     }
     openAuditDetail(auditId);
