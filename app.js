@@ -4716,7 +4716,7 @@ function openAuditDetail(auditId) {
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
     const idx = AUDIT_STATUSES.indexOf(audit.status);
     const nextStatus = idx < AUDIT_STATUSES.length - 1 ? AUDIT_STATUSES[idx + 1] : null;
-    const isEditable = audit.status !== 'Audit Complete';
+    const isEditable = true; // All fields always editable
     const progress = AUDIT_STATUSES.map((st, i) => {
         const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
         return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
@@ -5997,15 +5997,15 @@ function generateAuditReport(auditId) {
             chartImages['ts-' + p.key] = renderChartToImage({
                 type: 'line',
                 data: { labels: tsLabels, datasets: [
-                    { data: seriesA, borderColor: '#1B2A4A', borderWidth: 2, pointRadius: 0, tension: 0.2, fill: false },
-                    { data: seriesB, borderColor: '#C9A84C', borderWidth: 2, pointRadius: 0, tension: 0.2, fill: false },
+                    { data: seriesA, borderColor: '#1B2A4A', borderWidth: 3, pointRadius: 0, tension: 0.2, fill: false },
+                    { data: seriesB, borderColor: '#C9A84C', borderWidth: 3, pointRadius: 0, tension: 0.2, fill: false },
                 ]},
                 options: {
                     responsive: false, animation: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d' } }, grid: { display: false }, ticks: { font: { size: 14 } } },
-                        y: { title: { display: true, text: p.label + ' (' + p.unit + ')', font: { size: 16 } }, grid: { display: false }, ticks: { font: { size: 14 } } },
+                        x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d' } }, grid: { display: false }, ticks: { font: { size: 18 } } },
+                        y: { title: { display: true, text: p.label + ' (' + p.unit + ')', font: { size: 20, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 18 } } },
                     },
                 },
             });
@@ -6023,15 +6023,15 @@ function generateAuditReport(auditId) {
             chartImages['scatter-' + p.key] = renderChartToImage({
                 type: 'scatter',
                 data: { datasets: [
-                    { data: r.pairs, backgroundColor: 'rgba(27,42,74,0.4)', borderColor: 'rgba(27,42,74,0.5)', pointRadius: 3 },
-                    { data: [{ x: minX, y: r.slope * minX + r.intercept }, { x: maxX, y: r.slope * maxX + r.intercept }], type: 'line', borderColor: '#C9A84C', borderWidth: 2, pointRadius: 0, fill: false },
+                    { data: r.pairs, backgroundColor: 'rgba(27,42,74,0.5)', borderColor: 'rgba(27,42,74,0.6)', pointRadius: 4 },
+                    { data: [{ x: minX, y: r.slope * minX + r.intercept }, { x: maxX, y: r.slope * maxX + r.intercept }], type: 'line', borderColor: '#C9A84C', borderWidth: 3, pointRadius: 0, fill: false },
                 ]},
                 options: {
                     responsive: false, animation: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { title: { display: true, text: shortA + ' ' + p.label + ' (' + p.unit + ')', font: { size: 16 } }, grid: { display: false }, ticks: { font: { size: 14 } } },
-                        y: { title: { display: true, text: shortB + ' ' + p.label + ' (' + p.unit + ')', font: { size: 16 } }, grid: { display: false }, ticks: { font: { size: 14 } } },
+                        x: { title: { display: true, text: shortA + ' ' + p.label + ' (' + p.unit + ')', font: { size: 20, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 18 } } },
+                        y: { title: { display: true, text: shortB + ' ' + p.label + ' (' + p.unit + ')', font: { size: 20, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 18 } } },
                     },
                 },
             });
@@ -6047,7 +6047,7 @@ function generateAuditReport(auditId) {
             <h4>${escapeHtml(shortB)} and ${escapeHtml(shortA)} \u2014 ${p.labelHtml}</h4>
             <div class="chart-sub">${dateRange}. Hourly data, first 24 hours removed</div>
             <img src="${chartImages['ts-' + p.key]}" style="width:100%">
-            <div class="chart-legend"><span><span style="background:#1B2A4A"></span>${escapeHtml(shortA)}</span><span><span style="background:#C9A84C"></span>${escapeHtml(shortB)}</span></div>
+            <div class="chart-legend"><span><span style="background:#1B2A4A;display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle;margin-right:8px"></span>${escapeHtml(shortA)}</span><span><span style="background:#C9A84C;display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle;margin-right:8px"></span>${escapeHtml(shortB)}</span></div>
         </div>` : '').join('');
     const scatterHtml = AUDIT_PARAMETERS.map(p => {
         const r = (cached.regressionResults || results)[p.key];
@@ -6098,8 +6098,8 @@ function generateAuditReport(auditId) {
     .chart-card h4 { font-size: 16px; font-weight: 600; color: #1e293b; margin-bottom: 4px; }
     .chart-card .chart-sub { font-size: 13px; color: #64748b; margin-bottom: 12px; }
     .chart-card img { width: 100%; display: block; }
-    .chart-card .chart-eq { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #475569; text-align: center; margin-top: 8px; }
-    .chart-card .chart-legend { display: flex; justify-content: center; gap: 24px; font-size: 13px; color: #475569; margin-top: 8px; }
+    .chart-card .chart-eq { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: #334155; text-align: center; margin-top: 10px; }
+    .chart-card .chart-legend { display: flex; justify-content: center; gap: 32px; font-size: 15px; color: #334155; margin-top: 10px; }
     .chart-card .chart-legend span:first-child { display: inline-block; width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
     .print-controls { margin-bottom: 20px; display: flex; align-items: center; gap: 16px; }
     .print-controls button { padding: 10px 24px; font-size: 14px; font-family: 'DM Sans', sans-serif; font-weight: 600; background: #1B2A4A; color: white; border: none; border-radius: 8px; cursor: pointer; }
@@ -6108,8 +6108,12 @@ function generateAuditReport(auditId) {
     @media print {
         body { padding: 20px; }
         .no-print { display: none !important; }
-        .chart-card { break-inside: avoid; }
-        table.dqo tbody tr:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        h2 { break-after: avoid; page-break-after: avoid; }
+        .chart-card { break-inside: avoid; page-break-inside: avoid; }
+        .chart-grid { break-before: auto; }
+        .report-meta { break-inside: avoid; page-break-inside: avoid; }
+        table.dqo { break-inside: avoid; page-break-inside: avoid; }
+        table.dqo tbody tr:nth-child(even), .chart-legend, .chart-eq, .chart-sub { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
 </style>
 </head><body>
