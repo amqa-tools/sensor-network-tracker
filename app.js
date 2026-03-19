@@ -5615,6 +5615,7 @@ function createScatterChart(canvasId, regression, param, parsed) {
                     backgroundColor: 'rgba(27,42,74,0.4)',
                     borderColor: 'rgba(27,42,74,0.5)',
                     pointRadius: 3,
+                    pointHitRadius: 3,
                     pointHoverRadius: 5,
                 },
                 {
@@ -5626,6 +5627,8 @@ function createScatterChart(canvasId, regression, param, parsed) {
                     borderColor: '#C9A84C',
                     borderWidth: 2,
                     pointRadius: 0,
+                    pointHitRadius: 0,
+                    pointHoverRadius: 0,
                     fill: false,
                 },
             ],
@@ -5633,7 +5636,17 @@ function createScatterChart(canvasId, regression, param, parsed) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: { enabled: true } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    enabled: true,
+                    filter: (tooltipItem) => tooltipItem.datasetIndex === 0,
+                    callbacks: {
+                        label: (ctx) => `x: ${ctx.parsed.x}, y: ${ctx.parsed.y}`,
+                    },
+                },
+            },
+            hover: { mode: 'point', intersect: true },
             interaction: { mode: 'point', intersect: true },
             scales: {
                 x: { grid: { display: false }, ticks: { font: { size: 10 } } },
@@ -5690,8 +5703,8 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
     const chart = new Chart(canvas, {
         type: 'line',
         data: { labels, datasets: [
-            { data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
-            { data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
+            { data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5, pointRadius: 0, pointHitRadius: 5, tension: 0.2, fill: false },
+            { data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5, pointRadius: 0, pointHitRadius: 5, tension: 0.2, fill: false },
         ]},
         options: {
             responsive: true,
