@@ -5633,7 +5633,8 @@ function createScatterChart(canvasId, regression, param, parsed) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { legend: { display: false }, tooltip: { enabled: true } },
+            interaction: { mode: 'point', intersect: true },
             scales: {
                 x: { grid: { display: false }, ticks: { font: { size: 10 } } },
                 y: { grid: { display: false }, ticks: { font: { size: 10 } } },
