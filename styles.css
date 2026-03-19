@@ -2077,54 +2077,41 @@ tr:last-child td {
     height: 260px !important;
 }
 
-.chart-scale-zone {
+/* Scale edit — small clickable pencil buttons, don't block canvas */
+.chart-scale-btn {
     position: absolute;
     z-index: 2;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.15s;
-}
-
-.chart-scale-zone:hover {
-    opacity: 1;
-    background: rgba(27, 42, 74, 0.04);
-}
-
-.chart-scale-zone::after {
-    content: '\270E';
-    position: absolute;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--navy-500);
     background: var(--surface);
     border: 1px solid var(--slate-200);
     border-radius: 4px;
-    padding: 1px 5px;
+    padding: 2px 6px;
     box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    line-height: 1;
 }
 
-.chart-scale-zone-y {
-    left: 32px;
-    top: 40px;
-    bottom: 20px;
-    width: 40px;
+.analysis-chart-card:hover .chart-scale-btn {
+    opacity: 0.6;
 }
 
-.chart-scale-zone-y::after {
+.chart-scale-btn:hover {
+    opacity: 1 !important;
+    background: var(--slate-50);
+}
+
+.chart-scale-btn-y {
+    left: 34px;
     top: 50%;
-    right: -2px;
     transform: translateY(-50%);
 }
 
-.chart-scale-zone-x {
-    bottom: 0;
-    left: 72px;
+.chart-scale-btn-x {
+    bottom: 4px;
     right: 16px;
-    height: 28px;
-}
-
-.chart-scale-zone-x::after {
-    right: 0;
-    top: 2px;
 }
 
 .chart-title-editable {
@@ -2231,11 +2218,7 @@ tr:last-child td {
     color: var(--slate-400);
 }
 
-.dark-mode .chart-scale-zone:hover {
-    background: rgba(255,255,255,0.05);
-}
-
-.dark-mode .chart-scale-zone::after {
+.dark-mode .chart-scale-btn {
     background: #1e293b;
     border-color: rgba(255,255,255,0.1);
     color: var(--slate-400);

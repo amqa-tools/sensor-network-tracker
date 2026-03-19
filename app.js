@@ -5356,13 +5356,13 @@ function rebuildCacheFromSaved(audit) {
     AUDIT_PARAMETERS.forEach(p => {
         const r = savedResults[p.key];
         if (r && !r.pairs) {
-            // Reconstruct pairs from trimmed row data
+            // Reconstruct pairs with timestamps from trimmed row data
             const pairs = [];
             for (const row of parsed.trimmedRows) {
                 const a = row.values[p.key]?.a;
                 const b = row.values[p.key]?.b;
                 if (!isNaN(a) && !isNaN(b) && isFinite(a) && isFinite(b)) {
-                    pairs.push({ x: a, y: b });
+                    pairs.push({ x: a, y: b, t: row.timestamp?.getTime?.() || row.timestamp });
                 }
             }
             r.pairs = pairs;
@@ -5378,8 +5378,17 @@ function runAllAnalyses(parsed) {
     for (const param of AUDIT_PARAMETERS) {
         const xArr = parsed.trimmedRows.map(r => r.values[param.key]?.a);
         const yArr = parsed.trimmedRows.map(r => r.values[param.key]?.b);
+        const tsArr = parsed.trimmedRows.map(r => r.timestamp);
         const reg = runLinearRegression(xArr, yArr);
         if (reg) {
+            // Attach timestamps to pairs for tooltip display
+            let tIdx = 0;
+            for (let i = 0; i < xArr.length; i++) {
+                if (!isNaN(xArr[i]) && !isNaN(yArr[i]) && isFinite(xArr[i]) && isFinite(yArr[i])) {
+                    if (reg.pairs[tIdx]) reg.pairs[tIdx].t = tsArr[i]?.getTime?.() || tsArr[i];
+                    tIdx++;
+                }
+            }
             const dqo = checkDQO(reg);
             results[param.key] = { ...reg, dqo, pass: dqo.pass };
         }
@@ -5581,9 +5590,9 @@ function renderScatterSection(auditId, parsed, results) {
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit})</div>
-            <div class="chart-scale-zone chart-scale-zone-y" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'y', this)" title="Click to edit Y range">&#9998;</div>
+            <div class="chart-scale-btn chart-scale-btn-y" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'y', this)" title="Click to edit Y range">&#9998;</div>
             <canvas id="scatter-${auditId}-${p.key}"></canvas>
-            <div class="chart-scale-zone chart-scale-zone-x" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'x', this)" title="Click to edit X range">&#9998;</div>
+            <div class="chart-scale-btn chart-scale-btn-x" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'x', this)" title="Click to edit X range">&#9998;</div>
             <div class="chart-axis-label chart-axis-x" onclick="editChartTitle(this)">${parsed.sensorA.short} ${p.label} (${p.unit})</div>
             <div class="chart-equation">${eqText}</div>
         </div>`; }).join('')}
@@ -5642,14 +5651,24 @@ function createScatterChart(canvasId, regression, param, parsed) {
                     enabled: true,
                     filter: (tooltipItem) => tooltipItem.datasetIndex === 0,
                     callbacks: {
-                        label: (ctx) => `  ${ctx.parsed.x}, ${ctx.parsed.y}`,
+                        title: (items) => {
+                            if (!items.length) return '';
+                            const raw = items[0].raw;
+                            if (raw?.t) {
+                                const d = new Date(raw.t);
+                                return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                            }
+                            return '';
+                        },
+                        label: (ctx) => `x: ${ctx.parsed.x}  y: ${ctx.parsed.y}`,
                     },
                     backgroundColor: '#1B2A4A',
-                    titleFont: { size: 0 },
+                    titleFont: { size: 11, family: "'DM Sans', sans-serif" },
                     bodyFont: { size: 12, family: "'JetBrains Mono', monospace" },
                     displayColors: false,
-                    padding: 8,
+                    padding: 10,
                     cornerRadius: 6,
+                    caretSize: 6,
                 },
             },
             hover: { mode: 'nearest', intersect: false, axis: 'xy' },
@@ -5675,7 +5694,7 @@ function renderTimeSeriesSection(auditId, parsed) {
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${p.labelHtml} (${p.unit})</div>
-            <div class="chart-scale-zone chart-scale-zone-y" onclick="editChartAxis('ts-${auditId}-${p.key}', 'y', this)" title="Click to edit Y range">&#9998;</div>
+            <div class="chart-scale-btn chart-scale-btn-y" onclick="editChartAxis('ts-${auditId}-${p.key}', 'y', this)" title="Click to edit Y range">&#9998;</div>
             <canvas id="ts-${auditId}-${p.key}"></canvas>
             <div class="chart-ts-legend">
                 <span class="chart-ts-legend-item"><span style="background:#1B2A4A"></span> ${parsed.sensorA.short}</span>
