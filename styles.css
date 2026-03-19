@@ -2072,9 +2072,10 @@ tr:last-child td {
     padding-left: 32px;
 }
 
-.analysis-chart-card canvas {
-    width: 100% !important;
-    height: 260px !important;
+.analysis-chart-card .chart-canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 260px;
 }
 
 /* Scale edit — inline pencil buttons next to axis labels, never overlap canvas */

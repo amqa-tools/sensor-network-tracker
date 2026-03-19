@@ -5590,7 +5590,7 @@ function renderScatterSection(auditId, parsed, results) {
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998;</span></div>
-            <canvas id="scatter-${auditId}-${p.key}"></canvas>
+            <div class="chart-canvas-wrap"><canvas id="scatter-${auditId}-${p.key}"></canvas></div>
             <div class="chart-axis-label chart-axis-x" onclick="editChartTitle(this)">${parsed.sensorA.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'x', this)">&#9998;</span></div>
             <div class="chart-equation">${eqText}</div>
         </div>`; }).join('')}
@@ -5622,7 +5622,7 @@ function createScatterChart(canvasId, regression, param, parsed) {
                     backgroundColor: 'rgba(27,42,74,0.4)',
                     borderColor: 'rgba(27,42,74,0.5)',
                     pointRadius: 3,
-                    pointHitRadius: 5,
+                    pointHitRadius: 10,
                     pointHoverRadius: 6,
                 },
                 {
@@ -5669,8 +5669,8 @@ function createScatterChart(canvasId, regression, param, parsed) {
                     caretSize: 6,
                 },
             },
-            hover: { mode: 'nearest', intersect: true },
-            interaction: { mode: 'nearest', intersect: true },
+            hover: { mode: 'nearest', intersect: false, axis: 'xy' },
+            interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             scales: {
                 x: { grid: { display: false }, ticks: { font: { size: 10 } } },
                 y: { grid: { display: false }, ticks: { font: { size: 10 } } },
@@ -5692,7 +5692,7 @@ function renderTimeSeriesSection(auditId, parsed) {
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${p.labelHtml} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('ts-${auditId}-${p.key}', 'y', this)">&#9998;</span></div>
-            <canvas id="ts-${auditId}-${p.key}"></canvas>
+            <div class="chart-canvas-wrap"><canvas id="ts-${auditId}-${p.key}"></canvas></div>
             <div class="chart-ts-legend">
                 <span class="chart-ts-legend-item"><span style="background:#1B2A4A"></span> ${parsed.sensorA.short}</span>
                 <span class="chart-ts-legend-item"><span style="background:#C9A84C"></span> ${parsed.sensorB.short}</span>
