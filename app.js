@@ -2912,7 +2912,8 @@ function nowDatetime() {
         String(now.getMonth() + 1).padStart(2, '0') + '-' +
         String(now.getDate()).padStart(2, '0') + 'T' +
         String(now.getHours()).padStart(2, '0') + ':' +
-        String(now.getMinutes()).padStart(2, '0');
+        String(now.getMinutes()).padStart(2, '0') + ':' +
+        String(now.getSeconds()).padStart(2, '0');
 }
 
 function formatDate(dateStr) {
@@ -5005,7 +5006,7 @@ let analysisDataCache = {}; // keyed by auditId — raw parsed data, not persist
 const DQO_THRESHOLDS = {
     r2: { min: 0.70, label: 'R\u00B2 \u2265 0.70' },
     slope: { min: 0.65, max: 1.35, label: 'Slope: 1.0 \u00B1 0.35' },
-    intercept: { min: -5, max: 5, label: '-5 \u2264 Intercept \u2264 5' },
+    intercept: { min: -5, max: 5, label: '\u22125 \u2264 Intercept \u2264 5' },
     sd: { max: 5, label: 'SD \u2264 5' },
     rmse: { max: 7, label: 'RMSE \u2264 7' },
 };
@@ -5625,11 +5626,11 @@ function renderSavedAnalysisView(auditId) {
         <table class="dqo-summary-table">
             <thead><tr>
                 <th>Parameter</th>
-                <th>R\u00B2 <span class="dqo-thresh">(\u2265${T.r2.min})</span></th>
+                <th>R\u00B2 <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></th>
                 <th>Slope <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></th>
                 <th>Intercept <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></th>
-                <th>SD <span class="dqo-thresh">(\u2264${T.sd.max})</span></th>
-                <th>RMSE <span class="dqo-thresh">(\u2264${T.rmse.max})</span></th>
+                <th>SD <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></th>
+                <th>RMSE <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></th>
                 <th>Result</th>
             </tr></thead>
             <tbody>
@@ -5669,11 +5670,11 @@ function renderDQOSection(results, overallPass) {
         <table class="dqo-summary-table">
             <thead><tr>
                 <th>Parameter</th>
-                <th>R\u00B2 <span class="dqo-thresh">(\u2265${T.r2.min})</span></th>
+                <th>R\u00B2 <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></th>
                 <th>Slope <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></th>
                 <th>Intercept <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></th>
-                <th>SD <span class="dqo-thresh">(\u2264${T.sd.max})</span></th>
-                <th>RMSE <span class="dqo-thresh">(\u2264${T.rmse.max})</span></th>
+                <th>SD <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></th>
+                <th>RMSE <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></th>
                 <th>Result</th>
             </tr></thead>
             <tbody>
@@ -5709,9 +5710,9 @@ function renderScatterSection(auditId, parsed, results) {
         ${AUDIT_PARAMETERS.map(p => {
             const r = results[p.key];
             const eqSign = r ? (r.intercept >= 0 ? '+' : '\u2212') : '';
-            const eqText = r ? `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)}     R\u00B2 = ${r.r2}` : '';
+            const eqText = r ? `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)},  R\u00B2 = ${r.r2}` : '';
             return `<div class="analysis-chart-card">
-            <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
+            <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short}: <strong>${p.labelHtml}</strong></div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998;</span></div>
             <div class="chart-canvas-wrap"><canvas id="scatter-${auditId}-${p.key}"></canvas></div>
@@ -5813,7 +5814,7 @@ function renderTimeSeriesSection(auditId, parsed) {
         <h3 class="analysis-section-heading">PM Timeseries</h3>
         <div class="analysis-chart-grid">
         ${pmParams.map(p => `<div class="analysis-chart-card">
-            <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
+            <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short}: <strong>${p.labelHtml}</strong></div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${p.labelHtml} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('ts-${auditId}-${p.key}', 'y', this)">&#9998;</span></div>
             <div class="chart-canvas-wrap"><canvas id="ts-${auditId}-${p.key}"></canvas></div>
@@ -6310,18 +6311,18 @@ function generateAuditReport(auditId) {
     const pmParams = AUDIT_PARAMETERS.filter(p => p.hasTimeSeries);
     const tsHtml = pmParams.map(p => chartImages['ts-' + p.key]
         ? `<div class="chart-card">
-            <h4>${escapeHtml(shortB)} and ${escapeHtml(shortA)} \u2014 ${p.labelHtml}</h4>
+            <h4>${escapeHtml(shortB)} and ${escapeHtml(shortA)}: <strong>${p.labelHtml}</strong></h4>
             <div class="chart-sub">${dateRange}. Hourly data, first 24 hours removed</div>
             <img src="${chartImages['ts-' + p.key]}" style="width:100%">
-            <div class="chart-legend"><span><span style="background:#1B2A4A;display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle;margin-right:8px"></span>${escapeHtml(shortA)}</span><span><span style="background:#C9A84C;display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle;margin-right:8px"></span>${escapeHtml(shortB)}</span></div>
+            <div class="chart-legend"><span><span style="background:#1B2A4A;display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle"></span> ${escapeHtml(shortA)}</span><span><span style="background:#C9A84C;display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle"></span> ${escapeHtml(shortB)}</span></div>
         </div>` : '').join('');
     const scatterHtml = AUDIT_PARAMETERS.map(p => {
         const r = (cached.regressionResults || results)[p.key];
         const eqSign = r ? (r.intercept >= 0 ? '+' : '\u2212') : '';
-        const eqText = r ? `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)}     R\u00B2 = ${r.r2}` : '';
+        const eqText = r ? `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)},  R\u00B2 = ${r.r2}` : '';
         return chartImages['scatter-' + p.key]
         ? `<div class="chart-card">
-            <h4>${escapeHtml(shortB)} and ${escapeHtml(shortA)} \u2014 ${p.labelHtml}</h4>
+            <h4>${escapeHtml(shortB)} and ${escapeHtml(shortA)}: <strong>${p.labelHtml}</strong></h4>
             <div class="chart-sub">${dateRange}. Hourly data, first 24 hours removed</div>
             <img src="${chartImages['scatter-' + p.key]}" style="width:100%">
             <div class="chart-eq">${eqText}</div>
@@ -6359,27 +6360,31 @@ function generateAuditReport(auditId) {
     table.dqo td:last-child { text-align: center; }
     table.dqo tbody tr:nth-child(even) { background: #fafbfc; }
     .thresholds { font-size: 14px; color: #334155; margin-top: 12px; line-height: 1.7; }
-    .chart-grid { display: grid; grid-template-columns: 1fr; gap: 24px; margin-top: 16px; }
-    .chart-card { border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; page-break-inside: avoid; }
-    .chart-card h4 { font-size: 16px; font-weight: 600; color: #1e293b; margin-bottom: 4px; }
-    .chart-card .chart-sub { font-size: 13px; color: #64748b; margin-bottom: 12px; }
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .chart-grid-single { grid-template-columns: 1fr; }
+    .chart-card { border: 1px solid #cbd5e1; border-radius: 10px; padding: 16px; page-break-inside: avoid; }
+    .chart-card h4 { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; color: #1e293b; margin-bottom: 2px; }
+    .chart-card h4 strong { font-weight: 700; }
+    .chart-card .chart-sub { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #64748b; margin-bottom: 8px; }
     .chart-card img { width: 100%; display: block; }
-    .chart-card .chart-eq { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: #334155; text-align: center; margin-top: 10px; }
-    .chart-card .chart-legend { display: flex; justify-content: center; gap: 32px; font-size: 15px; color: #334155; margin-top: 10px; }
-    .chart-card .chart-legend span:first-child { display: inline-block; width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+    .chart-card .chart-eq { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #334155; text-align: center; margin-top: 8px; }
+    .chart-card .chart-legend { display: flex; justify-content: center; gap: 32px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: #334155; margin-top: 8px; white-space: nowrap; }
+    .chart-card .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
     .print-controls { margin-bottom: 20px; display: flex; align-items: center; gap: 16px; }
     .print-controls button { padding: 10px 24px; font-size: 14px; font-family: 'DM Sans', sans-serif; font-weight: 600; background: #1B2A4A; color: white; border: none; border-radius: 8px; cursor: pointer; }
     .print-controls label { font-size: 13px; color: #64748b; display: flex; align-items: center; gap: 6px; cursor: pointer; }
     .report-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; }
     @media print {
-        body { padding: 20px; }
+        body { padding: 16px; }
         .no-print { display: none !important; }
-        h2 { break-after: avoid; page-break-after: avoid; }
+        h2 { break-after: avoid; page-break-after: avoid; margin-top: 16px; }
         .chart-card { break-inside: avoid; page-break-inside: avoid; }
         .chart-grid { break-before: auto; }
+        .report-header-bar { break-inside: avoid; }
         .report-meta { break-inside: avoid; page-break-inside: avoid; }
         table.dqo { break-inside: avoid; page-break-inside: avoid; }
-        table.dqo tbody tr:nth-child(even), .chart-legend, .chart-eq, .chart-sub { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .thresholds { break-before: avoid; }
+        table.dqo tbody tr:nth-child(even), .chart-legend, .chart-eq, .chart-sub, .trim-note { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
 </style>
 </head><body>
@@ -6413,11 +6418,11 @@ function generateAuditReport(auditId) {
     <table class="dqo">
         <thead><tr>
             <th>Parameter</th>
-            <th>R\u00B2 <span class="dqo-thresh">(\u2265${T.r2.min})</span></th>
+            <th>R\u00B2 <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></th>
             <th>Slope <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></th>
             <th>Intercept <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></th>
-            <th>SD <span class="dqo-thresh">(\u2264${T.sd.max})</span></th>
-            <th>RMSE <span class="dqo-thresh">(\u2264${T.rmse.max})</span></th>
+            <th>SD <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></th>
+            <th>RMSE <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></th>
             <th>Result</th>
         </tr></thead>
         <tbody>${dqoRows}</tbody>
@@ -6426,7 +6431,6 @@ function generateAuditReport(auditId) {
 
     ${tsHtml ? `<h2>PM Timeseries</h2><div class="chart-grid">${tsHtml}</div>` : ''}
 
-    <div style="page-break-before:always"></div>
     <h2>Regression Plots</h2>
     <div class="chart-grid">${scatterHtml}</div>
 

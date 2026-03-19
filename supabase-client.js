@@ -195,11 +195,11 @@ const db = {
 
         const noteId = data[0].id;
 
-        // Insert tags
+        // Insert tags — filter out any non-string or empty IDs
         const tagRows = [];
-        (note.taggedSensors || []).forEach(id => tagRows.push({ note_id: noteId, tag_type: 'sensor', tag_id: id }));
-        (note.taggedCommunities || []).forEach(id => tagRows.push({ note_id: noteId, tag_type: 'community', tag_id: id }));
-        (note.taggedContacts || []).forEach(id => tagRows.push({ note_id: noteId, tag_type: 'contact', tag_id: id }));
+        (note.taggedSensors || []).forEach(id => { if (id) tagRows.push({ note_id: noteId, tag_type: 'sensor', tag_id: String(id) }); });
+        (note.taggedCommunities || []).forEach(id => { if (id) tagRows.push({ note_id: noteId, tag_type: 'community', tag_id: String(id) }); });
+        (note.taggedContacts || []).forEach(id => { if (id) tagRows.push({ note_id: noteId, tag_type: 'contact', tag_id: String(id) }); });
 
         if (tagRows.length > 0) {
             const { error: tagError } = await supa.from('note_tags').insert(tagRows);
