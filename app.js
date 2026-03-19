@@ -5491,7 +5491,7 @@ function renderScatterSection(auditId, parsed, results) {
         <h3 class="analysis-section-heading">Regression Plots</h3>
         <div class="analysis-chart-grid">
         ${AUDIT_PARAMETERS.map(p => `<div class="analysis-chart-card">
-            <h4>${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}<br><span style="font-weight:400;font-size:11px;color:var(--slate-400)">Hourly data, first 24 hours removed</span></h4>
+            <h4 class="chart-title-editable" onclick="editChartTitle(this, 'scatter-${auditId}-${p.key}')">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}<br><span style="font-weight:400;font-size:11px;color:var(--slate-400)">Hourly data, first 24 hours removed</span></h4>
             <button class="axis-edit-btn axis-edit-y" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998; Y</button>
             <button class="axis-edit-btn axis-edit-x" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'x', this)">&#9998; X</button>
             <canvas id="scatter-${auditId}-${p.key}"></canvas>
@@ -5572,7 +5572,7 @@ function renderTimeSeriesSection(auditId, parsed) {
         <h3 class="analysis-section-heading">PM Time Series</h3>
         <div class="analysis-chart-grid">
         ${pmParams.map(p => `<div class="analysis-chart-card">
-            <h4>${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}<br><span style="font-weight:400;font-size:11px;color:var(--slate-400)">Hourly data, first 24 hours excluded from analysis</span></h4>
+            <h4 class="chart-title-editable" onclick="editChartTitle(this, 'ts-${auditId}-${p.key}')">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}<br><span style="font-weight:400;font-size:11px;color:var(--slate-400)">Hourly data, first 24 hours removed</span></h4>
             <button class="axis-edit-btn axis-edit-y" onclick="editChartAxis('ts-${auditId}-${p.key}', 'y', this)">&#9998; Y</button>
             <canvas id="ts-${auditId}-${p.key}"></canvas>
         </div>`).join('')}
@@ -5590,34 +5590,16 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
-    const labels = parsed.allRows.map(r => r.timestamp);
-    const seriesA = parsed.allRows.map(r => {
-        const v = r.values[param.key]?.a;
-        return isNaN(v) ? null : v;
-    });
-    const seriesB = parsed.allRows.map(r => {
-        const v = r.values[param.key]?.b;
-        return isNaN(v) ? null : v;
-    });
+    // Use only trimmed data (first 24h removed)
+    const rows = parsed.trimmedRows;
+    const labels = rows.map(r => r.timestamp);
+    const seriesA = rows.map(r => { const v = r.values[param.key]?.a; return isNaN(v) ? null : v; });
+    const seriesB = rows.map(r => { const v = r.values[param.key]?.b; return isNaN(v) ? null : v; });
 
-    // Calculate Y range from trimmed data only (excluding first 24h)
-    const trimmedVals = parsed.trimmedRows.flatMap(r => {
-        const a = r.values[param.key]?.a;
-        const b = r.values[param.key]?.b;
-        return [a, b].filter(v => !isNaN(v) && isFinite(v));
-    });
-    const yMin = trimmedVals.length > 0 ? Math.min(...trimmedVals) : undefined;
-    const yMax = trimmedVals.length > 0 ? Math.max(...trimmedVals) : undefined;
+    const allVals = [...seriesA, ...seriesB].filter(v => v !== null && isFinite(v));
+    const yMin = allVals.length > 0 ? Math.min(...allVals) : 0;
+    const yMax = allVals.length > 0 ? Math.max(...allVals) : 10;
     const yPad = (yMax - yMin) * 0.05 || 1;
-
-    const trimTs = parsed.trimIndex > 0 ? parsed.allRows[parsed.trimIndex].timestamp : null;
-    const firstTs = parsed.allRows[0]?.timestamp;
-
-    // Annotations: just trim shading, no start/end labels
-    const annotations = {};
-    if (trimTs) {
-        annotations.trimBox = { type: 'box', xMin: firstTs, xMax: trimTs, backgroundColor: 'rgba(255,248,232,0.45)', borderColor: 'rgba(201,168,76,0.3)' };
-    }
 
     const chart = new Chart(canvas, {
         type: 'line',
@@ -5630,7 +5612,6 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } },
-                annotation: { annotations },
             },
             scales: {
                 x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d', hour: 'MMM d HH:mm' } }, grid: { display: false } },
@@ -5645,6 +5626,36 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
         },
     });
     analysisChartInstances.push(chart);
+}
+
+function editChartTitle(h4El, canvasId) {
+    if (h4El.querySelector('input')) return; // already editing
+    const currentText = h4El.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentText;
+    input.className = 'chart-title-input';
+    const origHtml = h4El.innerHTML;
+    h4El.innerHTML = '';
+    h4El.appendChild(input);
+    input.focus();
+    input.select();
+
+    const finish = () => {
+        const newText = input.value.trim();
+        if (newText) {
+            h4El.innerHTML = escapeHtml(newText);
+        } else {
+            h4El.innerHTML = origHtml;
+        }
+        // Re-add the editable click
+        h4El.onclick = () => editChartTitle(h4El, canvasId);
+    };
+    input.addEventListener('blur', finish);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') { input.value = ''; input.blur(); }
+    });
 }
 
 function editChartAxis(canvasId, axis, btn) {
@@ -5889,30 +5900,22 @@ function generateAuditReport(auditId) {
             return img;
         };
 
-        const trimTs = cached.trimIndex > 0 ? cached.allRows[cached.trimIndex].timestamp : null;
-        const firstTs = cached.allRows[0]?.timestamp;
-        const lastTs = cached.allRows[cached.allRows.length - 1]?.timestamp;
-        const labels = cached.allRows.map(r => r.timestamp);
+        const trimmedRows = cached.trimmedRows || cached.allRows;
+        const tsLabels = trimmedRows.map(r => r.timestamp);
 
-        // PM Time series
+        // PM Time series (trimmed — first 24h removed)
         AUDIT_PARAMETERS.filter(p => p.hasTimeSeries).forEach(p => {
-            const seriesA = cached.allRows.map(r => { const v = r.values[p.key]?.a; return isNaN(v) ? null : v; });
-            const seriesB = cached.allRows.map(r => { const v = r.values[p.key]?.b; return isNaN(v) ? null : v; });
-            const annotations = {};
-            if (trimTs) {
-                annotations.trimBox = { type: 'box', xMin: firstTs, xMax: trimTs, backgroundColor: 'rgba(255,248,232,0.45)', borderColor: 'rgba(201,168,76,0.3)' };
-                annotations.trimLabel = { type: 'label', xValue: new Date((firstTs.getTime() + trimTs.getTime()) / 2), yValue: 'max',
-                    content: '24hrs excluded', font: { size: 8, style: 'italic' }, color: '#8a6d20', backgroundColor: 'rgba(255,248,232,0.8)', padding: 3, yAdjust: 6 };
-            }
+            const seriesA = trimmedRows.map(r => { const v = r.values[p.key]?.a; return isNaN(v) ? null : v; });
+            const seriesB = trimmedRows.map(r => { const v = r.values[p.key]?.b; return isNaN(v) ? null : v; });
             chartImages['ts-' + p.key] = renderChartToImage({
                 type: 'line',
-                data: { labels, datasets: [
+                data: { labels: tsLabels, datasets: [
                     { label: shortA, data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
                     { label: shortB, data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
                 ]},
                 options: {
                     responsive: false, animation: false,
-                    plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 14 } }, annotation: { annotations } },
+                    plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 14 } } },
                     scales: {
                         x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d' } }, grid: { display: false } },
                         y: { title: { display: true, text: p.label + ' (' + p.unit + ')', font: { size: 12 } }, grid: { display: false } },

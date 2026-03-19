@@ -2097,13 +2097,62 @@ tr:last-child td {
     font-weight: 600;
 }
 
-.analysis-chart-card:hover .axis-edit-btn {
-    opacity: 0.7;
+.axis-edit-y:hover,
+.axis-edit-x:hover {
+    opacity: 1 !important;
     pointer-events: auto;
 }
 
-.axis-edit-btn:hover {
-    opacity: 1 !important;
+/* Show Y edit when hovering the left 40px of the chart card */
+.analysis-chart-card .axis-edit-y {
+    opacity: 0;
+}
+.analysis-chart-card:hover .axis-edit-y {
+    opacity: 0.5;
+    pointer-events: auto;
+}
+
+.analysis-chart-card .axis-edit-x {
+    opacity: 0;
+}
+.analysis-chart-card:hover .axis-edit-x {
+    opacity: 0.5;
+    pointer-events: auto;
+}
+
+.chart-title-editable {
+    cursor: text;
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    transition: background 0.15s;
+}
+
+.chart-title-editable:hover {
+    background: var(--slate-50);
+}
+
+.chart-title-input {
+    width: 100%;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    color: var(--slate-700);
+    border: 1px solid var(--navy-400);
+    border-radius: 4px;
+    padding: 4px 8px;
+    outline: none;
+    background: var(--surface);
+}
+
+.dark-mode .chart-title-editable:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.dark-mode .chart-title-input {
+    background: #151e2b;
+    border-color: rgba(255,255,255,0.2);
+    color: #e2e8f0;
 }
 
 .axis-edit-y {
