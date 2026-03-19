@@ -4894,8 +4894,18 @@ function beginAnalysis(auditId) {
         return;
     }
 
-    // If we have results but no cached data (page was refreshed), show DQO summary + re-upload option
+    // If we have results but no cached data (page was refreshed), rebuild cache from saved chart data
     if (hasResults && !analysisDataCache[auditId]) {
+        if (audit.analysisChartData) {
+            analysisDataCache[auditId] = rebuildCacheFromSaved(audit);
+        }
+        if (analysisDataCache[auditId]) {
+            document.getElementById('analysis-modal-title').textContent = audit.analysisName || `Audit Analysis: ${communityName}`;
+            renderAnalysisResults(auditId, analysisDataCache[auditId]);
+            openModal('modal-audit-analysis');
+            return;
+        }
+        // Fallback if no chart data saved (old audits before this feature)
         document.getElementById('analysis-modal-title').textContent = audit.analysisName || `Audit Analysis: ${communityName}`;
         renderSavedAnalysisView(auditId);
         openModal('modal-audit-analysis');
@@ -4965,27 +4975,38 @@ function handleAnalysisUpload(auditId, file) {
             // Run regression on trimmed data (excluding first 24 hours)
             const results = runAllAnalyses(parsed);
 
-            // Save — strip pairs arrays (too large for persistence)
+            // Save results including pairs for scatter plots
             audit.analysisResults = {};
             AUDIT_PARAMETERS.forEach(p => {
                 if (results[p.key]) {
-                    const { pairs, ...summary } = results[p.key];
-                    audit.analysisResults[p.key] = summary;
+                    audit.analysisResults[p.key] = results[p.key];
                 }
             });
             audit.analysisName = analysisName;
             audit.analysisUploadDate = new Date().toISOString();
             audit.analysisUploadedBy = getCurrentUserName();
+
+            // Build compact chart data for persistence (timestamps + all param values)
+            audit.analysisChartData = {
+                sensorA: parsed.sensorA,
+                sensorB: parsed.sensorB,
+                trimIndex: parsed.trimIndex,
+                rows: parsed.allRows.map(r => ({
+                    t: r.timestamp.getTime(),
+                    v: Object.fromEntries(AUDIT_PARAMETERS.map(p => [p.key, { a: r.values[p.key]?.a, b: r.values[p.key]?.b }]).filter(([k, v]) => !isNaN(v.a) || !isNaN(v.b)))
+                })),
+            };
+
             persistAuditUpdate(auditId, {
                 analysisResults: audit.analysisResults,
                 analysisName: audit.analysisName,
                 analysisUploadDate: audit.analysisUploadDate,
                 analysisUploadedBy: audit.analysisUploadedBy,
+                analysisChartData: audit.analysisChartData,
             });
 
-            // Cache raw data (includes pairs for charting)
+            // Cache in memory
             analysisDataCache[auditId] = parsed;
-            // Also store full results with pairs in cache for scatter plots
             analysisDataCache[auditId].regressionResults = results;
 
             // Advance status based on DQO results
@@ -5242,6 +5263,30 @@ function checkDQO(result) {
     };
     dqo.pass = dqo.r2 && dqo.slope && dqo.intercept && dqo.sd && dqo.rmse;
     return dqo;
+}
+
+function rebuildCacheFromSaved(audit) {
+    const cd = audit.analysisChartData;
+    if (!cd || !cd.rows || !cd.rows.length) return null;
+
+    const allRows = cd.rows.map(r => ({
+        timestamp: new Date(r.t),
+        values: Object.fromEntries(AUDIT_PARAMETERS.map(p => [p.key, r.v?.[p.key] || { a: NaN, b: NaN }])),
+    }));
+
+    const trimIndex = cd.trimIndex || 0;
+    const parsed = {
+        sensorA: cd.sensorA,
+        sensorB: cd.sensorB,
+        allRows,
+        trimIndex,
+        trimmedRows: allRows.slice(trimIndex),
+    };
+
+    // Rebuild regression results with pairs from saved analysisResults
+    parsed.regressionResults = audit.analysisResults || {};
+
+    return parsed;
 }
 
 function runAllAnalyses(parsed) {

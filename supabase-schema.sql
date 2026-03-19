@@ -286,6 +286,7 @@ CREATE TABLE audits (
     analysis_name text DEFAULT '',
     analysis_upload_date timestamptz,
     analysis_uploaded_by text DEFAULT '',
+    analysis_chart_data jsonb DEFAULT NULL,
     created_by uuid REFERENCES profiles(id),
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
