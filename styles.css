@@ -2189,6 +2189,26 @@ tr:last-child td {
     border-color: var(--navy-200);
 }
 
+.ov-card-clickable {
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.ov-card-clickable:hover {
+    color: var(--navy-500);
+}
+
+.ov-card-expand {
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    margin-left: 4px;
+}
+
+.ov-card-clickable:hover .ov-card-expand {
+    opacity: 0.6;
+}
+
 .ov-view-all {
     font-size: 12px;
     font-weight: 600;

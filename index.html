@@ -338,6 +338,7 @@
 
                 <div class="tabs">
                     <button class="tab active" data-tab="sensor-history">Device History</button>
+                    <button class="tab" data-tab="sensor-tickets">Service Tickets</button>
                     <button class="tab" data-tab="sensor-audits">Audits</button>
                 </div>
 
@@ -345,8 +346,6 @@
                     <div class="history-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                         <button class="btn btn-primary" onclick="openAddNoteModal(currentSensor, 'sensor')">+ Add Note</button>
                         <button class="btn" onclick="openCollocationModal(currentSensor)" style="border-color:var(--navy-400);color:var(--navy-500)">+ Log Collocation</button>
-                        <button class="btn btn-service" onclick="openTicketFromSensor(currentSensor)">+ New Service Ticket</button>
-                        <button class="btn" onclick="viewSensorTickets(currentSensor)" id="btn-view-sensor-tickets" style="display:none;border-color:var(--slate-300);color:var(--slate-500)">View Service Tickets</button>
                         <select id="sensor-history-filter" onchange="filterSensorHistory()">
                             <option value="">All History</option>
                             <option value="_notes">Field Notes</option>
@@ -357,6 +356,13 @@
                         </select>
                     </div>
                     <div id="sensor-history-timeline" class="timeline"></div>
+                </div>
+
+                <div id="tab-sensor-tickets" class="tab-content">
+                    <div class="history-actions">
+                        <button class="btn btn-service" onclick="openTicketFromSensor(currentSensor)">+ New Service Ticket</button>
+                    </div>
+                    <div id="sensor-tickets-section"></div>
                 </div>
 
                 <div id="tab-sensor-audits" class="tab-content">

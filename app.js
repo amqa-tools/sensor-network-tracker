@@ -1656,13 +1656,8 @@ function showSensorView(sensorId) {
 
     filterSensorHistory();
 
-    // Show "View Service Tickets" button if sensor has tickets
-    const sensorTickets = serviceTickets.filter(t => t.sensorId === sensorId);
-    const viewTicketsBtn = document.getElementById('btn-view-sensor-tickets');
-    if (viewTicketsBtn) {
-        viewTicketsBtn.style.display = sensorTickets.length > 0 ? '' : 'none';
-        viewTicketsBtn.textContent = sensorTickets.length === 1 ? 'View Service Ticket' : `View Service Tickets (${sensorTickets.length})`;
-    }
+    // Service Tickets
+    renderSensorTickets(sensorId);
 
     // Audits
     renderSensorAudits(sensorId);
@@ -4622,16 +4617,7 @@ function openNewTicketModal(preselectedSensorId) {
 
 function openTicketFromSensor(sensorId) { openNewTicketModal(sensorId); }
 
-function viewSensorTickets(sensorId) {
-    const tickets = serviceTickets.filter(t => t.sensorId === sensorId);
-    if (tickets.length === 1) {
-        openTicketDetail(tickets[0].id);
-    } else if (tickets.length > 1) {
-        // Open the most recent non-closed ticket, or the most recent one
-        const active = tickets.find(t => t.status !== 'Closed') || tickets[0];
-        openTicketDetail(active.id);
-    }
-}
+
 
 async function saveNewTicket(event) {
     event.preventDefault();
@@ -6096,23 +6082,23 @@ function renderCommunityOverview(communityId) {
     dashboard.innerHTML = `
         <div class="community-overview-grid">
             <div class="ov-card">
-                <h4 class="ov-card-title">Sensors</h4>
+                <h4 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-sensors')">Sensors <span class="ov-card-expand">&rarr;</span></h4>
                 ${sensorHtml}
             </div>
             <div class="ov-card">
-                <h4 class="ov-card-title">Contacts</h4>
+                <h4 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-contacts')">Contacts <span class="ov-card-expand">&rarr;</span></h4>
                 ${contactsHtml}
             </div>
             <div class="ov-card ov-card-wide">
-                <h4 class="ov-card-title">Recent History</h4>
+                <h4 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-history')">Recent History <span class="ov-card-expand">&rarr;</span></h4>
                 ${historyHtml}
             </div>
             <div class="ov-card ov-card-wide">
-                <h4 class="ov-card-title">Recent Communications</h4>
+                <h4 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-comms')">Recent Communications <span class="ov-card-expand">&rarr;</span></h4>
                 ${commsHtml}
             </div>
             <div class="ov-card">
-                <h4 class="ov-card-title">Most Recent Audit</h4>
+                <h4 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-audits')">Most Recent Audit <span class="ov-card-expand">&rarr;</span></h4>
                 ${auditHtml}
             </div>
         </div>
@@ -6131,6 +6117,29 @@ function renderCommunityAudits(communityId) {
     }
 
     section.innerHTML = communityAudits.map(a => renderAuditListCard(a, 'community')).join('');
+}
+
+function renderSensorTickets(sensorId) {
+    const section = document.getElementById('sensor-tickets-section');
+    if (!section) return;
+
+    const tickets = serviceTickets.filter(t => t.sensorId === sensorId);
+    if (tickets.length === 0) {
+        section.innerHTML = '<div class="empty-state">No service tickets for this sensor.</div>';
+        return;
+    }
+
+    section.innerHTML = tickets.map(t => {
+        const dateStr = t.createdAt ? formatDate(t.createdAt) : '';
+        return `<div class="audit-list-card" onclick="openTicketDetail('${t.id}')">
+            <div class="audit-list-card-header">
+                <span style="font-weight:600;color:var(--slate-700)">${formatTicketType(t.ticketType)}</span>
+                <span class="ticket-status-badge ${TICKET_STATUS_CSS[t.status] || ''}">${t.status}</span>
+            </div>
+            <div class="audit-list-card-meta">${dateStr}${t.createdBy ? ' by ' + escapeHtml(t.createdBy) : ''}</div>
+            ${t.issueDescription ? `<div style="font-size:12px;color:var(--slate-500);margin-top:4px">${escapeHtml(t.issueDescription.substring(0, 100))}${t.issueDescription.length > 100 ? '...' : ''}</div>` : ''}
+        </div>`;
+    }).join('');
 }
 
 function renderSensorAudits(sensorId) {
