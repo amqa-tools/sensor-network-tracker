@@ -4683,6 +4683,7 @@ function openAuditDetail(auditId) {
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}</div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Photos</label>
             ${isEditable ? `<label class="btn btn-sm" style="cursor:pointer;margin-bottom:8px">Upload Photos <input type="file" accept="image/*" multiple style="display:none" onchange="uploadAuditPhotos('${audit.id}', '${audit.communityId}', this.files)"></label>` : ''}
+            <div id="audit-photos-grid" class="audit-photos-grid">${renderAuditPhotos(audit.id, audit.communityId)}</div>
         </div>
         <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
             <button class="btn btn-sm btn-danger" onclick="deleteAudit('${audit.id}')" style="font-size:11px;opacity:0.7">Delete Audit</button>
@@ -5958,13 +5959,40 @@ function generateAuditReport(auditId) {
     URL.revokeObjectURL(url);
 }
 
+function renderAuditPhotos(auditId, communityId) {
+    const files = (communityFiles[communityId] || []).filter(f =>
+        f.storagePath && f.storagePath.startsWith(auditId + '/') && f.type && f.type.startsWith('image/')
+    );
+    if (files.length === 0) return '<p style="font-size:12px;color:var(--slate-400)">No photos yet.</p>';
+    return files.map(f => {
+        const imgSrc = db.getFileUrl(f.storagePath);
+        return `<div class="audit-photo-thumb">
+            <img src="${imgSrc}" alt="${escapeHtml(f.name)}" onclick="openStorageFile('${f.storagePath}')">
+            <button class="audit-photo-delete" onclick="deleteAuditPhoto('${communityId}', '${f.id}', '${f.storagePath}', '${auditId}')" title="Delete">&times;</button>
+        </div>`;
+    }).join('');
+}
+
+async function deleteAuditPhoto(communityId, fileId, storagePath, auditId) {
+    if (!confirm('Delete this photo?')) return;
+    try {
+        await supa.storage.from('community-files').remove([storagePath]);
+        await supa.from('community_files').delete().eq('id', fileId);
+        const arr = communityFiles[communityId];
+        if (arr) {
+            const idx = arr.findIndex(f => f.id === fileId);
+            if (idx >= 0) arr.splice(idx, 1);
+        }
+    } catch (err) { handleSaveError(err); }
+    const grid = document.getElementById('audit-photos-grid');
+    if (grid) grid.innerHTML = renderAuditPhotos(auditId, communityId);
+}
+
 async function uploadAuditPhotos(auditId, communityId, files) {
     for (const file of files) {
         try {
-            // Store in audit-specific folder
             const path = `${auditId}/${Date.now()}_${file.name}`;
             await supa.storage.from('community-files').upload(path, file);
-            // Also tag to the community's files
             const { data: fileData } = await supa.from('community_files').insert({
                 community_id: communityId, file_name: file.name, file_type: file.type,
                 storage_path: path, uploaded_by: currentUserId,
@@ -5973,7 +6001,9 @@ async function uploadAuditPhotos(auditId, communityId, files) {
             communityFiles[communityId].push({ id: fileData?.[0]?.id || generateId('f'), name: file.name, type: file.type, storagePath: path, date: new Date().toISOString() });
         } catch (err) { handleSaveError(err); }
     }
-    openAuditDetail(auditId);
+    // Refresh the photo grid inline instead of reopening the whole modal
+    const grid = document.getElementById('audit-photos-grid');
+    if (grid) grid.innerHTML = renderAuditPhotos(auditId, communityId);
 }
 
 // ===== DARK MODE =====
