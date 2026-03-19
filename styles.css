@@ -2079,7 +2079,34 @@ tr:last-child td {
     height: 260px !important;
 }
 
-/* Axis edit buttons removed — axis labels are now click-to-edit text */
+.chart-scale-edit {
+    position: absolute;
+    font-size: 10px;
+    color: var(--slate-300);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+    z-index: 2;
+}
+
+.analysis-chart-card:hover .chart-scale-edit {
+    opacity: 0.6;
+}
+
+.chart-scale-edit:hover {
+    opacity: 1 !important;
+    color: var(--navy-500);
+}
+
+.chart-scale-y {
+    left: 20px;
+    top: 45%;
+}
+
+.chart-scale-x {
+    bottom: 52px;
+    right: 20px;
+}
 
 .chart-title-editable {
     font-size: 13px;
@@ -2147,13 +2174,6 @@ tr:last-child td {
     color: var(--slate-500);
     margin-top: 4px;
     padding: 4px;
-    border-radius: 4px;
-    cursor: text;
-    transition: background 0.15s;
-}
-
-.chart-equation:hover {
-    background: var(--slate-50);
 }
 
 .chart-ts-legend {
