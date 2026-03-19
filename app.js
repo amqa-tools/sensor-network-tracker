@@ -5574,16 +5574,20 @@ function renderScatterSection(auditId, parsed, results) {
     el.innerHTML = `
         <h3 class="analysis-section-heading">Regression Plots</h3>
         <div class="analysis-chart-grid">
-        ${AUDIT_PARAMETERS.map(p => `<div class="analysis-chart-card">
+        ${AUDIT_PARAMETERS.map(p => {
+            const r = results[p.key];
+            const eqSign = r ? (r.intercept >= 0 ? '+' : '\u2212') : '';
+            const eqText = r ? `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)}     R\u00B2 = ${r.r2}` : '';
+            return `<div class="analysis-chart-card">
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">Hourly data, first 24 hours removed</div>
-            <button class="axis-edit-btn axis-edit-y" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998; Y</button>
-            <button class="axis-edit-btn axis-edit-x" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'x', this)">&#9998; X</button>
+            <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit})</div>
             <canvas id="scatter-${auditId}-${p.key}"></canvas>
-        </div>`).join('')}
+            <div class="chart-axis-label chart-axis-x" onclick="editChartTitle(this)">${parsed.sensorA.short} ${p.label} (${p.unit})</div>
+            <div class="chart-equation" onclick="editChartTitle(this)">${eqText}</div>
+        </div>`; }).join('')}
     </div>`;
 
-    // Defer chart creation to next frame so canvas elements exist
     requestAnimationFrame(() => {
         AUDIT_PARAMETERS.forEach(p => {
             const r = results[p.key];
@@ -5600,15 +5604,12 @@ function createScatterChart(canvasId, regression, param, parsed) {
     const xVals = regression.pairs.map(p => p.x);
     const minX = Math.min(...xVals);
     const maxX = Math.max(...xVals);
-    const eqSign = regression.intercept >= 0 ? '+' : '\u2212';
-    const eqLabel = `y = ${regression.slope}x ${eqSign} ${Math.abs(regression.intercept)}`;
 
     const chart = new Chart(canvas, {
         type: 'scatter',
         data: {
             datasets: [
                 {
-                    label: `${param.label}`,
                     data: regression.pairs,
                     backgroundColor: 'rgba(27,42,74,0.4)',
                     borderColor: 'rgba(27,42,74,0.5)',
@@ -5616,7 +5617,6 @@ function createScatterChart(canvasId, regression, param, parsed) {
                     pointHoverRadius: 5,
                 },
                 {
-                    label: eqLabel,
                     data: [
                         { x: minX, y: regression.slope * minX + regression.intercept },
                         { x: maxX, y: regression.slope * maxX + regression.intercept },
@@ -5632,18 +5632,10 @@ function createScatterChart(canvasId, regression, param, parsed) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { display: true, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 14 } },
-                title: {
-                    display: true,
-                    text: `R\u00B2 = ${regression.r2}`,
-                    font: { size: 12, family: "'JetBrains Mono', monospace" },
-                    color: '#64748b',
-                },
-            },
+            plugins: { legend: { display: false } },
             scales: {
-                x: { title: { display: true, text: `${parsed.sensorA.short} (${param.unit})`, font: { size: 11 } }, grid: { display: false } },
-                y: { title: { display: true, text: `${parsed.sensorB.short} (${param.unit})`, font: { size: 11 } }, grid: { display: false } },
+                x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                y: { grid: { display: false }, ticks: { font: { size: 10 } } },
             },
         },
     });
@@ -5659,8 +5651,12 @@ function renderTimeSeriesSection(auditId, parsed) {
         ${pmParams.map(p => `<div class="analysis-chart-card">
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">Hourly data, first 24 hours removed</div>
-            <button class="axis-edit-btn axis-edit-y" onclick="editChartAxis('ts-${auditId}-${p.key}', 'y', this)">&#9998; Y</button>
+            <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${p.labelHtml} (${p.unit})</div>
             <canvas id="ts-${auditId}-${p.key}"></canvas>
+            <div class="chart-ts-legend">
+                <span class="chart-ts-legend-item"><span style="background:#1B2A4A"></span> ${parsed.sensorA.short}</span>
+                <span class="chart-ts-legend-item"><span style="background:#C9A84C"></span> ${parsed.sensorB.short}</span>
+            </div>
         </div>`).join('')}
     </div>`;
 
@@ -5690,22 +5686,20 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
     const chart = new Chart(canvas, {
         type: 'line',
         data: { labels, datasets: [
-            { label: parsed.sensorA.short, data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
-            { label: parsed.sensorB.short, data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
+            { data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
+            { data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
         ]},
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } },
-            },
+            plugins: { legend: { display: false } },
             scales: {
-                x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d', hour: 'MMM d HH:mm' } }, grid: { display: false } },
+                x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d', hour: 'MMM d HH:mm' } }, grid: { display: false }, ticks: { font: { size: 10 } } },
                 y: {
                     min: Math.max(0, yMin - yPad),
                     max: yMax + yPad,
-                    title: { display: true, text: `${param.label} (${param.unit})`, font: { size: 11 } },
                     grid: { display: false },
+                    ticks: { font: { size: 10 } },
                 },
             },
             interaction: { mode: 'index', intersect: false },
