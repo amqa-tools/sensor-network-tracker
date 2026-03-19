@@ -995,7 +995,7 @@ const ALL_SENSOR_COLUMNS = [
     { key: 'location', label: 'Location', sortable: true, removable: true },
     { key: 'dateInstalled', label: 'Install Date', sortable: true, removable: true },
     { key: 'datePurchased', label: 'Purchase Date', sortable: true, removable: true },
-    { key: 'collocationDates', label: 'Collocation Dates', sortable: false, removable: true },
+    { key: 'collocationDates', label: 'Most Recent Collocation', sortable: false, removable: true },
 ];
 
 let hiddenColumns = loadData('hiddenSensorColumns', []);
@@ -1328,7 +1328,7 @@ function saveSensor(e) {
         const fieldLabels = {
             soaTagId: 'SOA Tag ID', type: 'Type', status: 'Status',
             community: 'Community', location: 'Location',
-            datePurchased: 'Purchase Date', collocationDates: 'Collocation Dates'
+            datePurchased: 'Purchase Date', collocationDates: 'Most Recent Collocation'
         };
 
         const changes = [];
@@ -1619,7 +1619,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Purchase Date</label>
                 <input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="datePurchased" value="${s.datePurchased || ''}" onblur="inlineSaveSensor(this)">
             </div>
-            <div class="info-item"><label>Collocation Dates</label>
+            <div class="info-item"><label>Most Recent Collocation</label>
                 <input class="inline-edit-input" data-sensor="${s.id}" data-field="collocationDates" value="${s.collocationDates || ''}" placeholder="e.g. Mar 5-13" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
         `;
@@ -1632,7 +1632,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Location</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
             <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'} <a class="move-sensor-link" onclick="viewInstallHistory()">View history &rarr;</a></p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
-            <div class="info-item"><label>Collocation Dates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'collocationDates')">${s.collocationDates || '—'}</p></div>
+            <div class="info-item"><label>Most Recent Collocation</label><p>${(() => { const c = getMostRecentCollocation(s.id); return c ? `${c.communityName}, ${c.dateRange}` : (s.collocationDates || '\u2014'); })()} <a class="move-sensor-link" onclick="viewCollocationHistory()">View history &rarr;</a></p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
             ${setupMode ? '<div class="info-item"><button class="btn btn-sm" onclick="openAddFieldModal()" style="margin-top:18px">+ Add Field</button></div>' : ''}
         `;
@@ -1658,7 +1658,7 @@ function inlineEditSensor(sensorId, field) {
     const s = sensors.find(x => x.id === sensorId);
     if (!s) return;
 
-    const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date', collocationDates: 'Collocation Dates' };
+    const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date', collocationDates: 'Most Recent Collocation' };
     const label = labels[field] || field;
     const oldVal = s[field] || '';
     const promptMsg = field === 'location' ? `Edit ${label} (enter an address or GPS coordinates):` : `Edit ${label}:`;
@@ -1778,7 +1778,7 @@ function showCommunityView(communityId) {
 
     const sensorTableHead = `<thead><tr>
         <th>Sensor ID</th><th>SOA Tag ID</th><th>Status</th>
-        <th>Location</th><th>Install Date</th><th>Purchase Date</th><th>Collocation Dates</th><th>Actions</th>
+        <th>Location</th><th>Install Date</th><th>Purchase Date</th><th>Most Recent Collocation</th><th>Actions</th>
     </tr></thead>`;
 
     function renderSensorRows(list) {
@@ -1902,6 +1902,9 @@ function showCommunityView(communityId) {
 
     // Audits
     renderCommunityAudits(communityId);
+
+    // Overview dashboard
+    renderCommunityOverview(communityId);
 
     resetTabs(document.getElementById('view-community'));
 
@@ -2600,7 +2603,41 @@ function openAddNoteModal(contextId, contextType) {
         statusGroup.style.display = 'none';
     }
 
+    // Reset audit link
+    document.getElementById('note-audit-link-group').style.display = 'none';
+
     openModal('modal-add-note');
+}
+
+function onNoteTypeChange() {
+    const type = document.getElementById('note-type-input').value;
+    const linkGroup = document.getElementById('note-audit-link-group');
+    if (type === 'Audit') {
+        const contextId = document.getElementById('note-context-id').value;
+        const contextType = document.getElementById('note-context-type').value;
+        // Find relevant audits for this sensor or community
+        let relevantAudits;
+        if (contextType === 'sensor') {
+            relevantAudits = audits.filter(a => a.auditPodId === contextId || a.communityPodId === contextId);
+        } else {
+            relevantAudits = audits.filter(a => a.communityId === contextId);
+        }
+        if (relevantAudits.length > 0) {
+            linkGroup.style.display = '';
+            document.getElementById('note-audit-link-options').innerHTML = relevantAudits.map(a => {
+                const cName = COMMUNITIES.find(c => c.id === a.communityId)?.name || a.communityId;
+                const dateStr = a.scheduledStart ? `${formatDate(a.scheduledStart)} \u2013 ${formatDate(a.scheduledEnd)}` : '';
+                return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate-600);cursor:pointer;padding:4px 0">
+                    <input type="checkbox" class="note-audit-link-cb" value="${a.id}" style="width:15px;height:15px">
+                    ${escapeHtml(a.auditPodId)} at ${escapeHtml(cName)} ${dateStr} <span class="audit-status-badge ${AUDIT_STATUS_CSS[a.status]}" style="font-size:10px;padding:1px 6px">${a.status}</span>
+                </label>`;
+            }).join('');
+        } else {
+            linkGroup.style.display = 'none';
+        }
+    } else {
+        linkGroup.style.display = 'none';
+    }
 }
 
 function saveNote(e) {
@@ -3797,7 +3834,7 @@ const SENSOR_EXPORT_FIELDS = [
     { key: 'location', label: 'Location', get: s => s.location || '' },
     { key: 'dateInstalled', label: 'Install Date', get: s => s.dateInstalled || '' },
     { key: 'datePurchased', label: 'Purchase Date', get: s => s.datePurchased || '' },
-    { key: 'collocationDates', label: 'Collocation Dates', get: s => s.collocationDates || '' },
+    { key: 'collocationDates', label: 'Most Recent Collocation', get: s => s.collocationDates || '' },
 ];
 
 const CONTACT_EXPORT_FIELDS = [
@@ -4029,6 +4066,25 @@ function viewInstallHistory() {
     if (filterEl) filterEl.value = '_changes';
     filterSensorHistory();
     document.getElementById('tab-sensor-history').scrollIntoView({ behavior: 'smooth' });
+}
+
+function viewCollocationHistory() {
+    const filterEl = document.getElementById('sensor-history-filter');
+    if (filterEl) filterEl.value = 'Audit';
+    filterSensorHistory();
+    document.getElementById('tab-sensor-history').scrollIntoView({ behavior: 'smooth' });
+}
+
+function getMostRecentCollocation(sensorId) {
+    const sensorAudits = audits
+        .filter(a => (a.auditPodId === sensorId || a.communityPodId === sensorId) && (a.status === 'Audit Complete' || a.status === 'Analysis Pending' || a.status === 'Complete'))
+        .sort((a, b) => (b.scheduledEnd || '').localeCompare(a.scheduledEnd || ''));
+    if (sensorAudits.length === 0) return null;
+    const a = sensorAudits[0];
+    const communityName = COMMUNITIES.find(c => c.id === a.communityId)?.name || a.communityId;
+    const start = a.scheduledStart ? formatDate(a.scheduledStart) : '';
+    const end = a.scheduledEnd ? formatDate(a.scheduledEnd) : '';
+    return { communityName, dateRange: `${start} \u2013 ${end}`, audit: a };
 }
 
 // ===== PINNED SIDEBAR ITEMS =====
@@ -4683,6 +4739,22 @@ async function saveNewAudit(event) {
     const auditNotes = document.getElementById('audit-notes-input').value.trim();
     if (!auditPodId || !communityId || !communityPodId || !scheduledStart || !scheduledEnd) return;
     if (new Date(scheduledEnd) < new Date(scheduledStart)) { alert('End date must be after start date.'); return; }
+
+    // Check for sensor overlap with existing audits
+    const conflicts = audits.filter(a => {
+        if (a.status === 'Audit Complete') return false;
+        const hasSensorOverlap = a.auditPodId === auditPodId || a.auditPodId === communityPodId || a.communityPodId === auditPodId || a.communityPodId === communityPodId;
+        if (!hasSensorOverlap) return false;
+        const hasDateOverlap = a.scheduledStart <= scheduledEnd && a.scheduledEnd >= scheduledStart;
+        return hasDateOverlap;
+    });
+    if (conflicts.length > 0) {
+        const msgs = conflicts.map(c => {
+            const cName = COMMUNITIES.find(x => x.id === c.communityId)?.name || c.communityId;
+            return `\u2022 ${c.auditPodId} \u2194 ${c.communityPodId} at ${cName} (${c.scheduledStart} to ${c.scheduledEnd})`;
+        });
+        if (!confirm(`Warning: One or more sensors are already assigned to overlapping audits:\n\n${msgs.join('\n')}\n\nSchedule anyway?`)) return;
+    }
 
     const conductedBy = [installTeam, takedownTeam].filter(Boolean).join(' / ');
     const audit = { auditPodId, communityPodId, communityId, status: 'Scheduled', scheduledStart, scheduledEnd,
@@ -5856,6 +5928,104 @@ function renderRawDataPanel(parsed) {
 }
 
 // ===== AUDIT LISTS IN COMMUNITY / SENSOR VIEWS =====
+function activateCommunityTab(tabName) {
+    const container = document.getElementById('view-community');
+    if (!container) return;
+    container.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+    container.querySelectorAll('.tab-content').forEach(tc => tc.classList.toggle('active', tc.id === 'tab-' + tabName));
+}
+
+function renderCommunityOverview(communityId) {
+    const dashboard = document.getElementById('community-overview-dashboard');
+    if (!dashboard) return;
+
+    // Sensor summary
+    const commSensors = sensors.filter(s => s.community === communityId);
+    const sensorHtml = commSensors.length > 0
+        ? commSensors.slice(0, 3).map(s => `<div class="ov-sensor-row" onclick="showSensorDetail('${s.id}')">
+            <span style="font-family:var(--font-mono);font-size:13px;font-weight:600">${s.id}</span>
+            <span style="font-size:12px;color:var(--slate-400)">${s.type || 'Unassigned'}</span>
+            <span>${renderStatusBadges(s, false)}</span>
+        </div>`).join('') + (commSensors.length > 3 ? `<div style="margin-top:4px"><a class="ov-view-all" onclick="activateCommunityTab('community-sensors')">View all ${commSensors.length} sensors &rarr;</a></div>` : '')
+        : '<p class="ov-empty">No sensors assigned</p>';
+
+    // Recent history (3 items)
+    const children = getChildCommunities(communityId);
+    const allCommunityIds = [communityId, ...children.map(c => c.id)];
+    const sensorIdsInCommunity = sensors.filter(s => allCommunityIds.includes(s.community)).map(s => s.id);
+    const commNotes = notes.filter(n => {
+        if (n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id))) return true;
+        if (n.taggedSensors && n.taggedSensors.some(id => sensorIdsInCommunity.includes(id))) return true;
+        return false;
+    }).sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')).slice(0, 3);
+    const historyHtml = commNotes.length > 0
+        ? commNotes.map(n => `<div class="ov-timeline-item">
+            <span class="ov-timeline-type">${n.type}</span>
+            <span class="ov-timeline-text">${escapeHtml((n.text || '').substring(0, 100))}${(n.text || '').length > 100 ? '...' : ''}</span>
+            <span class="ov-timeline-date">${formatDate(n.date || n.createdAt)}</span>
+        </div>`).join('') + `<div><a class="ov-view-all" onclick="activateCommunityTab('community-history')">View all history &rarr;</a></div>`
+        : '<p class="ov-empty">No history yet</p>';
+
+    // Recent comms (3 items)
+    const commComms = comms.filter(c => allCommunityIds.includes(c.community) || (c.taggedCommunities && c.taggedCommunities.some(id => allCommunityIds.includes(id))))
+        .sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')).slice(0, 3);
+    const commsHtml = commComms.length > 0
+        ? commComms.map(c => `<div class="ov-timeline-item">
+            <span class="ov-timeline-type">${c.commType || c.type}</span>
+            <span class="ov-timeline-text">${escapeHtml((c.text || '').substring(0, 100))}${(c.text || '').length > 100 ? '...' : ''}</span>
+            <span class="ov-timeline-date">${formatDate(c.date || c.createdAt)}</span>
+        </div>`).join('') + `<div><a class="ov-view-all" onclick="activateCommunityTab('community-comms')">View all comms &rarr;</a></div>`
+        : '<p class="ov-empty">No communications yet</p>';
+
+    // Top contacts (2)
+    const commContacts = contacts.filter(c => allCommunityIds.includes(c.community) && c.active !== false).slice(0, 2);
+    const contactsHtml = commContacts.length > 0
+        ? commContacts.map(c => `<div class="ov-contact-row" onclick="showContactDetail('${c.id}')">
+            <div><strong>${escapeHtml(c.name)}</strong></div>
+            <div style="font-size:12px;color:var(--slate-400)">${escapeHtml(c.role || '')}${c.org ? ` \u00B7 ${escapeHtml(c.org)}` : ''}</div>
+        </div>`).join('') + `<div><a class="ov-view-all" onclick="activateCommunityTab('community-contacts')">View all contacts &rarr;</a></div>`
+        : '<p class="ov-empty">No contacts yet</p>';
+
+    // Most recent audit
+    const communityAudits = audits.filter(a => a.communityId === communityId).sort((a, b) => (b.scheduledEnd || '').localeCompare(a.scheduledEnd || ''));
+    const recentAudit = communityAudits[0];
+    const auditHtml = recentAudit
+        ? `<div class="ov-audit-card" onclick="openAuditDetail('${recentAudit.id}')">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-family:var(--font-mono);font-size:12px">${recentAudit.auditPodId} \u2194 ${recentAudit.communityPodId}</span>
+                <span class="audit-status-badge ${AUDIT_STATUS_CSS[recentAudit.status]}">${recentAudit.status}</span>
+            </div>
+            <div style="font-size:12px;color:var(--slate-400);margin-top:4px">${recentAudit.scheduledStart ? formatDate(recentAudit.scheduledStart) + ' \u2013 ' + formatDate(recentAudit.scheduledEnd) : '\u2014'}</div>
+            ${Object.keys(recentAudit.analysisResults || {}).length > 0 ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${AUDIT_PARAMETERS.map(p => { const r = recentAudit.analysisResults[p.key]; if (!r) return ''; return `<span class="audit-param-badge ${r.pass ? 'pass' : 'fail'}">${p.label} ${r.pass ? '\u2713' : '\u2717'}</span>`; }).join('')}</div>` : ''}
+        </div>` + (communityAudits.length > 1 ? `<div><a class="ov-view-all" onclick="activateCommunityTab('community-audits')">View all ${communityAudits.length} audits &rarr;</a></div>` : '')
+        : '<p class="ov-empty">No audits yet</p>';
+
+    dashboard.innerHTML = `
+        <div class="community-overview-grid">
+            <div class="ov-card">
+                <h4 class="ov-card-title">Sensors</h4>
+                ${sensorHtml}
+            </div>
+            <div class="ov-card">
+                <h4 class="ov-card-title">Contacts</h4>
+                ${contactsHtml}
+            </div>
+            <div class="ov-card ov-card-wide">
+                <h4 class="ov-card-title">Recent History</h4>
+                ${historyHtml}
+            </div>
+            <div class="ov-card ov-card-wide">
+                <h4 class="ov-card-title">Recent Communications</h4>
+                ${commsHtml}
+            </div>
+            <div class="ov-card">
+                <h4 class="ov-card-title">Most Recent Audit</h4>
+                ${auditHtml}
+            </div>
+        </div>
+    `;
+}
+
 function renderCommunityAudits(communityId) {
     const section = document.getElementById('community-audits-section');
     if (!section) return;
@@ -6325,7 +6495,7 @@ async function importSensors(event) {
                 community: '',
                 location: String(row['Location'] || row['location'] || '').trim(),
                 datePurchased: String(row['Purchase Date'] || row['date_purchased'] || '').trim(),
-                collocationDates: String(row['Collocation Dates'] || row['collocation_dates'] || '').trim(),
+                collocationDates: String(row['Most Recent Collocation'] || row['collocation_dates'] || '').trim(),
                 dateInstalled: '',
             };
 

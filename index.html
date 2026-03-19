@@ -248,15 +248,20 @@
                 </div>
 
                 <div class="tabs">
-                    <button class="tab active" data-tab="community-sensors">Sensors</button>
+                    <button class="tab active" data-tab="community-overview">Overview</button>
+                    <button class="tab" data-tab="community-sensors">Sensors</button>
                     <button class="tab" data-tab="community-contacts">Contacts</button>
-                    <button class="tab" data-tab="community-history">Community History</button>
+                    <button class="tab" data-tab="community-history">History</button>
                     <button class="tab" data-tab="community-comms">Communications</button>
                     <button class="tab" data-tab="community-files">Files</button>
                     <button class="tab" data-tab="community-audits">Audits</button>
                 </div>
 
-                <div id="tab-community-sensors" class="tab-content active">
+                <div id="tab-community-overview" class="tab-content active">
+                    <div id="community-overview-dashboard"></div>
+                </div>
+
+                <div id="tab-community-sensors" class="tab-content">
                     <div id="community-sensors-section"></div>
                 </div>
 
@@ -595,15 +600,19 @@
                 <input type="hidden" id="note-context-type">
                 <div class="form-group">
                     <label>Note Type</label>
-                    <select id="note-type-input">
+                    <select id="note-type-input" onchange="onNoteTypeChange()">
                         <option value="General">General</option>
                         <option value="Audit">Audit / Collocation</option>
                         <option value="Site Work">Site Work</option>
                         <option value="Issue">Issue</option>
                     </select>
                 </div>
-                <div class="form-group" id="note-status-change-group" style="display:none">
-                    <label><input type="checkbox" id="note-change-status" onchange="document.getElementById('note-status-list').style.display = this.checked ? '' : 'none'"> Also change sensor status</label>
+                <div id="note-audit-link-group" style="display:none;margin-bottom:8px">
+                    <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px">Link to audit</label>
+                    <div id="note-audit-link-options" style="margin-top:4px"></div>
+                </div>
+                <div id="note-status-change-group" style="display:none;margin-top:8px">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--slate-600);text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" id="note-change-status" onchange="document.getElementById('note-status-list').style.display = this.checked ? '' : 'none'" style="width:16px;height:16px"> Also change sensor status</label>
                     <div id="note-status-list" class="status-toggle-list" style="display:none;margin-top:6px"></div>
                 </div>
                 <div class="form-group">
