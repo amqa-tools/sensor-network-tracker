@@ -162,7 +162,10 @@ function createNote(type, text, tags, additionalInfo) {
         taggedContacts: tags?.contacts || [],
     };
     notes.push(note);
-    persistNote(note);
+    // Persist and update in-memory ID with Supabase-generated UUID
+    db.insertNote(note).then(saved => {
+        if (saved?.id) note.id = saved.id;
+    }).catch(handleSaveError);
     return note;
 }
 
@@ -2119,7 +2122,7 @@ function openAddContactForCommunity() {
     }
 }
 
-function saveContact(e) {
+async function saveContact(e) {
     e.preventDefault();
     const editId = document.getElementById('contact-edit-id').value;
     const isActive = document.getElementById('contact-active-yes').checked;
@@ -2159,26 +2162,25 @@ function saveContact(e) {
         if (idx >= 0) contacts[idx] = data;
         trackRecent('contacts', data.id, 'edited');
     } else {
+        // New contact — let Supabase generate the UUID
+        try {
+            const saved = await db.upsertContact(data);
+            if (saved?.id) data.id = saved.id;
+        } catch (err) {
+            handleSaveError(err);
+            data.id = generateId('c'); // fallback for offline
+        }
         contacts.push(data);
         trackRecent('contacts', data.id, 'edited');
 
         // Log new contact added
         if (!setupMode && data.community) {
-            const note = {
-                id: generateId('n'),
-                date: nowDatetime(),
-                type: 'Info Edit',
-                text: `${data.name} added as a contact for ${getCommunityName(data.community)}.`,
-                createdBy: getCurrentUserName(), createdById: currentUserId,
-                taggedSensors: [],
-                taggedCommunities: [data.community],
-                taggedContacts: [data.id],
-            };
-            notes.push(note); persistNote(note);
+            createNote('Info Edit', `${data.name} added as a contact for ${getCommunityName(data.community)}.`, {
+                communities: [data.community], contacts: [data.id] });
         }
     }
 
-    persistContact(data);
+    if (editId) persistContact(data); // Only fire-and-forget for edits
     closeModal('modal-add-contact');
     renderContacts();
 
@@ -2738,7 +2740,7 @@ function saveComm(e) {
     }).filter(Boolean);
 
     const comm = {
-        id: 'comm' + Date.now(),
+        id: generateId('comm'),
         date: commDate,
         type: 'Communication',
         commType: commType,
@@ -2749,7 +2751,10 @@ function saveComm(e) {
         taggedCommunities: [communityId],
     };
 
-    comms.push(comm); persistComm(comm);
+    comms.push(comm);
+    db.insertComm(comm).then(saved => {
+        if (saved?.id) comm.id = saved.id;
+    }).catch(handleSaveError);
     closeModal('modal-comm');
 
     if (currentCommunity) showCommunityView(currentCommunity);

@@ -142,8 +142,9 @@ const db = {
             org: contact.org || '',
             active: contact.active !== false,
         };
-        if (contact.id && typeof contact.id === 'string' && contact.id.length > 10) {
-            // Existing UUID — update
+        // Only include id if it's a valid UUID (existing record)
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (contact.id && uuidPattern.test(contact.id)) {
             row.id = contact.id;
         }
         const { data, error } = await supa.from('contacts').upsert(row).select();
