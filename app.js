@@ -5624,8 +5624,8 @@ function createScatterChart(canvasId, regression, param, parsed) {
                     backgroundColor: 'rgba(27,42,74,0.4)',
                     borderColor: 'rgba(27,42,74,0.5)',
                     pointRadius: 3,
-                    pointHitRadius: 12,
-                    pointHoverRadius: 5,
+                    pointHitRadius: 5,
+                    pointHoverRadius: 6,
                 },
                 {
                     data: [
@@ -5671,8 +5671,8 @@ function createScatterChart(canvasId, regression, param, parsed) {
                     caretSize: 6,
                 },
             },
-            hover: { mode: 'nearest', intersect: false, axis: 'xy' },
-            interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+            hover: { mode: 'nearest', intersect: true },
+            interaction: { mode: 'nearest', intersect: true },
             scales: {
                 x: { grid: { display: false }, ticks: { font: { size: 10 } } },
                 y: { grid: { display: false }, ticks: { font: { size: 10 } } },
