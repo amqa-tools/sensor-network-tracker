@@ -127,14 +127,26 @@ async function loadAllData() {
 // Fire-and-forget writes to Supabase. UI updates immediately from in-memory arrays.
 function handleSaveError(err) {
     console.error('Save error:', err);
+    const raw = err?.message || err || 'Unknown error';
+    const friendly = raw.includes('duplicate') ? 'This record already exists.' :
+        raw.includes('violates') ? 'A data conflict occurred. Please try again.' :
+        raw.includes('network') || raw.includes('fetch') ? 'Could not reach the server. Check your connection.' : raw;
     const msg = document.createElement('div');
     msg.className = 'save-error-toast';
-    msg.textContent = 'Save failed: ' + (err?.message || err || 'Unknown error');
+    msg.textContent = 'Save failed: ' + friendly;
     document.body.appendChild(msg);
     setTimeout(() => msg.remove(), 6000);
 }
 
-function persistSensor(s) { db.upsertSensor(s).catch(handleSaveError); }
+function showSuccessToast(text) {
+    const msg = document.createElement('div');
+    msg.className = 'save-success-toast';
+    msg.textContent = text;
+    document.body.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+}
+
+function persistSensor(s) { return db.upsertSensor(s).catch(handleSaveError); }
 function persistContact(c) { return db.upsertContact(c).catch(handleSaveError); }
 function persistNote(n) { return db.insertNote(n).catch(handleSaveError); }
 function persistComm(c) { return db.insertComm(c).catch(handleSaveError); }
@@ -1195,12 +1207,6 @@ function renderSensors() {
         return `<tr>${checkbox}${idCell}${dataCells}${actions}</tr>`;
     }).join('') || `<tr><td colspan="${totalCols}" class="empty-state">No sensors found.</td></tr>`;
 
-    if (setupMode) {
-        document.querySelectorAll('.inline-edit-status').forEach(sel => {
-            sel.addEventListener('change', function() { inlineSaveSensor(this); });
-        });
-    }
-
     renderSensorTableHeader();
 }
 
@@ -1354,12 +1360,15 @@ function saveSensor(e) {
             }
         }
 
-        // Apply the data
+        // Apply the data — preserve customFields from the existing sensor
         const idx = sensors.findIndex(s => s.id === editId);
-        if (idx >= 0) sensors[idx] = data;
+        if (idx >= 0) {
+            data.customFields = sensors[idx].customFields || {};
+            sensors[idx] = data;
+        }
         trackRecent('sensors', data.id, 'edited');
         persistSensor(data);
-        closeModal('modal-add-sensor');
+        closeModal('modal-add-sensor'); showSuccessToast('Sensor saved');
         renderSensors();
 
         // If there are changes, queue annotation popups (skip in setup mode)
@@ -1384,7 +1393,7 @@ function saveSensor(e) {
         }
         sensors.push(data);
         persistSensor(data);
-        closeModal('modal-add-sensor');
+        closeModal('modal-add-sensor'); showSuccessToast('Sensor saved');
         renderSensors();
     }
 }
@@ -2189,7 +2198,7 @@ async function saveContact(e) {
     }
 
     if (editId) persistContact(data); // Only fire-and-forget for edits
-    closeModal('modal-add-contact');
+    closeModal('modal-add-contact'); showSuccessToast('Contact saved');
     renderContacts();
 
     // Auto-log email/phone changes (not in setup mode)
@@ -2394,7 +2403,7 @@ function deleteCurrentContact() {
 
     db.deleteContact(currentContact).catch(err => console.error('Delete error:', err));
     contacts = contacts.filter(x => x.id !== currentContact);
-    closeModal('modal-add-contact');
+    closeModal('modal-add-contact'); showSuccessToast('Contact saved');
 
     // Close the tab and go to contacts list
     const tabId = getTabId('contact', currentContact);
@@ -2718,7 +2727,7 @@ function saveNote(e) {
         }
     }
 
-    closeModal('modal-add-note');
+    closeModal('modal-add-note'); showSuccessToast('Note added');
 
     if (currentCommunity) showCommunityView(currentCommunity);
     if (currentSensor) showSensorView(currentSensor);
@@ -2763,7 +2772,7 @@ function saveComm(e) {
     db.insertComm(comm).then(saved => {
         if (saved?.id) comm.id = saved.id;
     }).catch(handleSaveError);
-    closeModal('modal-comm');
+    closeModal('modal-comm'); showSuccessToast('Communication logged');
 
     if (currentCommunity) showCommunityView(currentCommunity);
 }
@@ -2785,7 +2794,7 @@ function renderTimeline(containerId, items) {
         const expandable = hasFullBody ? `onclick="this.querySelector('.timeline-text-full').classList.toggle('open')" style="cursor:pointer"` : '';
 
         const additionalInfoHtml = item.additionalInfo
-            ? `<div class="timeline-additional-info"><em>${highlightMentions(item.additionalInfo)}</em></div>`
+            ? `<div class="timeline-additional-info"><em>${highlightMentions(escapeHtml(item.additionalInfo))}</em></div>`
             : '';
 
         const createdAt = item.createdAt || item.created_at || '';
@@ -2808,7 +2817,7 @@ function renderTimeline(containerId, items) {
                     </div>
                     ${actions}
                 </div>
-                <div class="timeline-text">${highlightMentions(item.text)}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
+                <div class="timeline-text">${highlightMentions(escapeHtml(item.text))}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
                 ${additionalInfoHtml}
                 ${hasFullBody ? `<div class="timeline-text-full">${item.fullBody}</div>` : ''}
                 ${attribution}
@@ -3301,10 +3310,7 @@ function filterSensorHistory() {
 }
 
 // ===== INLINE COMMUNITY CHANGE (sensor detail) =====
-function openInlineCommunityChange(sensorId) {
-    // Reuse the move sensor modal
-    openMoveSensorModal(sensorId);
-}
+
 
 // ===== TAG-CHIP INPUTS (Facebook Marketplace style) =====
 function setupTagChipInput(containerId, getOptions, getLabel) {
@@ -4138,24 +4144,20 @@ function saveCollocation(e) {
     const s = sensors.find(x => x.id === sensorId);
     const communityId = s?.community || '';
 
-    // Store collocation data as structured additionalInfo: "location|start|end"
+    // Create note with structured additionalInfo for getMostRecentCollocation
     const noteText = `Collocation at ${location}: ${formatDate(startDate)} \u2013 ${formatDate(endDate)}.${extraNotes ? ' ' + extraNotes : ''}`;
-    createNote('Collocation', noteText, {
+    const collocNote = createNote('Collocation', noteText, {
         sensors: [sensorId],
         communities: communityId ? [communityId] : [],
     });
-    // Store structured data for getMostRecentCollocation to parse
-    const lastNote = notes[notes.length - 1];
-    if (lastNote) {
-        lastNote.additionalInfo = `${location}|${startDate}|${endDate}`;
-        persistNote(lastNote);
-    }
+    // Set additionalInfo on the in-memory note (createNote already persists to DB)
+    collocNote.additionalInfo = `${location}|${startDate}|${endDate}`;
 
     // Update the sensor's collocationDates field for backward compatibility
     s.collocationDates = `${location}, ${formatDate(startDate)} \u2013 ${formatDate(endDate)}`;
     persistSensor(s);
 
-    closeModal('modal-collocation');
+    closeModal('modal-collocation'); showSuccessToast('Collocation logged');
     if (currentSensor === sensorId) showSensorView(sensorId);
 }
 
@@ -4849,7 +4851,7 @@ async function saveNewAudit(event) {
     const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
     createNote('Audit', `Audit scheduled: ${auditPodId} auditing ${communityPodId} at ${communityName} (${scheduledStart} to ${scheduledEnd}).`, {
         sensors: [auditPodId, communityPodId], communities: [communityId] });
-    closeModal('modal-new-audit');
+    closeModal('modal-new-audit'); showSuccessToast('Audit scheduled');
     updateSidebarAuditCount();
     if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
 }
