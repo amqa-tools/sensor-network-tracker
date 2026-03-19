@@ -2077,33 +2077,54 @@ tr:last-child td {
     height: 260px !important;
 }
 
-.chart-scale-edit {
+.chart-scale-zone {
     position: absolute;
-    font-size: 10px;
-    color: var(--slate-300);
+    z-index: 2;
     cursor: pointer;
     opacity: 0;
-    transition: opacity 0.15s, color 0.15s;
-    z-index: 2;
+    transition: opacity 0.15s;
 }
 
-.analysis-chart-card:hover .chart-scale-edit {
-    opacity: 0.6;
+.chart-scale-zone:hover {
+    opacity: 1;
+    background: rgba(27, 42, 74, 0.04);
 }
 
-.chart-scale-edit:hover {
-    opacity: 1 !important;
+.chart-scale-zone::after {
+    content: '\270E';
+    position: absolute;
+    font-size: 12px;
     color: var(--navy-500);
+    background: var(--surface);
+    border: 1px solid var(--slate-200);
+    border-radius: 4px;
+    padding: 1px 5px;
+    box-shadow: var(--shadow-sm);
 }
 
-.chart-scale-y {
-    left: 20px;
-    top: 45%;
+.chart-scale-zone-y {
+    left: 32px;
+    top: 40px;
+    bottom: 20px;
+    width: 40px;
 }
 
-.chart-scale-x {
-    bottom: 52px;
-    right: 20px;
+.chart-scale-zone-y::after {
+    top: 50%;
+    right: -2px;
+    transform: translateY(-50%);
+}
+
+.chart-scale-zone-x {
+    bottom: 0;
+    left: 72px;
+    right: 16px;
+    height: 28px;
+}
+
+.chart-scale-zone-x::after {
+    right: 0;
+    top: 2px;
 }
 
 .chart-title-editable {
@@ -2154,9 +2175,13 @@ tr:last-child td {
     writing-mode: vertical-lr;
     transform: rotate(180deg);
     position: absolute;
-    left: 4px;
-    top: 50%;
-    margin-top: -20px;
+    left: 6px;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
     text-align: center;
 }
 
@@ -2202,8 +2227,17 @@ tr:last-child td {
 
 .dark-mode .chart-axis-label,
 .dark-mode .chart-equation,
-.dark-mode .chart-ts-legend,
-.dark-mode .chart-scale-edit {
+.dark-mode .chart-ts-legend {
+    color: var(--slate-400);
+}
+
+.dark-mode .chart-scale-zone:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.dark-mode .chart-scale-zone::after {
+    background: #1e293b;
+    border-color: rgba(255,255,255,0.1);
     color: var(--slate-400);
 }
 
@@ -2252,9 +2286,6 @@ tr:last-child td {
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
     padding: 6px 8px;
-    top: 50%;
-    left: 28px;
-    transform: translateY(-50%);
 }
 
 .axis-popover-row {

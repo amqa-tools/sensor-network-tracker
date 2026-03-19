@@ -5581,9 +5581,9 @@ function renderScatterSection(auditId, parsed, results) {
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit})</div>
-            <div class="chart-scale-edit chart-scale-y" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'y', this)" title="Click to edit Y range">&#9998;</div>
+            <div class="chart-scale-zone chart-scale-zone-y" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'y', this)" title="Click to edit Y range">&#9998;</div>
             <canvas id="scatter-${auditId}-${p.key}"></canvas>
-            <div class="chart-scale-edit chart-scale-x" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'x', this)" title="Click to edit X range">&#9998;</div>
+            <div class="chart-scale-zone chart-scale-zone-x" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'x', this)" title="Click to edit X range">&#9998;</div>
             <div class="chart-axis-label chart-axis-x" onclick="editChartTitle(this)">${parsed.sensorA.short} ${p.label} (${p.unit})</div>
             <div class="chart-equation">${eqText}</div>
         </div>`; }).join('')}
@@ -5655,7 +5655,7 @@ function renderTimeSeriesSection(auditId, parsed) {
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}</div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${p.labelHtml} (${p.unit})</div>
-            <div class="chart-scale-edit chart-scale-y" onclick="editChartAxis('ts-${auditId}-${p.key}', 'y', this)" title="Click to edit Y range">&#9998;</div>
+            <div class="chart-scale-zone chart-scale-zone-y" onclick="editChartAxis('ts-${auditId}-${p.key}', 'y', this)" title="Click to edit Y range">&#9998;</div>
             <canvas id="ts-${auditId}-${p.key}"></canvas>
             <div class="chart-ts-legend">
                 <span class="chart-ts-legend-item"><span style="background:#1B2A4A"></span> ${parsed.sensorA.short}</span>
@@ -5758,12 +5758,16 @@ function editChartAxis(canvasId, axis, btn) {
         </div>
     `;
 
-    // Position near the button that was clicked
+    // Position near the axis that was clicked
     const card = btn.closest('.analysis-chart-card');
-    if (axis === 'x') {
+    if (axis === 'y') {
+        pop.style.left = '72px';
+        pop.style.top = '50%';
+        pop.style.transform = 'translateY(-50%)';
+    } else {
         pop.style.left = '50%';
         pop.style.top = 'auto';
-        pop.style.bottom = '60px';
+        pop.style.bottom = '36px';
         pop.style.transform = 'translateX(-50%)';
     }
     card.appendChild(pop);
