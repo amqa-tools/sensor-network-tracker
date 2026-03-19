@@ -5492,8 +5492,8 @@ function renderScatterSection(auditId, parsed, results) {
         <div class="analysis-chart-grid">
         ${AUDIT_PARAMETERS.map(p => `<div class="analysis-chart-card">
             <h4>${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}<br><span style="font-weight:400;font-size:11px;color:var(--slate-400)">Hourly data, first 24 hours removed</span></h4>
-            <button class="axis-edit-btn axis-edit-y" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'y')">&#9998; Y</button>
-            <button class="axis-edit-btn axis-edit-x" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'x')">&#9998; X</button>
+            <button class="axis-edit-btn axis-edit-y" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998; Y</button>
+            <button class="axis-edit-btn axis-edit-x" onclick="editChartAxis('scatter-${auditId}-${p.key}', 'x', this)">&#9998; X</button>
             <canvas id="scatter-${auditId}-${p.key}"></canvas>
         </div>`).join('')}
     </div>`;
@@ -5573,7 +5573,7 @@ function renderTimeSeriesSection(auditId, parsed) {
         <div class="analysis-chart-grid">
         ${pmParams.map(p => `<div class="analysis-chart-card">
             <h4>${parsed.sensorB.short} and ${parsed.sensorA.short} \u2014 ${p.labelHtml}<br><span style="font-weight:400;font-size:11px;color:var(--slate-400)">Hourly data, first 24 hours excluded from analysis</span></h4>
-            <button class="axis-edit-btn axis-edit-y" onclick="editChartAxis('ts-${auditId}-${p.key}', 'y')">&#9998; Y</button>
+            <button class="axis-edit-btn axis-edit-y" onclick="editChartAxis('ts-${auditId}-${p.key}', 'y', this)">&#9998; Y</button>
             <canvas id="ts-${auditId}-${p.key}"></canvas>
         </div>`).join('')}
     </div>`;
@@ -5647,20 +5647,52 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
     analysisChartInstances.push(chart);
 }
 
-function editChartAxis(canvasId, axis) {
+function editChartAxis(canvasId, axis, btn) {
+    // Close any existing popover
+    document.querySelectorAll('.axis-popover').forEach(p => p.remove());
+
     const chart = analysisChartInstances.find(c => c.canvas?.id === canvasId);
     if (!chart || !chart.scales[axis]) return;
     const scale = chart.scales[axis];
-    const label = axis === 'y' ? 'Y-axis' : 'X-axis';
+    const label = axis === 'y' ? 'Y' : 'X';
 
-    const newMin = prompt(`${label} minimum:`, Math.round(scale.min * 100) / 100);
-    if (newMin === null) return;
-    const newMax = prompt(`${label} maximum:`, Math.round(scale.max * 100) / 100);
-    if (newMax === null) return;
+    const pop = document.createElement('div');
+    pop.className = 'axis-popover';
+    pop.innerHTML = `
+        <div class="axis-popover-row">
+            <label>Min</label>
+            <input type="number" id="axis-pop-min" value="${Math.round(scale.min * 100) / 100}" step="any">
+            <label>Max</label>
+            <input type="number" id="axis-pop-max" value="${Math.round(scale.max * 100) / 100}" step="any">
+            <button class="axis-popover-apply" onclick="applyAxisEdit('${canvasId}','${axis}')">Apply</button>
+            <button class="axis-popover-close" onclick="this.closest('.axis-popover').remove()">&times;</button>
+        </div>
+    `;
 
-    chart.options.scales[axis].min = parseFloat(newMin);
-    chart.options.scales[axis].max = parseFloat(newMax);
+    // Position near the button
+    const card = btn.closest('.analysis-chart-card');
+    card.appendChild(pop);
+    pop.querySelector('#axis-pop-min').focus();
+    pop.querySelector('#axis-pop-min').select();
+
+    // Enter key applies
+    pop.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') applyAxisEdit(canvasId, axis);
+        if (e.key === 'Escape') pop.remove();
+    });
+}
+
+function applyAxisEdit(canvasId, axis) {
+    const chart = analysisChartInstances.find(c => c.canvas?.id === canvasId);
+    if (!chart) return;
+    const pop = document.querySelector('.axis-popover');
+    if (!pop) return;
+    const min = parseFloat(pop.querySelector('#axis-pop-min').value);
+    const max = parseFloat(pop.querySelector('#axis-pop-max').value);
+    if (!isNaN(min)) chart.options.scales[axis].min = min;
+    if (!isNaN(max)) chart.options.scales[axis].max = max;
     chart.update();
+    pop.remove();
 }
 
 function renderRawDataPanel(parsed) {
