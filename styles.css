@@ -2401,6 +2401,67 @@ tr:last-child td {
     box-shadow: 0 0 0 3px rgba(27,42,74,0.1);
 }
 
+/* ===== IMAGE LIGHTBOX ===== */
+.image-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: lbFadeIn 0.15s ease;
+}
+
+@keyframes lbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.image-lightbox-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    cursor: pointer;
+}
+
+.image-lightbox-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    z-index: 1;
+}
+
+.image-lightbox-content img {
+    display: block;
+    max-width: 90vw;
+    max-height: 85vh;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    object-fit: contain;
+    background: white;
+}
+
+.image-lightbox-close {
+    position: absolute;
+    top: -12px;
+    right: -12px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: white;
+    border: none;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--slate-600);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.image-lightbox-close:hover {
+    background: var(--slate-100);
+}
+
 /* ===== AUDIT PHOTOS ===== */
 .audit-photos-grid {
     display: flex;

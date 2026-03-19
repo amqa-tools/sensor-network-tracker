@@ -1950,7 +1950,7 @@ function renderCommunityFiles(communityId) {
         const fileUrl = f.storagePath ? '' : (f.data || ''); // fallback for old base64 data
         const viewOnclick = f.storagePath
             ? `onclick="openStorageFile('${f.storagePath}')"`
-            : `onclick="window.open('${fileUrl}', '_blank')"`;
+            : `onclick="openImageLightbox('${fileUrl}')"`;
         const downloadHref = f.storagePath ? '#' : fileUrl;
         const downloadOnclick = f.storagePath
             ? `onclick="event.preventDefault(); downloadStorageFile('${f.storagePath}', '${f.name}')"`
@@ -1995,7 +1995,35 @@ function renderCommunityFiles(communityId) {
 
 async function openStorageFile(storagePath) {
     const url = await db.getSignedUrl(storagePath);
-    window.open(url, '_blank');
+    openImageLightbox(url);
+}
+
+function openImageLightbox(src) {
+    // Remove any existing lightbox
+    document.getElementById('image-lightbox')?.remove();
+
+    const lb = document.createElement('div');
+    lb.id = 'image-lightbox';
+    lb.className = 'image-lightbox';
+    lb.innerHTML = `
+        <div class="image-lightbox-backdrop" onclick="closeLightbox()"></div>
+        <div class="image-lightbox-content">
+            <button class="image-lightbox-close" onclick="closeLightbox()">&times;</button>
+            <img src="${src}" alt="Full size image">
+        </div>
+    `;
+    document.body.appendChild(lb);
+
+    // Escape to close
+    lb._escHandler = (e) => { if (e.key === 'Escape') closeLightbox(); };
+    document.addEventListener('keydown', lb._escHandler);
+}
+
+function closeLightbox() {
+    const lb = document.getElementById('image-lightbox');
+    if (!lb) return;
+    document.removeEventListener('keydown', lb._escHandler);
+    lb.remove();
 }
 
 async function downloadStorageFile(storagePath, fileName) {
