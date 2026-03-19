@@ -410,13 +410,21 @@ async function enterApp() {
     currentUserId = profile?.id || null;
     const userEmail = profile?.email || '';
 
-    // Load role — check profile first, then allowed_emails as fallback
-    currentUserRole = profile?.role || 'user';
-    if (currentUserRole === 'user') {
-        try {
-            const { data: emailRow } = await supa.from('allowed_emails').select('role').eq('email', userEmail.toLowerCase()).single();
-            if (emailRow?.role === 'admin') currentUserRole = 'admin';
-        } catch(e) { /* role column may not exist yet */ }
+    // Check if user has been archived or deleted
+    try {
+        const { data: emailRow } = await supa.from('allowed_emails').select('role, status').eq('email', userEmail.toLowerCase()).single();
+        if (!emailRow || emailRow.status === 'archived' || emailRow.status === 'revoked') {
+            await db.signOut();
+            document.getElementById('login-loading').style.display = 'none';
+            document.getElementById('login-screen').style.display = 'flex';
+            showLoginError('Your account has been archived. Please contact an admin if you need access restored.');
+            return;
+        }
+        // Load role
+        currentUserRole = profile?.role || emailRow?.role || 'user';
+    } catch(e) {
+        // Fallback if allowed_emails check fails
+        currentUserRole = profile?.role || 'user';
     }
 
     // Load global MFA setting
@@ -3521,8 +3529,8 @@ async function renderAllowedUsers(currentEmail) {
     // Show/hide admin-only controls
     document.getElementById('settings-add-user-row').style.display = isAdmin ? '' : 'none';
 
-    const active = (data || []).filter(r => r.status !== 'revoked');
-    const revoked = (data || []).filter(r => r.status === 'revoked');
+    const active = (data || []).filter(r => r.status === 'active');
+    const archived = (data || []).filter(r => r.status === 'archived' || r.status === 'revoked');
 
     document.getElementById('settings-active-users').innerHTML = active.map(row => {
         const isYou = row.email.toLowerCase() === currentEmail.toLowerCase();
@@ -3535,8 +3543,11 @@ async function renderAllowedUsers(currentEmail) {
                 <option value="admin" ${row.role === 'admin' ? 'selected' : ''}>Admin</option>
                </select>`
             : '';
-        const revokeBtn = isAdmin && !isYou
-            ? `<button class="btn btn-sm btn-danger" onclick="revokeUser('${row.id}')">Revoke</button>`
+        const archiveBtn = isAdmin && !isYou
+            ? `<button class="btn btn-sm btn-danger" onclick="archiveUser('${row.id}')">Archive</button>`
+            : '';
+        const deleteBtn = isAdmin && !isYou
+            ? `<button class="btn btn-sm" style="color:#e11d48;border-color:#fecdd3;font-size:11px;font-weight:600" onclick="permanentlyDeleteUser('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Delete</button>`
             : '';
         return `<div class="settings-user-row">
             <span>
@@ -3544,21 +3555,24 @@ async function renderAllowedUsers(currentEmail) {
                 ${roleBadge}
                 ${isYou ? '<span class="settings-user-you">(you)</span>' : ''}
             </span>
-            <span style="display:flex;gap:6px;align-items:center">${roleToggle}${revokeBtn}</span>
+            <span style="display:flex;gap:6px;align-items:center">${roleToggle}${archiveBtn}${deleteBtn}</span>
         </div>`;
     }).join('') || '<p style="color:var(--slate-400);font-size:13px">No active users.</p>';
 
-    const revokedSection = document.getElementById('settings-revoked-section');
-    if (revoked.length > 0 && isAdmin) {
-        revokedSection.style.display = '';
-        document.getElementById('settings-revoked-users').innerHTML = revoked.map(row => {
+    const archivedSection = document.getElementById('settings-archived-section');
+    if (archived.length > 0 && isAdmin) {
+        archivedSection.style.display = '';
+        document.getElementById('settings-archived-users').innerHTML = archived.map(row => {
             return `<div class="settings-user-row">
                 <span class="settings-user-email" style="color:var(--slate-400)">${escapeHtml(row.email)}</span>
-                <button class="btn btn-sm" onclick="reactivateUser('${row.id}')">Reactivate</button>
+                <span style="display:flex;gap:6px;align-items:center">
+                    <button class="btn btn-sm" onclick="reactivateUser('${row.id}')">Reactivate</button>
+                    <button class="btn btn-sm" style="color:#e11d48;border-color:#fecdd3;font-size:11px;font-weight:600" onclick="permanentlyDeleteUser('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Delete</button>
+                </span>
             </div>`;
         }).join('');
     } else {
-        revokedSection.style.display = 'none';
+        archivedSection.style.display = 'none';
     }
 
     // MFA admin toggle
@@ -3586,7 +3600,7 @@ async function addAllowedEmail() {
     if (!email) return;
 
     const { data: existing } = await supa.from('allowed_emails').select('*').eq('email', email).single();
-    if (existing && existing.status === 'revoked') {
+    if (existing && (existing.status === 'archived' || existing.status === 'revoked')) {
         await supa.from('allowed_emails').update({ status: 'active', role }).eq('id', existing.id);
     } else {
         const { error } = await supa.from('allowed_emails').insert({ email, status: 'active', role });
@@ -3602,11 +3616,11 @@ async function addAllowedEmail() {
     await renderAllowedUsers(session?.user?.email || '');
 }
 
-async function revokeUser(id) {
-    if (currentUserRole !== 'admin') { alert('Only admins can revoke access.'); return; }
-    if (!confirm('Revoke access for this user? They will no longer be able to sign in. Their history will be preserved.')) return;
+async function archiveUser(id) {
+    if (currentUserRole !== 'admin') { alert('Only admins can archive users.'); return; }
+    if (!confirm('Archive this user? They will no longer be able to sign in, but their history and edits will be preserved. You can reactivate them later.')) return;
 
-    const { error } = await supa.from('allowed_emails').update({ status: 'revoked' }).eq('id', id);
+    const { error } = await supa.from('allowed_emails').update({ status: 'archived' }).eq('id', id);
     if (error) { alert(error.message); return; }
 
     const session = await db.getSession();
@@ -3620,6 +3634,50 @@ async function reactivateUser(id) {
 
     const session = await db.getSession();
     await renderAllowedUsers(session?.user?.email || '');
+}
+
+async function permanentlyDeleteUser(id, email) {
+    if (currentUserRole !== 'admin') { alert('Only admins can delete users.'); return; }
+
+    // First warning — recommend archiving instead
+    const firstConfirm = confirm(
+        'Are you sure you want to permanently delete this user?\n\n' +
+        'If this user has simply become inactive, you should ARCHIVE them instead. ' +
+        'Archiving preserves their account so it can be reactivated later.\n\n' +
+        'Click OK to proceed with permanent deletion, or Cancel to go back.'
+    );
+    if (!firstConfirm) return;
+
+    // Second warning — final confirmation
+    const secondConfirm = confirm(
+        'FINAL WARNING: This action cannot be undone!\n\n' +
+        'Permanently deleting "' + email + '" will:\n' +
+        '  - Remove their account entirely\n' +
+        '  - Change all their past edits and notes to show "[Deleted User]"\n\n' +
+        'Are you absolutely sure you want to delete this user?'
+    );
+    if (!secondConfirm) return;
+
+    try {
+        // Update the user's profile name to "[Deleted User]" so all past
+        // notes, comms, audits, and tickets show the anonymized name
+        const { data: profileRow } = await supa.from('profiles').select('id').eq('email', email).single();
+        if (profileRow) {
+            await supa.from('profiles').update({ name: '[Deleted User]', email: '' }).eq('id', profileRow.id);
+        }
+
+        // Remove from allowed emails
+        await supa.from('allowed_emails').delete().eq('id', id);
+
+        // Update in-memory data to reflect the change immediately
+        notes.forEach(n => { if (profileRow && n.createdById === profileRow.id) n.createdBy = '[Deleted User]'; });
+        comms.forEach(c => { if (profileRow && c.createdById === profileRow.id) c.createdBy = '[Deleted User]'; });
+
+        const session = await db.getSession();
+        await renderAllowedUsers(session?.user?.email || '');
+    } catch (err) {
+        alert('Failed to delete user: ' + err.message);
+    }
 }
 
 async function changeUserRole(id, newRole) {

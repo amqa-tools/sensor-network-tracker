@@ -190,12 +190,18 @@ CREATE POLICY "Admins can insert allowed_emails"
 CREATE POLICY "Admins can update allowed_emails"
     ON allowed_emails FOR UPDATE TO authenticated
     USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+CREATE POLICY "Admins can delete allowed_emails"
+    ON allowed_emails FOR DELETE TO authenticated
+    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
 
 -- profiles
 CREATE POLICY "Authenticated users can read profiles"
     ON profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Users can update own profile"
     ON profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
+CREATE POLICY "Admins can update any profile"
+    ON profiles FOR UPDATE TO authenticated
+    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
 
 -- communities
 CREATE POLICY "Authenticated users can read communities"

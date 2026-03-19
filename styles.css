@@ -3427,6 +3427,19 @@ tr:last-child td {
     color: var(--slate-600);
 }
 
+.btn-delete-user {
+    background: transparent;
+    color: var(--rose-600, #e11d48);
+    border: 1px solid var(--rose-200, #fecdd3);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.btn-delete-user:hover {
+    background: var(--rose-50, #fff1f2);
+    border-color: var(--rose-400, #fb7185);
+}
+
 .mfa-setup-container {
     text-align: center;
     padding: 16px 0;
