@@ -772,9 +772,6 @@ body {
 }
 
 
-.dark-mode-btn {
-    display: none;
-}
 
 .sidebar-overlay {
     display: none;
@@ -2072,6 +2069,7 @@ tr:last-child td {
 
 .analysis-chart-card {
     position: relative;
+    padding-left: 32px;
 }
 
 .analysis-chart-card canvas {
@@ -2198,9 +2196,15 @@ tr:last-child td {
     border-radius: 2px;
 }
 
-.dark-mode .chart-axis-label:hover,
-.dark-mode .chart-equation:hover {
+.dark-mode .chart-axis-label:hover {
     background: rgba(255,255,255,0.05);
+}
+
+.dark-mode .chart-axis-label,
+.dark-mode .chart-equation,
+.dark-mode .chart-ts-legend,
+.dark-mode .chart-scale-edit {
+    color: var(--slate-400);
 }
 
 .chart-subtitle-input {
@@ -3833,8 +3837,7 @@ th:hover .field-reorder-btns {
     background: #0c1220;
 }
 
-.dark-mode .hamburger-btn,
-.dark-mode .dark-mode-btn {
+.dark-mode .hamburger-btn {
     color: #94a3b8;
 }
 
@@ -3913,7 +3916,7 @@ th:hover .field-reorder-btns {
     #sidebar, .mobile-header, .sidebar-overlay, .global-search-bar,
     .open-tabs-bar, .back-button, .setup-mode-toggle, .dark-mode-toggle,
     .btn, button, .history-actions, .filter-bar, .sidebar-bottom-actions,
-    .community-detail-toolbar, .timeline-actions {
+    .community-detail-toolbar, .timeline-actions, .no-print {
         display: none !important;
     }
     #main-wrapper { margin: 0; }

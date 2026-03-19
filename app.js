@@ -5664,7 +5664,6 @@ function renderTimeSeriesSection(auditId, parsed) {
         </div>`).join('')}
     </div>`;
 
-    const audit = audits.find(a => a.id === auditId);
     requestAnimationFrame(() => {
         pmParams.forEach(p => {
             createTimeSeriesChart(`ts-${auditId}-${p.key}`, parsed, p, audit);
@@ -5759,8 +5758,14 @@ function editChartAxis(canvasId, axis, btn) {
         </div>
     `;
 
-    // Position near the button
+    // Position near the button that was clicked
     const card = btn.closest('.analysis-chart-card');
+    if (axis === 'x') {
+        pop.style.left = '50%';
+        pop.style.top = 'auto';
+        pop.style.bottom = '60px';
+        pop.style.transform = 'translateX(-50%)';
+    }
     card.appendChild(pop);
     pop.querySelector('#axis-pop-min').focus();
     pop.querySelector('#axis-pop-min').select();
