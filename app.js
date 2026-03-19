@@ -4320,11 +4320,12 @@ function openTicketDetail(ticketId) {
     document.getElementById('service-ticket-modal-title').textContent = `Service Ticket: ${ticket.sensorId}`;
     document.getElementById('service-ticket-modal-body').innerHTML = `
         <div style="padding:12px 28px 0"><div class="ticket-steps ticket-steps-detail">${renderTicketProgress(ticket)}</div></div>
-        <div class="ticket-detail-actions" style="border-top:none;padding-top:8px">
-            <button class="btn" onclick="closeModal('modal-service-ticket')">Done</button>
+        <div class="ticket-detail-actions" style="border-top:none">
             ${isOpen && nextStatus ? `<button class="btn btn-primary" onclick="advanceTicketStatus('${ticket.id}')">Advance to: ${nextStatus}</button>` : ''}
-            ${statusIndex > 0 && isOpen ? `<a class="undo-link" onclick="revertTicketStatus('${ticket.id}')">undo last advance</a>` : ''}
-            ${isOpen ? `<button class="btn btn-danger" onclick="openCloseTicketModal('${ticket.id}')">Close Out Ticket</button>` : ''}
+            ${statusIndex > 0 && isOpen ? `<a class="undo-link" onclick="revertTicketStatus('${ticket.id}')">Undo</a>` : ''}
+            <span class="action-spacer"></span>
+            ${isOpen ? `<button class="btn btn-danger" onclick="openCloseTicketModal('${ticket.id}')">Close Out</button>` : ''}
+            <button class="btn" onclick="closeModal('modal-service-ticket')">Done</button>
         </div>
         <div class="ticket-detail-grid">
             <div class="ticket-field"><label>Sensor</label><p><a href="#" onclick="closeModal('modal-service-ticket'); showSensorDetail('${ticket.sensorId}'); return false;" style="color:var(--navy-500)">${ticket.sensorId}</a></p></div>
@@ -4702,11 +4703,12 @@ function openAuditDetail(auditId) {
     document.getElementById('audit-detail-modal-title').textContent = `Audit: ${communityName}`;
     document.getElementById('audit-detail-modal-body').innerHTML = `
         <div style="padding:12px 28px 0"><div class="ticket-steps ticket-steps-detail">${progress}</div></div>
-        <div class="ticket-detail-actions" style="border-top:none;padding-top:8px">
-            <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
+        <div class="ticket-detail-actions" style="border-top:none">
             ${nextStatus ? `<button class="btn btn-primary" onclick="advanceAuditStatus('${audit.id}')">Advance to: ${nextStatus}</button>` : ''}
-            ${idx > 0 && isEditable ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">undo last advance</a>` : ''}
+            ${idx > 0 && isEditable ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
+            <span class="action-spacer"></span>
             ${audit.status === 'Complete' || audit.status === 'Analysis Pending' || audit.status === 'Audit Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
+            <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
         </div>
         <div class="ticket-detail-grid">
             <div class="ticket-field"><label>Community</label><p><a href="#" onclick="closeModal('modal-audit-detail'); showCommunity('${audit.communityId}'); return false;" style="color:var(--navy-500)">${escapeHtml(communityName)}</a></p></div>
