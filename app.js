@@ -412,7 +412,10 @@ async function enterApp() {
 
     // Check if user has been archived or deleted
     try {
-        const { data: emailRow } = await supa.from('allowed_emails').select('role, status').eq('email', userEmail.toLowerCase()).single();
+        // Also try session email in case profile email was cleared by a previous deletion
+        const session = await db.getSession();
+        const checkEmail = (userEmail || session?.user?.email || '').toLowerCase();
+        const { data: emailRow } = await supa.from('allowed_emails').select('role, status').eq('email', checkEmail).maybeSingle();
         if (!emailRow || emailRow.status === 'archived' || emailRow.status === 'revoked') {
             await db.signOut();
             document.getElementById('login-loading').style.display = 'none';
@@ -422,6 +425,14 @@ async function enterApp() {
         }
         // Load role
         currentUserRole = profile?.role || emailRow?.role || 'user';
+
+        // Repair profile if it was previously anonymized by deletion
+        if (profile && (profile.name === '[Deleted User]' || !profile.email) && checkEmail) {
+            const session2 = await db.getSession();
+            const userName = session2?.user?.user_metadata?.name || checkEmail.split('@')[0];
+            await supa.from('profiles').update({ email: checkEmail, name: userName }).eq('id', session2.user.id);
+            currentUser = userName;
+        }
     } catch(e) {
         // Fallback if allowed_emails check fails
         currentUserRole = profile?.role || 'user';
@@ -3646,7 +3657,7 @@ async function addAllowedEmail() {
     const role = roleSelect?.value || 'user';
     if (!email) return;
 
-    const { data: existing } = await supa.from('allowed_emails').select('*').eq('email', email).single();
+    const { data: existing } = await supa.from('allowed_emails').select('*').eq('email', email).maybeSingle();
     if (existing && (existing.status === 'archived' || existing.status === 'revoked')) {
         await supa.from('allowed_emails').update({ status: 'active', role }).eq('id', existing.id);
     } else {
