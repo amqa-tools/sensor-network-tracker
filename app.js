@@ -3837,8 +3837,8 @@ async function sendUserInvite(event) {
     btn.disabled = true;
     btn.textContent = 'Sending...';
 
-    // Add to allowed_emails via RPC (bypasses RLS, checks admin server-side)
-    const { error } = await supa.rpc('invite_user', { invite_email: email, invite_role: role });
+    // Add to allowed_emails and send invite email via Supabase Auth
+    const { error } = await supa.rpc('send_user_invite', { invite_email: email, invite_role: role });
     if (error) {
         errEl.textContent = error.message.includes('already an active') ? 'That email is already an active user.' : error.message;
         errEl.classList.add('visible');
@@ -3847,16 +3847,9 @@ async function sendUserInvite(event) {
         return;
     }
 
-    // Open email client with pre-filled invite
-    const signupUrl = window.location.origin + window.location.pathname;
-    const inviterName = currentUser || 'An administrator';
-    const subject = 'You\'ve been invited to the AMQA Sensor Network Tracker';
-    const body = `${inviterName} has invited you to join the AMQA Community Sensor Network Tracking Platform.\n\nSign up here:\n${signupUrl}\n\nUse this email address (${email}) to create your account. You'll be asked to set up an authenticator app for security during your first sign-in.`;
-    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-
     // Show success state
     document.getElementById('invite-modal-title').textContent = 'Invite Sent';
-    document.getElementById('invite-success-email').textContent = `${email} has been approved. Your email app has been opened with the invitation — just hit send.`;
+    document.getElementById('invite-success-email').textContent = `An invitation email has been sent to ${email}. They'll receive a link to create their account.`;
     document.getElementById('invite-step-form').style.display = 'none';
     document.getElementById('invite-step-success').style.display = '';
     btn.disabled = false;
