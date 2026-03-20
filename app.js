@@ -356,7 +356,6 @@ async function handleSignIn() {
 }
 
 async function checkMfaAndProceed() {
-    document.getElementById('loading-overlay').style.display = 'none';
     // Check if MFA is enforced for login challenges
     let mfaOn = true;
     try { const setting = await db.getAppSetting('mfa_required'); mfaOn = setting !== 'false'; } catch(e) { mfaOn = true; }
@@ -382,26 +381,34 @@ async function checkMfaAndProceed() {
 }
 
 function showMfaChallenge() {
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
     hideAllAuthForms();
     document.getElementById('mfa-challenge-section').style.display = '';
     document.getElementById('mfa-challenge-code').value = '';
     document.getElementById('mfa-challenge-code').focus();
 }
 
-function showMfaSetup() {
-    hideAllAuthForms();
-    document.getElementById('mfa-setup-section').style.display = '';
-    startMfaEnrollment();
-}
-
-async function startMfaEnrollment() {
+async function showMfaSetup() {
+    // Load QR code while overlay is still showing
     const { data, error } = await supa.auth.mfa.enroll({ factorType: 'totp' });
-    if (error) { showLoginError(error.message); return; }
+    if (error) {
+        document.getElementById('loading-overlay').style.display = 'none';
+        showLoginScreen();
+        showLoginError(error.message);
+        return;
+    }
 
     document.getElementById('mfa-setup-qr').innerHTML = `
         <img src="${data.totp.qr_code}" alt="" style="width:200px;height:200px">
     `;
     document.getElementById('mfa-setup-section').dataset.factorId = data.id;
+
+    // Now show the screen
+    document.getElementById('loading-overlay').style.display = 'none';
+    hideAllAuthForms();
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('mfa-setup-section').style.display = '';
 }
 
 async function handleMfaSetupVerify() {

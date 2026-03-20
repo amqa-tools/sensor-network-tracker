@@ -1175,16 +1175,18 @@
     <script src="supabase-client.js"></script>
     <script src="app.js"></script>
     <script>
-    // Safety net: if app hasn't loaded after 12 seconds, show login with error
+    // Safety net: if nothing is visible after 30 seconds, show login with error
     setTimeout(function() {
         var ls = document.getElementById('login-screen');
         var app = document.getElementById('app');
-        if (ls && app && ls.style.display === 'none' && app.style.display === 'none') {
+        var overlay = document.getElementById('loading-overlay');
+        var overlayVisible = overlay && overlay.style.display !== 'none';
+        if (ls && app && ls.style.display === 'none' && app.style.display === 'none' && !overlayVisible) {
             ls.style.display = 'flex';
             var err = document.getElementById('login-error');
             if (err) { err.textContent = 'The app is taking too long to load. Please check your internet connection and refresh.'; err.classList.add('visible'); }
         }
-    }, 12000);
+    }, 30000);
     </script>
 </body>
 </html>
