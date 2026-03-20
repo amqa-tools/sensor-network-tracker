@@ -61,6 +61,14 @@
         </div>
     </div>
 
+    <!-- Full-screen loading overlay -->
+    <div id="loading-overlay" style="display:none">
+        <div class="loading-spinner-container">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading</div>
+        </div>
+    </div>
+
     <div id="app" style="display:none">
         <div class="mobile-header" id="mobile-header">
             <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">&#9776;</button>
@@ -386,10 +394,8 @@
                     <h3 class="settings-section-title">User Management</h3>
                     <p class="settings-description">Approved email addresses and their roles. Only admins can manage users.</p>
                     <div id="settings-active-users"></div>
-                    <div id="settings-add-user-row" class="settings-add-user" style="display:none">
-                        <input type="email" id="settings-add-email" placeholder="Email address" aria-label="Email address to add">
-                        <select id="settings-add-role" aria-label="Role"><option value="user">User</option><option value="admin">Admin</option></select>
-                        <button class="btn btn-primary" onclick="addAllowedEmail()">Add Email</button>
+                    <div id="settings-add-user-row" style="display:none;margin-top:12px">
+                        <button class="btn btn-primary" onclick="openInviteUserModal()">+ Invite New User</button>
                     </div>
                 </div>
 
@@ -1096,6 +1102,38 @@
                 <button type="button" class="btn" onclick="closeModal('modal-close-ticket')">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="confirmCloseTicket()">Close Ticket</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Invite User Modal -->
+    <div id="modal-invite-user" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2>Invite New User</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-invite-user')">&times;</button>
+            </div>
+            <form id="invite-user-form" onsubmit="sendUserInvite(event)">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="invite-email" required placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select id="invite-role">
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Personal Message (optional)</label>
+                    <textarea id="invite-message" rows="3" placeholder="Add a note to the invitation email..."></textarea>
+                </div>
+                <div id="invite-error" class="login-error" role="alert"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('modal-invite-user')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Send Invite</button>
+                </div>
+            </form>
         </div>
     </div>
 

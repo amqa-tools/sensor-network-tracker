@@ -449,11 +449,23 @@ async function handleSignUp() {
     if (password.length < 6) { showLoginError('Password must be at least 6 characters.'); return; }
 
     try {
-        await db.signUp(email, password, name);
+        const result = await db.signUp(email, password, name);
         hideLoginError();
-        showAlert('Account Created', 'Account created! Check your email to confirm, then sign in.', () => {
-            showSignInForm();
-        });
+        // If Supabase returned a session (auto-confirm enabled), go straight in
+        if (result?.session) {
+            await checkMfaAndProceed();
+        } else {
+            // Try signing in directly — works if email confirmation is disabled in Supabase
+            try {
+                await db.signIn(email, password);
+                await checkMfaAndProceed();
+            } catch(e) {
+                // Email confirmation required — tell user to check email
+                showAlert('Account Created', 'Your account has been created. Please check your email to confirm, then sign in.', () => {
+                    showSignInForm();
+                });
+            }
+        }
     } catch (err) {
         showLoginError(err.message || 'Sign up failed. Your email may not be authorized.');
     }
@@ -465,7 +477,8 @@ async function enterApp() {
     sessionStorage.setItem('mfa_verified_at', Date.now().toString());
     sessionStorage.setItem('mfa_verified_user', session?.user?.id || '');
     document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('login-loading').style.display = '';
+    document.getElementById('login-loading').style.display = 'none';
+    document.getElementById('loading-overlay').style.display = 'flex';
 
     const profile = await db.getProfile();
     currentUser = profile?.name || profile?.email || 'User';
@@ -481,6 +494,7 @@ async function enterApp() {
         if (!emailRow || emailRow.status === 'archived' || emailRow.status === 'revoked') {
             await db.signOut();
             document.getElementById('login-loading').style.display = 'none';
+            document.getElementById('loading-overlay').style.display = 'none';
             document.getElementById('login-screen').style.display = 'flex';
             showLoginError('Your account has been archived. Please contact an admin if you need access restored.');
             return;
@@ -506,6 +520,7 @@ async function enterApp() {
     await loadAllData();
 
     document.getElementById('login-loading').style.display = 'none';
+    document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     document.getElementById('sidebar-user').innerHTML =
@@ -521,6 +536,7 @@ async function enterApp() {
     } catch (err) {
         console.error('App initialization error:', err);
         document.getElementById('login-loading').style.display = 'none';
+        document.getElementById('loading-overlay').style.display = 'none';
         document.getElementById('app').style.display = 'none';
         document.getElementById('login-screen').style.display = 'flex';
         showLoginError('Failed to load app data. Please check your connection and try again.');
@@ -3720,29 +3736,56 @@ async function renderAllowedUsers(currentEmail) {
     }
 }
 
-async function addAllowedEmail() {
-    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can add users.'); return; }
-    const input = document.getElementById('settings-add-email');
-    const roleSelect = document.getElementById('settings-add-role');
-    const email = input.value.trim().toLowerCase();
-    const role = roleSelect?.value || 'user';
-    if (!email) return;
+function openInviteUserModal() {
+    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can invite users.'); return; }
+    document.getElementById('invite-email').value = '';
+    document.getElementById('invite-role').value = 'user';
+    document.getElementById('invite-message').value = '';
+    const errEl = document.getElementById('invite-error');
+    errEl.textContent = '';
+    errEl.classList.remove('visible');
+    openModal('modal-invite-user');
+}
 
-    const { data: existing } = await supa.from('allowed_emails').select('*').eq('email', email).maybeSingle();
-    if (existing && (existing.status === 'archived' || existing.status === 'revoked')) {
-        await supa.from('allowed_emails').update({ status: 'active', role }).eq('id', existing.id);
-    } else {
-        const { error } = await supa.from('allowed_emails').insert({ email, status: 'active', role });
-        if (error) {
-            showAlert('Error', error.message.includes('duplicate') ? 'That email is already added.' : error.message);
-            return;
-        }
+async function sendUserInvite(event) {
+    event.preventDefault();
+    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can invite users.'); return; }
+
+    const email = document.getElementById('invite-email').value.trim().toLowerCase();
+    const role = document.getElementById('invite-role').value || 'user';
+    const personalMessage = document.getElementById('invite-message').value.trim();
+    const errEl = document.getElementById('invite-error');
+    errEl.textContent = '';
+    errEl.classList.remove('visible');
+
+    if (!email) { errEl.textContent = 'Please enter an email address.'; errEl.classList.add('visible'); return; }
+
+    // Add to allowed_emails via RPC (bypasses RLS, checks admin server-side)
+    const { error } = await supa.rpc('invite_user', { invite_email: email, invite_role: role });
+    if (error) {
+        errEl.textContent = error.message.includes('already an active') ? 'That email is already an active user.' : error.message;
+        errEl.classList.add('visible');
+        return;
     }
 
-    input.value = '';
-    if (roleSelect) roleSelect.value = 'user';
+    // Build invitation email
+    const signupUrl = window.location.origin + window.location.pathname;
+    const inviterName = currentUser || 'An administrator';
+    const subject = 'You\'ve been invited to the AMQA Sensor Network Tracker';
+    let body = `Hi,\n\n${inviterName} has invited you to join the AMQA Community Sensor Network Tracking Platform.\n\nSign up here: ${signupUrl}\n\nUse this email address (${email}) to create your account. You'll be asked to set up an authenticator app for security during your first sign-in.`;
+    if (personalMessage) {
+        body += `\n\nMessage from ${inviterName}:\n${personalMessage}`;
+    }
+    body += '\n\nADEC Division of Air Quality\nAir Monitoring and Quality Assurance';
+
+    // Open email client
+    const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailto, '_blank');
+
+    closeModal('modal-invite-user');
     const session = await db.getSession();
     await renderAllowedUsers(session?.user?.email || '');
+    showAlert('Invite Sent', `${email} has been added to the approved user list and your email client has been opened with the invitation. Make sure to send the email.`);
 }
 
 async function archiveUser(id) {
