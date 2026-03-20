@@ -4,6 +4,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+function nowDatetime() {
+    const now = new Date();
+    return now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0') + 'T' +
+        String(now.getHours()).padStart(2, '0') + ':' +
+        String(now.getMinutes()).padStart(2, '0') + ':' +
+        String(now.getSeconds()).padStart(2, '0');
+}
+
 // ===== AUTH =====
 const db = {
     // --- Auth ---
@@ -64,7 +74,7 @@ const db = {
     },
 
     async setAppSetting(key, value) {
-        const { error } = await supa.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() });
+        const { error } = await supa.from('app_settings').upsert({ key, value, updated_at: nowDatetime() });
         if (error) throw error;
     },
 
@@ -120,7 +130,7 @@ const db = {
             date_purchased: sensor.datePurchased || '',
             collocation_dates: sensor.collocationDates || '',
             date_installed: sensor.dateInstalled || '',
-            updated_at: new Date().toISOString(),
+            updated_at: nowDatetime(),
         });
         if (error) throw error;
     },
@@ -357,7 +367,7 @@ const db = {
     },
 
     async updateAudit(id, updates) {
-        const row = { updated_at: new Date().toISOString() };
+        const row = { updated_at: nowDatetime() };
         const map = { status: 'status', scheduledStart: 'scheduled_start', scheduledEnd: 'scheduled_end',
             actualStart: 'actual_start', actualEnd: 'actual_end', conductedBy: 'conducted_by',
             notes: 'notes', analysisResults: 'analysis_results',
@@ -404,7 +414,7 @@ const db = {
     },
 
     async updateServiceTicket(id, updates) {
-        const row = { updated_at: new Date().toISOString() };
+        const row = { updated_at: nowDatetime() };
         for (const [k, v] of Object.entries(updates)) {
             const map = { rmaNumber: 'rma_number', fedexTrackingTo: 'fedex_tracking_to', fedexTrackingFrom: 'fedex_tracking_from', issueDescription: 'issue_description', quantNotes: 'quant_notes', workCompleted: 'work_completed', closedAt: 'closed_at', status: 'status' };
             if (map[k]) row[map[k]] = v;

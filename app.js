@@ -168,7 +168,7 @@ function createNote(type, text, tags, additionalInfo) {
         text,
         additionalInfo: additionalInfo || '',
         createdBy: getCurrentUserName(), createdById: currentUserId,
-        createdAt: new Date().toISOString(),
+        createdAt: nowDatetime(),
         taggedSensors: tags?.sensors || [],
         taggedCommunities: tags?.communities || [],
         taggedContacts: tags?.contacts || [],
@@ -231,7 +231,7 @@ function trackRecent(type, id, action) {
     // Remove existing entry for this id
     const filtered = list.filter(item => item.id !== id);
     // Add to front
-    filtered.unshift({ id, action, time: new Date().toISOString() });
+    filtered.unshift({ id, action, time: nowDatetime() });
     // Keep only 5
     recentActivity[type] = filtered.slice(0, 5);
     saveData('recentActivity', recentActivity);
@@ -994,7 +994,7 @@ function renderStatusBadges(s, clickable) {
         if (clickable) return `<span class="editable-field" onclick="openStatusChangeModal('${s.id}')">No status set</span>`;
         return '—';
     }
-    return statuses.map(st => {
+    let html = statuses.map(st => {
         const cls = clickable ? 'badge-clickable' : '';
         if (st === 'Quant Ticket in Progress' && clickable) {
             const activeTicket = getActiveTicketsForSensor(s.id)[0];
@@ -1004,6 +1004,22 @@ function renderStatusBadges(s, clickable) {
         const onclick = clickable ? `onclick="openStatusChangeModal('${s.id}')"` : '';
         return `<span class="badge ${getStatusBadgeClass(st)} ${cls}" ${onclick}>${st}</span>`;
     }).join(' ');
+
+    // Show active service ticket statuses as additional badges on the sensor
+    const activeTickets = getActiveTicketsForSensor(s.id);
+    if (activeTickets.length > 0) {
+        activeTickets.forEach(ticket => {
+            const ticketStatus = ticket.status;
+            // Only show ticket-specific statuses that add info beyond what the sensor status already shows
+            if (ticketStatus && ticketStatus !== 'Closed') {
+                const cls = clickable ? 'badge-clickable' : '';
+                const onclick = clickable ? `onclick="openTicketDetail('${ticket.id}')"` : '';
+                html += ` <span class="badge badge-ticket-status ${cls}" ${onclick} title="Service ticket: ${escapeHtml(ticketStatus)}">${escapeHtml(ticketStatus)}</span>`;
+            }
+        });
+    }
+
+    return html;
 }
 
 function getCommunityName(id) {
@@ -1972,7 +1988,9 @@ function renderCommunityFiles(communityId) {
         return;
     }
 
-    grid.innerHTML = files.map(f => {
+    const imageFiles = files.filter(f => f.type && f.type.startsWith('image/') && f.storagePath);
+
+    grid.innerHTML = files.map((f, idx) => {
         const fileUrl = f.storagePath ? '' : (f.data || ''); // fallback for old base64 data
         const viewOnclick = f.storagePath
             ? `onclick="openStorageFile('${f.storagePath}')"`
@@ -1983,10 +2001,12 @@ function renderCommunityFiles(communityId) {
             : '';
 
         if (f.type && f.type.startsWith('image/')) {
-            const imgSrc = f.storagePath ? db.getFileUrl(f.storagePath) : fileUrl;
+            const imgSrc = f.storagePath ? '' : fileUrl;
             return `
-                <div class="file-card">
-                    <img src="${imgSrc}" alt="${f.name}" ${viewOnclick}>
+                <div class="file-card file-card-with-thumb">
+                    <div class="file-thumb" ${viewOnclick}>
+                        <img id="community-file-thumb-${communityId}-${idx}" src="${imgSrc}" alt="${f.name}">
+                    </div>
                     <div class="file-info">
                         <div>
                             <div class="file-name">${f.name}</div>
@@ -2017,6 +2037,24 @@ function renderCommunityFiles(communityId) {
             `;
         }
     }).join('');
+
+    // Load signed URLs for image thumbnails asynchronously
+    if (imageFiles.length > 0) {
+        setTimeout(() => loadCommunityFileThumbs(communityId, files), 0);
+    }
+}
+
+async function loadCommunityFileThumbs(communityId, files) {
+    for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f.type && f.type.startsWith('image/') && f.storagePath) {
+            try {
+                const url = await db.getSignedUrl(f.storagePath);
+                const img = document.getElementById(`community-file-thumb-${communityId}-${i}`);
+                if (img) img.src = url;
+            } catch(e) { /* file may not exist */ }
+        }
+    }
 }
 
 async function openStorageFile(storagePath) {
@@ -2695,7 +2733,7 @@ function saveNote(e) {
         type: type,
         text: text,
         createdBy: getCurrentUserName(), createdById: currentUserId,
-        createdAt: new Date().toISOString(),
+        createdAt: nowDatetime(),
         taggedSensors: sensorTags,
         taggedCommunities: communityTags,
         taggedContacts: contactTags,
@@ -2871,10 +2909,19 @@ function refreshCurrentView() {
     buildSensorSidebar();
     // Preserve active tab before re-rendering
     const activeTab = document.querySelector('.view.active .tab.active')?.dataset.tab;
-    if (currentSensor) showSensorView(currentSensor);
-    if (currentCommunity) showCommunityView(currentCommunity);
-    if (currentContact) showContactView(currentContact);
-    // Restore active tab
+    // Only re-render the currently active view — not all views with non-null state.
+    // (currentSensor, currentCommunity, currentContact are never cleared on view switch,
+    // so calling all three would navigate away to whichever runs last.)
+    const activeView = document.querySelector('.view.active');
+    const activeViewId = activeView?.id;
+    if (activeViewId === 'view-sensor-detail' && currentSensor) {
+        showSensorView(currentSensor);
+    } else if (activeViewId === 'view-community' && currentCommunity) {
+        showCommunityView(currentCommunity);
+    } else if (activeViewId === 'view-contact-detail' && currentContact) {
+        showContactView(currentContact);
+    }
+    // Restore active tab after re-render (showXxxView calls resetTabs which defaults to first tab)
     if (activeTab) {
         const container = document.querySelector('.view.active');
         if (container) {
@@ -4695,7 +4742,7 @@ async function saveNewTicket(event) {
     const ticket = { sensorId, ticketType, status: rmaNumber ? 'RMA Assigned' : 'Ticket Opened',
         rmaNumber, fedexTrackingTo: '', fedexTrackingFrom: '', issueDescription: description,
         quantNotes: '', workCompleted: '', createdBy: getCurrentUserName(), createdById: currentUserId,
-        createdAt: new Date().toISOString(), closedAt: null };
+        createdAt: nowDatetime(), closedAt: null };
     try {
         const saved = await db.insertServiceTicket(ticket);
         serviceTickets.unshift(saved);
@@ -4739,7 +4786,7 @@ function confirmCloseTicket() {
     const newStatuses = getSelectedStatuses('close-ticket-status');
 
     ticket.status = 'Closed';
-    ticket.closedAt = new Date().toISOString();
+    ticket.closedAt = nowDatetime();
     if (workCompleted) ticket.workCompleted = workCompleted;
     persistServiceTicketUpdate(ticketId, { status: 'Closed', closedAt: ticket.closedAt, workCompleted: ticket.workCompleted });
 
@@ -5241,7 +5288,7 @@ function handleAnalysisUpload(auditId, file) {
                 }
             });
             audit.analysisName = analysisName;
-            audit.analysisUploadDate = new Date().toISOString();
+            audit.analysisUploadDate = nowDatetime();
             audit.analysisUploadedBy = getCurrentUserName();
 
             // Build compact chart data for persistence (timestamps + all param values)
@@ -5862,8 +5909,8 @@ function createScatterChart(canvasId, regression, param, parsed) {
             hover: { mode: 'nearest', intersect: false, axis: 'xy' },
             interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             scales: {
-                x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-                y: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                x: { grid: { display: false }, ticks: { font: { size: 12 } } },
+                y: { grid: { display: false }, ticks: { font: { size: 12 } } },
             },
         },
     });
@@ -5877,7 +5924,7 @@ function renderTimeSeriesSection(auditId, parsed) {
     const auditDateRange = audit?.scheduledStart ? `${formatDate(audit.scheduledStart)} \u2013 ${formatDate(audit.scheduledEnd)}` : '';
     el.innerHTML = `
         <h3 class="analysis-section-heading">PM Timeseries</h3>
-        <div class="analysis-chart-grid">
+        <div class="analysis-chart-grid" style="grid-template-columns:1fr">
         ${pmParams.map(p => `<div class="analysis-chart-card">
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short}: <strong>${p.labelHtml}</strong></div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
@@ -5923,12 +5970,12 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d', hour: 'MMM d HH:mm' } }, grid: { display: false }, ticks: { font: { size: 10 } } },
+                x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d', hour: 'MMM d HH:mm' } }, grid: { display: false }, ticks: { font: { size: 12 } } },
                 y: {
                     min: Math.max(0, yMin - yPad),
                     max: yMax + yPad,
                     grid: { display: false },
-                    ticks: { font: { size: 10 } },
+                    ticks: { font: { size: 12 } },
                 },
             },
             interaction: { mode: 'index', intersect: false },
@@ -6296,8 +6343,12 @@ function generateAuditReport(auditId) {
         const paramKeys = Object.keys(PARAM_COLUMN_MAP);
         const paramLabels = AUDIT_PARAMETERS.reduce((m, p) => { m[p.key] = `${p.labelHtml} (${p.unit})`; return m; }, {});
         rawDataHtml = `
-            <div style="page-break-before:always"></div>
-            <h2 style="font-size:16px;color:#1B2A4A;margin:24px 0 12px;border-bottom:2px solid #1B2A4A;padding-bottom:6px">Hourly Data</h2>
+            <div class="print-page-break">
+            <div class="section-page-header">
+                <div><div class="sph-title">${escapeHtml(communityName)} Sensor Audit Report</div><div class="sph-sub">${dateRange} &mdash; ${escapeHtml(labelB)} &amp; ${escapeHtml(labelA)}</div></div>
+                <div class="sph-right"><div class="sph-dept"><div>ADEC Division of Air Quality</div><div>Air Monitoring &amp; Quality Assurance</div></div><img class="sph-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC"></div>
+            </div>
+            <h2 class="section-start-heading">Hourly Data</h2>
             <p style="font-size:11px;color:#8a6d20;background:#fff8e8;display:inline-block;padding:3px 10px;border-radius:6px;margin-bottom:8px">* = first 24 hours (excluded from regression). PM<sub>10</sub> values &gt; 1000 invalidated.</p>
             <table style="width:100%;border-collapse:collapse;font-size:9px;font-family:'JetBrains Mono',monospace">
                 <thead><tr style="background:#1B2A4A;color:white">
@@ -6320,6 +6371,7 @@ function generateAuditReport(auditId) {
                 </tbody>
             </table>
             <p style="font-size:10px;color:#64748b;margin-top:4px">${cached.allRows.length} total hourly observations</p>
+            </div>
         `;
     }
 
@@ -6359,8 +6411,8 @@ function generateAuditReport(auditId) {
                     responsive: false, animation: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d' } }, grid: { display: false }, ticks: { font: { size: 22 } } },
-                        y: { title: { display: true, text: p.label + ' (' + p.unit + ')', font: { size: 24, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 22 } } },
+                        x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM d' } }, grid: { display: false }, ticks: { font: { size: 32 } } },
+                        y: { title: { display: true, text: p.label + ' (' + p.unit + ')', font: { size: 30, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 32 } } },
                     },
                 },
             });
@@ -6385,8 +6437,8 @@ function generateAuditReport(auditId) {
                     responsive: false, animation: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { title: { display: true, text: shortA + ' ' + p.label + ' (' + p.unit + ')', font: { size: 24, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 22 } } },
-                        y: { title: { display: true, text: shortB + ' ' + p.label + ' (' + p.unit + ')', font: { size: 24, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 22 } } },
+                        x: { title: { display: true, text: shortA + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
+                        y: { title: { display: true, text: shortB + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
                     },
                 },
             });
@@ -6425,18 +6477,37 @@ function generateAuditReport(auditId) {
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'DM Sans', sans-serif; color: #1e293b; padding: 40px 48px; max-width: 1000px; margin: 0 auto; line-height: 1.5; }
-    h1 { font-size: 26px; color: #1B2A4A; margin-bottom: 2px; }
-    h2 { font-size: 16px; color: #1B2A4A; margin: 28px 0 12px; border-bottom: 2px solid #1B2A4A; padding-bottom: 6px; }
+    body { font-family: 'DM Sans', sans-serif; color: #1e293b; max-width: 1000px; margin: 0 auto; line-height: 1.5; padding: 40px 48px; }
     sub { font-size: 0.8em; }
+
+    /* Page 1 hero header */
+    h1 { font-size: 26px; color: #1B2A4A; margin-bottom: 2px; }
+    h2 { font-size: 16px; color: #1B2A4A; margin: 48px 0 14px; border-bottom: 2px solid #1B2A4A; padding-bottom: 6px; }
     .report-subtitle { font-size: 14px; color: #64748b; margin-bottom: 4px; line-height: 1.6; }
-    .report-sensors { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #475569; margin-bottom: 20px; }
-    .report-header-bar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 3px solid #C9A84C; padding-bottom: 16px; }
-    .report-meta { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 6px 16px; font-size: 13px; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; }
+    .report-sensors { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #475569; }
+    .report-header-bar {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        margin-bottom: 28px; border-bottom: 3px solid #C9A84C; padding-bottom: 18px;
+    }
+    .report-header-right { display: flex; align-items: center; gap: 14px; }
+    .report-header-info { text-align: right; font-size: 11px; color: #64748b; line-height: 1.6; }
+    .report-header-logo { height: 48px; width: auto; }
+
+    /* Print-only elements — hidden on screen, visible in print */
+    .section-page-header { display: none; }
+    .print-only { display: none; }
+
+    /* Section-start headings: normal margin on screen, no top margin in print (page header provides spacing) */
+    .section-start-heading { /* inherits h2 margin on screen */ }
+
+    /* Audit details grid */
+    .report-meta { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 6px 16px; font-size: 13px; margin-bottom: 0; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; }
     .report-meta dt { font-weight: 600; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
     .report-meta dd { margin: 0; color: #1e293b; padding-bottom: 6px; border-bottom: 1px solid #f1f5f9; }
     .report-meta dd:last-child, .report-meta dd:nth-last-child(2) { border-bottom: none; }
     .report-meta dd .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+    /* DQO table */
     .trim-note { display: inline-block; background: #fff8e8; color: #8a6d20; padding: 4px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; margin-bottom: 12px; }
     .dqo-thresh { display: block; font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #475569; margin-top: 2px; }
     table.dqo { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 8px; }
@@ -6447,31 +6518,68 @@ function generateAuditReport(auditId) {
     table.dqo td:first-child { text-align: left; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 14px; }
     table.dqo td:last-child { text-align: center; }
     table.dqo tbody tr:nth-child(even) { background: #fafbfc; }
-    .thresholds { font-size: 14px; color: #334155; margin-top: 12px; line-height: 1.7; }
-    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
-    .chart-grid-single { grid-template-columns: 1fr; }
-    .chart-card { border: 1px solid #cbd5e1; border-radius: 10px; padding: 16px; page-break-inside: avoid; }
-    .chart-card h4 { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; color: #1e293b; margin-bottom: 2px; }
-    .chart-card h4 strong { font-weight: 700; }
+    .thresholds { font-size: 14px; color: #334155; margin-top: 12px; margin-bottom: 0; line-height: 1.7; }
+
+    /* Chart cards and grid */
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; margin-bottom: 0; }
+    .chart-card { border: 1px solid #cbd5e1; border-radius: 10px; padding: 16px; }
+    .chart-card h3 { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; color: #1e293b; margin-bottom: 2px; }
+    .chart-card h3 strong { font-weight: 700; }
     .chart-card .chart-sub { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #64748b; margin-bottom: 8px; }
     .chart-card img { width: 100%; display: block; }
     .chart-card .chart-eq { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #334155; text-align: center; margin-top: 8px; }
     .chart-card .chart-legend { display: flex; justify-content: center; gap: 32px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: #334155; margin-top: 8px; white-space: nowrap; }
     .chart-card .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+    /* Report footer */
+    .report-footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; }
+
+    /* Print controls (screen only) */
     .print-controls { margin-bottom: 20px; display: flex; align-items: center; gap: 16px; }
     .print-controls button { padding: 10px 24px; font-size: 14px; font-family: 'DM Sans', sans-serif; font-weight: 600; background: #1B2A4A; color: white; border: none; border-radius: 8px; cursor: pointer; }
     .print-controls label { font-size: 13px; color: #64748b; display: flex; align-items: center; gap: 6px; cursor: pointer; }
-    0; text-align: center; }
+
     .report-section { break-inside: avoid; page-break-inside: avoid; }
+
     @media print {
-        body { padding: 16px; padding-top: 32px; }
+        @page { margin: 0.6in 0.65in 0.5in 0.65in; }
+        body { margin: 0; max-width: none; padding: 0; }
         .no-print { display: none !important; }
-        h2 { break-after: avoid; page-break-after: avoid; margin-top: 20px; }
-        h1 { margin-top: 12px; }
+        .print-only { display: block; }
+
+        /* Section page headers — shown in print at each forced page break */
+        .section-page-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 0 8px 0; margin-bottom: 20px;
+            border-bottom: 2px solid #C9A84C;
+        }
+        .section-page-header .sph-title { font-size: 11px; font-weight: 700; color: #1B2A4A; letter-spacing: 0.2px; }
+        .section-page-header .sph-sub { font-size: 9px; color: #64748b; margin-top: 2px; }
+        .section-page-header .sph-right { display: flex; align-items: center; gap: 10px; }
+        .section-page-header .sph-dept { font-size: 8px; color: #64748b; text-align: right; line-height: 1.5; }
+        .section-page-header .sph-logo { height: 22px; width: auto; }
+
+        /* Forced page breaks before sections that start new pages */
+        .print-page-break { break-before: page; page-break-before: always; }
+
+        /* Section-start headings lose top margin in print — the page header provides spacing */
+        .section-start-heading { margin-top: 0 !important; }
+
+        /* Scrunch timeseries charts to fit stacked on one page */
+        .chart-grid[style*="grid-template-columns:1fr"] .chart-card { padding: 10px; }
+        .chart-grid[style*="grid-template-columns:1fr"] .chart-card img { max-height: 280px; object-fit: contain; }
+        .chart-grid[style*="grid-template-columns:1fr"] { gap: 10px; margin-top: 10px; }
+        .chart-grid[style*="grid-template-columns:1fr"] .chart-legend { margin-top: 4px; font-size: 11px; }
+        .chart-grid[style*="grid-template-columns:1fr"] .chart-sub { margin-bottom: 4px; }
+
+        /* Page 1 hero header */
+        .report-header-bar { break-inside: avoid; page-break-inside: avoid; }
+
+        h2 { break-after: avoid; page-break-after: avoid; margin-top: 24px; }
+        h1 { margin-top: 0; }
         .report-section { break-inside: avoid; page-break-inside: avoid; }
         .chart-card { break-inside: avoid; page-break-inside: avoid; }
         .chart-grid { break-before: avoid; page-break-before: avoid; }
-        .report-header-bar { break-inside: avoid; page-break-inside: avoid; }
         .report-meta { break-inside: avoid; page-break-inside: avoid; }
         table.dqo { break-inside: avoid; page-break-inside: avoid; }
         .thresholds { break-before: avoid; page-break-before: avoid; }
@@ -6486,10 +6594,13 @@ function generateAuditReport(auditId) {
             <div class="report-subtitle">${dateRange}</div>
             <div class="report-sensors">${escapeHtml(labelB)} and ${escapeHtml(labelA)}</div>
         </div>
-        <div style="text-align:right;font-size:11px;color:#64748b;line-height:1.6">
-            <div style="font-weight:600">ADEC Division of Air Quality</div>
-            <div>Air Monitoring and Quality Assurance</div>
-            <div style="margin-top:4px">${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+        <div class="report-header-right">
+            <div class="report-header-info">
+                <div style="font-weight:600">ADEC Division of Air Quality</div>
+                <div>Air Monitoring and Quality Assurance</div>
+                <div style="margin-top:4px">${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+            </div>
+            <img class="report-header-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC Logo" onerror="this.style.display='none'">
         </div>
     </div>
 
@@ -6524,14 +6635,30 @@ function generateAuditReport(auditId) {
     <div class="thresholds">Intercept, SD, and RMSE are expressed in the units of the measured parameter (ppb for gases, \u00B5g/m\u00B3 for particulate matter). PM<sub>10</sub> values exceeding 1000 \u00B5g/m\u00B3 were invalidated prior to analysis.</div>
     </section>
 
-    ${tsHtml ? `<section class="report-section"><h2>PM Timeseries</h2><div class="chart-grid">${tsHtml}</div></section>` : ''}
+    ${tsHtml ? `
+    <div class="print-page-break">
+        <div class="section-page-header">
+            <div><div class="sph-title">${escapeHtml(communityName)} Sensor Audit Report</div><div class="sph-sub">${dateRange} &mdash; ${escapeHtml(labelB)} &amp; ${escapeHtml(labelA)}</div></div>
+            <div class="sph-right"><div class="sph-dept"><div>ADEC Division of Air Quality</div><div>Air Monitoring &amp; Quality Assurance</div></div><img class="sph-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC" onerror="this.style.display='none'"></div>
+        </div>
+        <h2 class="section-start-heading">PM Timeseries</h2>
+        <div class="chart-grid" style="grid-template-columns:1fr">${tsHtml}</div>
+    </div>` : ''}
 
     ${scatterCards.length > 0 ? (() => {
+        const sphHeader = '<div class="section-page-header"><div><div class="sph-title">' + escapeHtml(communityName) + ' Sensor Audit Report</div><div class="sph-sub">' + dateRange + ' &mdash; ' + escapeHtml(labelB) + ' &amp; ' + escapeHtml(labelA) + '</div></div><div class="sph-right"><div class="sph-dept"><div>ADEC Division of Air Quality</div><div>Air Monitoring &amp; Quality Assurance</div></div><img class="sph-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC"></div></div>';
         let out = '';
-        for (let i = 0; i < scatterCards.length; i += 2) {
-            const heading = i === 0 ? 'Regression Plots' : 'Regression Plots (continued)';
-            out += '<section class="report-section"><h2>' + heading + '</h2>';
-            out += '<div class="chart-grid">' + scatterCards.slice(i, i + 2).join('') + '</div></section>';
+        for (let i = 0; i < scatterCards.length; i += 4) {
+            if (i === 0) {
+                out += '<h2>Regression Plots</h2>';
+                out += '<div class="chart-grid">' + scatterCards.slice(i, i + 4).join('') + '</div>';
+            } else {
+                out += '<div class="print-page-break">';
+                out += sphHeader;
+                out += '<h2 class="print-only section-start-heading">Regression Plots (continued)</h2>';
+                out += '<div class="chart-grid">' + scatterCards.slice(i, i + 4).join('') + '</div>';
+                out += '</div>';
+            }
         }
         return out;
     })() : ''}
@@ -6600,16 +6727,26 @@ async function deleteAuditPhoto(communityId, fileId, storagePath, auditId) {
 }
 
 async function uploadAuditPhotos(auditId, communityId, files) {
+    // Build a display name from the audit's scheduled dates
+    const audit = audits.find(a => a.id === auditId);
+    let displayName = 'Audit Setup';
+    if (audit && audit.scheduledStart && audit.scheduledEnd) {
+        const startD = new Date(audit.scheduledStart + 'T00:00:00');
+        const endD = new Date(audit.scheduledEnd + 'T00:00:00');
+        const startStr = startD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const endStr = endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        displayName = `Audit Setup ${startStr} - ${endStr}`;
+    }
     for (const file of files) {
         try {
             const path = `${auditId}/${Date.now()}_${file.name}`;
             await supa.storage.from('community-files').upload(path, file);
             const { data: fileData } = await supa.from('community_files').insert({
-                community_id: communityId, file_name: file.name, file_type: file.type,
+                community_id: communityId, file_name: displayName, file_type: file.type,
                 storage_path: path, uploaded_by: currentUserId,
             }).select();
             if (!communityFiles[communityId]) communityFiles[communityId] = [];
-            communityFiles[communityId].push({ id: fileData?.[0]?.id || generateId('f'), name: file.name, type: file.type, storagePath: path, date: new Date().toISOString() });
+            communityFiles[communityId].push({ id: fileData?.[0]?.id || generateId('f'), name: displayName, type: file.type, storagePath: path, date: nowDatetime() });
         } catch (err) { handleSaveError(err); }
     }
     // Refresh the photo grid inline instead of reopening the whole modal

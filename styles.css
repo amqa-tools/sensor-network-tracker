@@ -1735,18 +1735,40 @@ tr:last-child td {
     box-shadow: var(--shadow-md);
 }
 
-.file-card img {
-    width: 100%;
-    max-height: 320px;
-    object-fit: contain;
-    background: var(--slate-50);
-    display: block;
-    cursor: pointer;
-    transition: transform 0.3s var(--ease-out);
+.file-card-with-thumb {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
 }
 
-.file-card img:hover {
-    transform: scale(1.02);
+.file-thumb {
+    flex-shrink: 0;
+    width: 80px;
+    height: 80px;
+    margin: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--slate-100);
+    cursor: pointer;
+    transition: transform 0.2s var(--ease-out);
+}
+
+.file-thumb:hover {
+    transform: scale(1.05);
+}
+
+.file-thumb img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    display: block;
+    border-radius: 8px;
+}
+
+.file-card-with-thumb .file-info {
+    border-top: none;
+    border-left: 1px solid var(--slate-100);
+    flex: 1;
 }
 
 .file-card .file-info {
@@ -3826,6 +3848,9 @@ th:hover .field-reorder-btns {
 
 .badge-service-quant { background: rgba(167, 139, 250, 0.12); color: #6d28d9; }
 .badge-service-quant::before { background: #8b5cf6; box-shadow: 0 0 6px rgba(139, 92, 246, 0.4); }
+
+.badge-ticket-status { background: rgba(109, 40, 217, 0.08); color: #6d28d9; border: 1.5px dashed rgba(139, 92, 246, 0.5); font-style: italic; }
+.badge-ticket-status::before { background: #8b5cf6; box-shadow: 0 0 6px rgba(139, 92, 246, 0.4); }
 
 .service-badge-count { background: var(--aurora-rose); color: white; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; margin-left: auto; }
 .btn-service { background: rgba(167, 139, 250, 0.1); color: #6d28d9; border: 1px solid rgba(167, 139, 250, 0.3); }
