@@ -64,12 +64,14 @@ const db = {
     async getProfile() {
         const session = await this.getSession();
         if (!session) return null;
-        const { data } = await supa.from('profiles').select('*').eq('id', session.user.id).single();
+        const { data, error } = await supa.from('profiles').select('*').eq('id', session.user.id).single();
+        if (error) throw error;
         return data;
     },
 
     async getAppSetting(key) {
-        const { data } = await supa.from('app_settings').select('value').eq('key', key).single();
+        const { data, error } = await supa.from('app_settings').select('value').eq('key', key).single();
+        if (error && error.code !== 'PGRST116') throw error;
         return data?.value || null;
     },
 
@@ -104,7 +106,8 @@ const db = {
 
     async setCommunityTags(communityId, tags) {
         // Delete existing then insert new
-        await supa.from('community_tags').delete().eq('community_id', communityId);
+        const { error: deleteError } = await supa.from('community_tags').delete().eq('community_id', communityId);
+        if (deleteError) throw deleteError;
         if (tags.length > 0) {
             const rows = tags.map(tag => ({ community_id: communityId, tag }));
             const { error } = await supa.from('community_tags').insert(rows);
@@ -285,8 +288,6 @@ const db = {
         const { error: uploadError } = await supa.storage.from('community-files').upload(path, file);
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = supa.storage.from('community-files').getPublicUrl(path);
-
         const { data, error } = await supa.from('community_files').insert({
             community_id: communityId,
             file_name: file.name,
@@ -303,11 +304,6 @@ const db = {
         await supa.storage.from('community-files').remove([storagePath]);
         const { error } = await supa.from('community_files').delete().eq('id', fileId);
         if (error) throw error;
-    },
-
-    getFileUrl(storagePath) {
-        const { data } = supa.storage.from('community-files').getPublicUrl(storagePath);
-        return data?.publicUrl || '';
     },
 
     async getSignedUrl(storagePath) {

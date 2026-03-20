@@ -73,7 +73,7 @@
         <div class="mobile-header" id="mobile-header">
             <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">&#9776;</button>
         </div>
-        <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()" role="presentation"></div>
         <!-- Sidebar -->
         <nav id="sidebar">
             <div class="sidebar-header">
@@ -118,9 +118,9 @@
                 </li>
             </ul>
             <div class="sidebar-bottom-actions">
-                <div class="setup-mode-toggle" id="setup-mode-toggle" onclick="toggleSetupMode()">
+                <div class="setup-mode-toggle" id="setup-mode-toggle" onclick="toggleSetupMode()" role="button" aria-label="Toggle setup mode" tabindex="0">
                     <span class="setup-mode-icon" aria-hidden="true">&#9881;</span>
-                <span class="setup-mode-label">Setup Mode</span>
+                    <span class="setup-mode-label">Setup Mode</span>
                 </div>
             </div>
         </nav>
@@ -156,8 +156,8 @@
                     <button class="btn" id="bulk-clear-btn" style="display:none" onclick="clearSensorSelection()">Clear Selection</button>
                 </div>
                 <div class="filter-bar">
-                    <input type="text" id="sensor-search" placeholder="Search sensors..." oninput="renderSensors()">
-                    <select id="sensor-status-filter" onchange="renderSensors()">
+                    <input type="text" id="sensor-search" placeholder="Search sensors..." oninput="renderSensors()" aria-label="Search sensors">
+                    <select id="sensor-status-filter" onchange="renderSensors()" aria-label="Filter by status">
                         <option value="">All Statuses</option>
                         <option value="Online">Online</option>
                         <option value="Offline">Offline</option>
@@ -192,7 +192,7 @@
                     <button class="btn btn-primary" onclick="openNewTicketModal()">+ New Ticket</button>
                 </div>
                 <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-                    <select id="service-type-filter" onchange="renderServiceView()" style="padding:6px 10px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-sans)">
+                    <select id="service-type-filter" onchange="renderServiceView()" aria-label="Filter by ticket type" style="padding:6px 10px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-sans)">
                         <option value="">All Types</option>
                         <option value="issue">Issue / Repair</option>
                         <option value="calibration">Calibration</option>
@@ -211,7 +211,7 @@
                     <button class="btn btn-primary" onclick="openNewAuditModal()">+ Schedule Audit</button>
                 </div>
                 <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-                    <select id="audit-status-filter" onchange="renderAuditsView()" style="padding:6px 10px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-sans)">
+                    <select id="audit-status-filter" onchange="renderAuditsView()" aria-label="Filter by audit status" style="padding:6px 10px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-sans)">
                         <option value="">All Statuses</option>
                         <option value="Scheduled">Scheduled</option>
                         <option value="In Progress">In Progress</option>
@@ -231,7 +231,7 @@
                 </div>
                 <div id="community-tag-filters" class="community-tag-filters"></div>
                 <div class="filter-bar">
-                    <input type="text" id="community-search" placeholder="Search communities..." oninput="renderCommunitiesList()">
+                    <input type="text" id="community-search" placeholder="Search communities..." oninput="renderCommunitiesList()" aria-label="Search communities">
                 </div>
                 <div id="communities-list-container"></div>
             </div>
@@ -240,7 +240,7 @@
             <div id="view-community" class="view">
                 <div class="community-detail-header">
                     <div class="community-detail-top">
-                        <h1 id="community-name" class="community-name-editable"></h1>
+                        <h1 id="community-name"></h1>
                         <span class="community-edit-name-btn" id="community-edit-name-btn" onclick="editCommunityName()" title="Edit name">&#9998;</span>
                         <div class="community-tags-container" id="community-type-badge"></div>
                     </div>
@@ -315,7 +315,7 @@
                     <button class="btn" onclick="exportContacts()">Export</button>
                 </div>
                 <div class="filter-bar">
-                    <input type="text" id="contact-search" placeholder="Search contacts..." oninput="renderContacts()">
+                    <input type="text" id="contact-search" placeholder="Search contacts..." oninput="renderContacts()" aria-label="Search contacts">
                 </div>
                 <div id="contacts-grid"></div>
             </div>
@@ -351,7 +351,7 @@
                     <div class="history-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                         <button class="btn btn-primary" onclick="openAddNoteModal(currentSensor, 'sensor')">+ Add Note</button>
                         <button class="btn" onclick="openCollocationModal(currentSensor)" style="border-color:var(--navy-400);color:var(--navy-500)">+ Log Collocation</button>
-                        <select id="sensor-history-filter" onchange="filterSensorHistory()">
+                        <select id="sensor-history-filter" onchange="filterSensorHistory()" aria-label="Filter history type">
                             <option value="">All History</option>
                             <option value="_notes">Field Notes</option>
                             <option value="_changes">Changes</option>
@@ -755,7 +755,7 @@
                     <button type="button" class="btn btn-sm" onclick="emailShowAll()">Show All</button>
                     <span class="email-toolbar-divider">|</span>
                     <label class="email-toolbar-label">Filter by Community:</label>
-                    <select id="email-community-filter" onchange="emailFilterByCommunity()">
+                    <select id="email-community-filter" onchange="emailFilterByCommunity()" aria-label="Filter by community">
                         <option value="">All Communities</option>
                     </select>
                 </div>

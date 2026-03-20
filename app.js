@@ -726,25 +726,25 @@ function renderOpenTabs() {
                 if (childToParent[childTab.id] === tab.id && !rendered.has(childTab.id)) {
                     rendered.add(childTab.id);
                     const childActive = childTab.id === activeTabId;
-                    childrenHtml += `<div class="open-tab-child ${childActive ? 'active' : ''}" onclick="switchToTab('${childTab.id}')" title="${childTab.label}">
-                        <span class="open-tab-label">${childTab.label}</span>
+                    childrenHtml += `<div class="open-tab-child ${childActive ? 'active' : ''}" onclick="switchToTab('${childTab.id}')" title="${escapeHtml(childTab.label)}">
+                        <span class="open-tab-label">${escapeHtml(childTab.label)}</span>
                         <span class="open-tab-close" onclick="closeTab('${childTab.id}', event)">&times;</span>
                     </div>`;
                 }
             });
 
             html += `<div class="open-tab-group">
-                <div class="open-tab ${isActive ? 'active' : ''}" onclick="switchToTab('${tab.id}')" title="${tab.label}">
+                <div class="open-tab ${isActive ? 'active' : ''}" onclick="switchToTab('${tab.id}')" title="${escapeHtml(tab.label)}">
                     <span class="open-tab-icon">${tab.icon}</span>
-                    <span class="open-tab-label">${tab.label}</span>
+                    <span class="open-tab-label">${escapeHtml(tab.label)}</span>
                     <span class="open-tab-close" onclick="closeTab('${tab.id}', event)">&times;</span>
                 </div>
                 <div class="open-tab-children">${childrenHtml}</div>
             </div>`;
         } else {
-            html += `<div class="open-tab ${isActive ? 'active' : ''}" onclick="switchToTab('${tab.id}')" title="${tab.label}">
+            html += `<div class="open-tab ${isActive ? 'active' : ''}" onclick="switchToTab('${tab.id}')" title="${escapeHtml(tab.label)}">
                 <span class="open-tab-icon">${tab.icon}</span>
-                <span class="open-tab-label">${tab.label}</span>
+                <span class="open-tab-label">${escapeHtml(tab.label)}</span>
                 <span class="open-tab-close" onclick="closeTab('${tab.id}', event)">&times;</span>
             </div>`;
         }
@@ -1080,10 +1080,6 @@ function getStatusArray(s) {
     if (Array.isArray(s.status)) return s.status;
     if (s.status) return [s.status];
     return [];
-}
-
-function getStatusDisplay(s) {
-    return getStatusArray(s).join(', ') || '—';
 }
 
 function renderStatusBadges(s, clickable) {
@@ -1774,7 +1770,6 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>SOA Tag ID</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'soaTagId')">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
-            ${setupMode ? '<div class="info-item"><button class="btn btn-sm" onclick="openAddFieldModal()" style="margin-top:18px">+ Add Field</button></div>' : ''}
         `;
     }
 
@@ -2092,8 +2087,6 @@ function renderCommunityFiles(communityId) {
         return;
     }
 
-    const imageFiles = files.filter(f => f.type && f.type.startsWith('image/') && f.storagePath);
-
     grid.innerHTML = files.map((f, idx) => {
         const fileUrl = f.storagePath ? '' : (f.data || ''); // fallback for old base64 data
         const viewOnclick = f.storagePath
@@ -2101,7 +2094,7 @@ function renderCommunityFiles(communityId) {
             : `onclick="openImageLightbox('${fileUrl}')"`;
         const downloadHref = f.storagePath ? '#' : fileUrl;
         const downloadOnclick = f.storagePath
-            ? `onclick="event.preventDefault(); downloadStorageFile('${f.storagePath}', '${f.name}')"`
+            ? `onclick="event.preventDefault(); downloadStorageFile('${f.storagePath}', '${(f.name || '').replace(/'/g, "\\'")}')"`
             : '';
 
         if (f.type && f.type.startsWith('image/')) {
@@ -2109,11 +2102,11 @@ function renderCommunityFiles(communityId) {
             return `
                 <div class="file-card file-card-with-thumb">
                     <div class="file-thumb" ${viewOnclick}>
-                        <img id="community-file-thumb-${communityId}-${idx}" src="${imgSrc}" alt="${f.name}">
+                        <img id="community-file-thumb-${communityId}-${idx}" src="${imgSrc}" alt="${escapeHtml(f.name)}">
                     </div>
                     <div class="file-info">
                         <div>
-                            <div class="file-name">${f.name}</div>
+                            <div class="file-name">${escapeHtml(f.name)}</div>
                             <div class="file-date">${formatDate(f.date)}</div>
                         </div>
                         <button class="btn btn-sm btn-danger" onclick="deleteFile('${communityId}', '${f.id}', '${f.storagePath || ''}')">Delete</button>
@@ -2125,15 +2118,15 @@ function renderCommunityFiles(communityId) {
                 <div class="file-card">
                     <div class="file-card-pdf">
                         <div class="pdf-icon">&#128196;</div>
-                        <div class="pdf-label">${f.name}</div>
+                        <div class="pdf-label">${escapeHtml(f.name)}</div>
                     </div>
                     <div class="file-info">
                         <div>
-                            <div class="file-name">${f.name}</div>
+                            <div class="file-name">${escapeHtml(f.name)}</div>
                             <div class="file-date">${formatDate(f.date)}</div>
                         </div>
                         <div>
-                            <a class="btn btn-sm" href="${downloadHref}" ${downloadOnclick} download="${f.name}">Download</a>
+                            <a class="btn btn-sm" href="${downloadHref}" ${downloadOnclick} download="${escapeHtml(f.name)}">Download</a>
                             <button class="btn btn-sm btn-danger" onclick="deleteFile('${communityId}', '${f.id}', '${f.storagePath || ''}')">Delete</button>
                         </div>
                     </div>
@@ -2143,7 +2136,7 @@ function renderCommunityFiles(communityId) {
     }).join('');
 
     // Load signed URLs for image thumbnails asynchronously
-    if (imageFiles.length > 0) {
+    if (files.some(f => f.type && f.type.startsWith('image/') && f.storagePath)) {
         setTimeout(() => loadCommunityFileThumbs(communityId, files), 0);
     }
 }
@@ -2162,8 +2155,13 @@ async function loadCommunityFileThumbs(communityId, files) {
 }
 
 async function openStorageFile(storagePath) {
-    const url = await db.getSignedUrl(storagePath);
-    openImageLightbox(url);
+    try {
+        const url = await db.getSignedUrl(storagePath);
+        openImageLightbox(url);
+    } catch (err) {
+        console.error('Error opening file:', err);
+        showAlert('Error', 'Could not open file: ' + err.message);
+    }
 }
 
 function openImageLightbox(src) {
@@ -2195,11 +2193,16 @@ function closeLightbox() {
 }
 
 async function downloadStorageFile(storagePath, fileName) {
-    const url = await db.getSignedUrl(storagePath);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.click();
+    try {
+        const url = await db.getSignedUrl(storagePath);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+    } catch (err) {
+        console.error('Download error:', err);
+        showAlert('Error', 'Could not download file: ' + err.message);
+    }
 }
 
 async function deleteFile(communityId, fileId, storagePath) {
@@ -2423,31 +2426,9 @@ function saveContactStatusNote() {
 }
 
 function skipContactStatusNote() {
-    if (!pendingContactStatusNote) return;
-    const p = pendingContactStatusNote;
-    const date = document.getElementById('contact-status-note-date').value || nowDatetime();
-
-    const noteText = p.action === 'deactivated'
-        ? `${p.contactName} marked as inactive.`
-        : `${p.contactName} reactivated.`;
-
-    const note = {
-        id: generateId('n'),
-        date: date,
-        type: 'Info Edit',
-        text: noteText,
-        createdBy: getCurrentUserName(), createdById: currentUserId,
-        taggedSensors: [],
-        taggedCommunities: p.community ? [p.community] : [],
-        taggedContacts: [p.contactId],
-    };
-
-    notes.push(note); persistNote(note);
-    pendingContactStatusNote = null;
-    closeModal('modal-contact-status-note');
-
-    if (currentContact === p.contactId) showContactView(p.contactId);
-    if (currentCommunity) showCommunityView(currentCommunity);
+    // Clear the optional note text and save with no additional info
+    document.getElementById('contact-status-note-text').value = '';
+    saveContactStatusNote();
 }
 
 function showContactDetail(contactId) {
@@ -2464,14 +2445,14 @@ function showContactView(contactId) {
     if (!c) return;
     currentContact = contactId;
 
-    document.getElementById('contact-detail-name').innerHTML = c.name + (c.active === false ? '<span class="contact-inactive-badge" style="margin-left:10px;font-size:12px">Inactive</span>' : '');
+    document.getElementById('contact-detail-name').innerHTML = escapeHtml(c.name) + (c.active === false ? '<span class="contact-inactive-badge" style="margin-left:10px;font-size:12px">Inactive</span>' : '');
     if (setupMode) {
         document.getElementById('contact-info-card').innerHTML = `
             <div class="info-item"><label>Name</label>
-                <input class="inline-edit-input" data-contact="${c.id}" data-field="name" value="${c.name}" onblur="inlineSaveContact(this); showContactView('${c.id}')" onkeydown="if(event.key==='Enter')this.blur()">
+                <input class="inline-edit-input" data-contact="${c.id}" data-field="name" value="${escapeHtml(c.name)}" onblur="inlineSaveContact(this); showContactView('${c.id}')" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
             <div class="info-item"><label>Role</label>
-                <input class="inline-edit-input" data-contact="${c.id}" data-field="role" value="${c.role || ''}" placeholder="Role / Title" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()">
+                <input class="inline-edit-input" data-contact="${c.id}" data-field="role" value="${escapeHtml(c.role || '')}" placeholder="Role / Title" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
             <div class="info-item"><label>Community</label>
                 <select class="inline-edit-select" data-contact="${c.id}" data-field="community" onchange="inlineSaveContact(this)">
@@ -2479,13 +2460,13 @@ function showContactView(contactId) {
                 </select>
             </div>
             <div class="info-item"><label>Organization</label>
-                <input class="inline-edit-input" data-contact="${c.id}" data-field="org" value="${c.org || ''}" placeholder="Organization" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()">
+                <input class="inline-edit-input" data-contact="${c.id}" data-field="org" value="${escapeHtml(c.org || '')}" placeholder="Organization" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
             <div class="info-item"><label>Email</label>
-                <input class="inline-edit-input" type="email" data-contact="${c.id}" data-field="email" value="${c.email || ''}" placeholder="Email" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()">
+                <input class="inline-edit-input" type="email" data-contact="${c.id}" data-field="email" value="${escapeHtml(c.email || '')}" placeholder="Email" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
             <div class="info-item"><label>Phone</label>
-                <input class="inline-edit-input" type="tel" data-contact="${c.id}" data-field="phone" value="${c.phone || ''}" placeholder="Phone" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()">
+                <input class="inline-edit-input" type="tel" data-contact="${c.id}" data-field="phone" value="${escapeHtml(c.phone || '')}" placeholder="Phone" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
             <div class="info-item"><label>Status</label>
                 <select class="inline-edit-select" data-contact="${c.id}" data-field="active" onchange="inlineSaveContact(this)">
@@ -2682,7 +2663,7 @@ function sendEmail() {
     const involvedCommunities = [...new Set(selectedContacts.map(c => c.community))];
 
     const comm = {
-        id: 'comm' + Date.now(),
+        id: generateId('comm'),
         date: nowDatetime(),
         type: 'Communication',
         commType: 'Email',
@@ -2965,7 +2946,7 @@ function renderTimeline(containerId, items) {
                 </div>
                 <div class="timeline-text">${highlightMentions(escapeHtml(item.text))}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
                 ${additionalInfoHtml}
-                ${hasFullBody ? `<div class="timeline-text-full">${item.fullBody}</div>` : ''}
+                ${hasFullBody ? `<div class="timeline-text-full">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
                 ${tags ? `<div class="timeline-tags">${tags}</div>` : ''}
             </div>
@@ -3140,9 +3121,9 @@ function setupMentionAutocomplete(textarea, dropdown) {
 
                 if (matches.length > 0 && query.length > 0) {
                     dropdown.innerHTML = matches.map((c, i) =>
-                        `<div class="mention-option${i === 0 ? ' selected' : ''}" data-name="${c.name}" data-community="${getCommunityName(c.community)}">
-                            <span>${c.name}</span>
-                            <span class="mention-community">${getCommunityName(c.community)}</span>
+                        `<div class="mention-option${i === 0 ? ' selected' : ''}" data-name="${escapeHtml(c.name)}" data-community="${escapeHtml(getCommunityName(c.community))}">
+                            <span>${escapeHtml(c.name)}</span>
+                            <span class="mention-community">${escapeHtml(getCommunityName(c.community))}</span>
                         </div>`
                     ).join('');
                     dropdown.classList.add('visible');
@@ -3465,9 +3446,6 @@ function filterSensorHistory() {
     renderTimeline('sensor-history-timeline', sensorNotes);
 }
 
-// ===== INLINE COMMUNITY CHANGE (sensor detail) =====
-
-
 // ===== TAG-CHIP INPUTS (Facebook Marketplace style) =====
 function setupTagChipInput(containerId, getOptions, getLabel) {
     const container = document.getElementById(containerId);
@@ -3570,7 +3548,7 @@ function addChip(containerId, value) {
     const chip = document.createElement('span');
     chip.className = 'tag-chip';
     chip.dataset.value = value;
-    chip.innerHTML = `${value} <span class="tag-chip-remove" onclick="this.parentElement.remove()">&times;</span>`;
+    chip.innerHTML = `${escapeHtml(value)} <span class="tag-chip-remove" onclick="this.parentElement.remove()">&times;</span>`;
     chips.insertBefore(chip, input);
 }
 
@@ -3916,7 +3894,7 @@ async function changeUserRole(id, newRole) {
     if (error) { showAlert('Error', error.message); return; }
 
     // Also update the profile if the user has one
-    const { data: emailRow } = await supa.from('allowed_emails').select('email').eq('id', id).single();
+    const { data: emailRow } = await supa.from('allowed_emails').select('email').eq('id', id).maybeSingle();
     if (emailRow) {
         await supa.from('profiles').update({ role: newRole }).eq('email', emailRow.email);
     }
@@ -4069,46 +4047,6 @@ async function renderMfaSettings() {
     }
 }
 
-async function startMfaSetup() {
-    const { data, error } = await supa.auth.mfa.enroll({ factorType: 'totp' });
-    if (error) { showAlert('Error', error.message); return; }
-
-    const area = document.getElementById('mfa-setup-area');
-    area.innerHTML = `
-        <div class="mfa-setup-container">
-            <p style="margin:16px 0 8px;font-weight:500">Scan this QR code with your authenticator app:</p>
-            <div class="mfa-qr-code">
-                <img src="${data.totp.qr_code}" alt="MFA QR Code" style="width:200px;height:200px">
-            </div>
-            <p style="font-size:12px;color:var(--slate-400);margin:8px 0">Or enter this code manually: <code style="font-family:var(--font-mono);color:var(--slate-700)">${data.totp.secret}</code></p>
-            <div class="mfa-verify-field">
-                <input type="text" id="mfa-verify-code" placeholder="000000" maxlength="6">
-                <button class="btn btn-primary" onclick="verifyMfa('${data.id}')">Verify</button>
-            </div>
-        </div>
-    `;
-}
-
-async function verifyMfa(factorId) {
-    const code = document.getElementById('mfa-verify-code').value.trim();
-    if (!code || code.length !== 6) { showAlert('Validation Error', 'Enter the 6-digit code from your authenticator app.'); return; }
-
-    const { data: challenge } = await supa.auth.mfa.challenge({ factorId });
-    const { error } = await supa.auth.mfa.verify({ factorId, challengeId: challenge.id, code });
-
-    if (error) { showAlert('Error', 'Invalid code. Try again.'); return; }
-    showAlert('Success', 'MFA enabled successfully!');
-    await renderMfaSettings();
-}
-
-async function disableMfa(factorId) {
-    showConfirm('Disable MFA', 'Disable MFA? Your account will only be protected by your password.', async () => {
-        const { error } = await supa.auth.mfa.unenroll({ factorId });
-        if (error) { showAlert('Error', error.message); return; }
-        await renderMfaSettings();
-    });
-}
-
 // ===== SENSOR TAGS & SIDEBAR =====
 const SENSOR_ISSUE_STATUSES = ['PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue', 'Needs Repair', 'Power Failure', 'Lost Connection'];
 
@@ -4215,14 +4153,14 @@ function handleGlobalSearch() {
     if (matchedCommunities.length) {
         html += `<div class="search-result-group"><div class="search-result-group-label">Communities</div>
             ${matchedCommunities.map(c => `<div class="search-result-item" onclick="closeGlobalSearch(); showCommunity('${c.id}')">
-                <span class="search-result-name">${c.name}</span>
+                <span class="search-result-name">${escapeHtml(c.name)}</span>
                 <span class="search-result-meta">${getChildCommunities(c.id).length ? getChildCommunities(c.id).length + ' sub-communities' : ''}</span>
             </div>`).join('')}</div>`;
     }
     if (matchedContacts.length) {
         html += `<div class="search-result-group"><div class="search-result-group-label">Contacts</div>
             ${matchedContacts.map(c => `<div class="search-result-item" onclick="closeGlobalSearch(); showContactDetail('${c.id}')">
-                <span class="search-result-name">${c.name}</span>
+                <span class="search-result-name">${escapeHtml(c.name)}</span>
                 <span class="search-result-meta">${getCommunityName(c.community)}${c.active === false ? ' &middot; Inactive' : ''}</span>
             </div>`).join('')}</div>`;
     }
@@ -4396,7 +4334,6 @@ function executeBulkAction() {
     const eventDate = document.getElementById('bulk-action-date').value || nowDatetime();
     const sensorIds = Array.from(selectedSensors);
     const sensorList = sensorIds.join(', ');
-    const now = eventDate;
 
     let toCommunityId = null;
     let toName = '';
@@ -4420,7 +4357,7 @@ function executeBulkAction() {
         if (s.community) sourceCommunities.add(s.community);
         if (doMove) {
             s.community = toCommunityId;
-            s.dateInstalled = now.split('T')[0];
+            s.dateInstalled = eventDate.split('T')[0];
         }
         if (doStatus) {
             s.status = newStatuses;
@@ -4437,7 +4374,7 @@ function executeBulkAction() {
         if (toCommunityId && !taggedComms.includes(toCommunityId)) taggedComms.push(toCommunityId);
         const note = {
             id: generateId('n'),
-            date: now,
+            date: eventDate,
             type: doMove ? 'Movement' : 'Status Change',
             text: noteText,
             createdBy: getCurrentUserName(), createdById: currentUserId,
@@ -4484,6 +4421,8 @@ function goBack() {
     else if (prevViewId === 'view-communities') showView('communities');
     else if (prevViewId === 'view-contacts') showView('contacts');
     else if (prevViewId === 'view-settings') showView('settings');
+    else if (prevViewId === 'view-service') showView('service');
+    else if (prevViewId === 'view-audits') showView('audits');
     else if (prevViewId === 'view-community' && currentCommunity) showCommunityView(currentCommunity);
     else if (prevViewId === 'view-sensor-detail' && currentSensor) showSensorView(currentSensor);
     else if (prevViewId === 'view-contact-detail' && currentContact) showContactView(currentContact);
@@ -4549,12 +4488,10 @@ function saveCollocation(e) {
 
     // Create note with structured additionalInfo for getMostRecentCollocation
     const noteText = `Collocation at ${location}: ${formatDate(startDate)} \u2013 ${formatDate(endDate)}.${extraNotes ? ' ' + extraNotes : ''}`;
-    const collocNote = createNote('Collocation', noteText, {
+    createNote('Collocation', noteText, {
         sensors: [sensorId],
         communities: communityId ? [communityId] : [],
-    });
-    // Set additionalInfo on the in-memory note (createNote already persists to DB)
-    collocNote.additionalInfo = `${location}|${startDate}|${endDate}`;
+    }, `${location}|${startDate}|${endDate}`);
 
     // Update the sensor's collocationDates field for backward compatibility
     s.collocationDates = `${location}, ${formatDate(startDate)} \u2013 ${formatDate(endDate)}`;
@@ -5256,7 +5193,6 @@ function openAuditDetail(auditId) {
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
     const idx = AUDIT_STATUSES.indexOf(audit.status);
     const nextStatus = idx < AUDIT_STATUSES.length - 1 ? AUDIT_STATUSES[idx + 1] : null;
-    const isEditable = true; // All fields always editable
     const progress = AUDIT_STATUSES.map((st, i) => {
         const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
         return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
@@ -5273,7 +5209,7 @@ function openAuditDetail(auditId) {
         <div style="padding:12px 28px 0"><div class="ticket-steps ticket-steps-detail">${progress}</div></div>
         <div class="ticket-detail-actions" style="border-top:none">
             ${nextStatus ? `<button class="btn btn-primary" onclick="advanceAuditStatus('${audit.id}')">Advance to: ${nextStatus}</button>` : ''}
-            ${idx > 0 && isEditable ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
+            ${idx > 0 ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
             <span class="action-spacer"></span>
             ${audit.status === 'Complete' || audit.status === 'Analysis Pending' || audit.status === 'Audit Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
             <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
@@ -5283,17 +5219,17 @@ function openAuditDetail(auditId) {
             <div class="ticket-field"><label>Status</label><p><span class="audit-status-badge ${AUDIT_STATUS_CSS[audit.status]}">${audit.status}</span></p></div>
             <div class="ticket-field"><label>Audit Pod</label><p style="font-family:var(--font-mono);font-size:13px"><a href="#" onclick="closeModal('modal-audit-detail'); showSensorDetail('${audit.auditPodId}'); return false;" style="color:var(--navy-500)">${audit.auditPodId}</a></p></div>
             <div class="ticket-field"><label>Community Pod</label><p style="font-family:var(--font-mono);font-size:13px"><a href="#" onclick="closeModal('modal-audit-detail'); showSensorDetail('${audit.communityPodId}'); return false;" style="color:var(--navy-500)">${audit.communityPodId}</a></p></div>
-            <div class="ticket-field"><label>Scheduled Start</label>${isEditable ? `<input type="date" class="ticket-edit-input" value="${audit.scheduledStart || ''}" onblur="saveAuditField('${audit.id}','scheduledStart',this.value)">` : `<p>${audit.scheduledStart || '—'}</p>`}</div>
-            <div class="ticket-field"><label>Scheduled End</label>${isEditable ? `<input type="date" class="ticket-edit-input" value="${audit.scheduledEnd || ''}" onblur="saveAuditField('${audit.id}','scheduledEnd',this.value)">` : `<p>${audit.scheduledEnd || '—'}</p>`}</div>
-            <div class="ticket-field"><label>Actual Start</label>${isEditable ? `<input type="date" class="ticket-edit-input" value="${audit.actualStart || ''}" onblur="saveAuditField('${audit.id}','actualStart',this.value)">` : `<p>${audit.actualStart || '—'}</p>`}</div>
-            <div class="ticket-field"><label>Actual End</label>${isEditable ? `<input type="date" class="ticket-edit-input" value="${audit.actualEnd || ''}" onblur="saveAuditField('${audit.id}','actualEnd',this.value)">` : `<p>${audit.actualEnd || '—'}</p>`}</div>
-            <div class="ticket-field"><label>Install Team</label>${isEditable ? `<input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[0] || '')}" placeholder="Who installed" onblur="saveAuditConductors('${audit.id}', this.value, null)">` : `<p>${escapeHtml(audit.conductedBy?.split(' / ')[0]) || '—'}</p>`}</div>
-            <div class="ticket-field"><label>Takedown Team</label>${isEditable ? `<input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)">` : `<p>${escapeHtml(audit.conductedBy?.split(' / ')[1]) || '—'}</p>`}</div>
-            <div class="ticket-field full-width"><label>Notes</label>${isEditable ? `<textarea class="ticket-edit-input" rows="3" onblur="saveAuditField('${audit.id}','notes',this.value)">${escapeHtml(audit.notes)}</textarea>` : `<p>${escapeHtml(audit.notes) || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Scheduled Start</label><input type="date" class="ticket-edit-input" value="${audit.scheduledStart || ''}" onblur="saveAuditField('${audit.id}','scheduledStart',this.value)"></div>
+            <div class="ticket-field"><label>Scheduled End</label><input type="date" class="ticket-edit-input" value="${audit.scheduledEnd || ''}" onblur="saveAuditField('${audit.id}','scheduledEnd',this.value)"></div>
+            <div class="ticket-field"><label>Actual Start</label><input type="date" class="ticket-edit-input" value="${audit.actualStart || ''}" onblur="saveAuditField('${audit.id}','actualStart',this.value)"></div>
+            <div class="ticket-field"><label>Actual End</label><input type="date" class="ticket-edit-input" value="${audit.actualEnd || ''}" onblur="saveAuditField('${audit.id}','actualEnd',this.value)"></div>
+            <div class="ticket-field"><label>Install Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[0] || '')}" placeholder="Who installed" onblur="saveAuditConductors('${audit.id}', this.value, null)"></div>
+            <div class="ticket-field"><label>Takedown Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)"></div>
+            <div class="ticket-field full-width"><label>Notes</label><textarea class="ticket-edit-input" rows="3" onblur="saveAuditField('${audit.id}','notes',this.value)">${escapeHtml(audit.notes)}</textarea></div>
         </div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}</div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Photos</label>
-            ${isEditable ? `<label class="btn btn-sm" style="cursor:pointer;margin-bottom:8px">Upload Photos <input type="file" accept="image/*" multiple style="display:none" onchange="uploadAuditPhotos('${audit.id}', '${audit.communityId}', this.files)"></label>` : ''}
+            <label class="btn btn-sm" style="cursor:pointer;margin-bottom:8px">Upload Photos <input type="file" accept="image/*" multiple style="display:none" onchange="uploadAuditPhotos('${audit.id}', '${audit.communityId}', this.files)"></label>
             <div id="audit-photos-grid" class="audit-photos-grid">${renderAuditPhotos(audit.id, audit.communityId)}</div>
         </div>
         <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
@@ -6756,7 +6692,7 @@ function generateAuditReport(auditId) {
             <div class="chart-legend"><span><span style="background:#1B2A4A;display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle"></span> ${escapeHtml(shortA)}</span><span><span style="background:#C9A84C;display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle"></span> ${escapeHtml(shortB)}</span></div>
         </div>` : '').join('');
     const scatterCards = AUDIT_PARAMETERS.map(p => {
-        const r = (cached.regressionResults || results)[p.key];
+        const r = (cached?.regressionResults || results)[p.key];
         const eqSign = r ? (r.intercept >= 0 ? '+' : '\u2212') : '';
         const eqText = r ? `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)},&nbsp;&nbsp;&nbsp;&nbsp; R\u00B2 = ${r.r2}` : '';
         return chartImages['scatter-' + p.key]
