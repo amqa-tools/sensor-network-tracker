@@ -504,19 +504,23 @@ async function handleSignUp() {
     try {
         if (isInvited) {
             // Invited user — they already have a session from the invite link
-            // Update their password and create their profile
-            await supa.auth.updateUser({ password });
             const session = await db.getSession();
-            if (session?.user) {
-                await supa.rpc('upsert_profile', {
-                    user_id: session.user.id,
-                    user_email: email,
-                    user_name: name,
-                });
+            if (!session?.user) {
+                // Session expired — sign them in with the password they just set
+                showLoginError('Your invite session expired. Please click the invite link in your email again.');
+                return;
             }
+            // Update their password and create their profile
+            const { error: updateErr } = await supa.auth.updateUser({ password, data: { name } });
+            if (updateErr) { showLoginError(updateErr.message); return; }
+            await supa.rpc('upsert_profile', {
+                user_id: session.user.id,
+                user_email: email,
+                user_name: name,
+            });
             await checkMfaAndProceed();
         } else {
-            // Regular signup
+            // Regular signup — first check if allowed
             const result = await db.signUp(email, password, name);
             hideLoginError();
 
@@ -525,19 +529,24 @@ async function handleSignUp() {
                 return;
             }
 
-            // Try signing in directly
+            // signUp may return a user with no session if email confirmation is on
+            // or if user already exists. Try signing in directly.
             try {
                 await db.signIn(email, password);
                 await checkMfaAndProceed();
             } catch(signInErr) {
-                showAlert('Check Your Email', 'If you received an invite, click the link in that email to get started. Otherwise, try signing in with your existing password.', () => {
-                    showSignInForm();
-                });
+                // If they were invited but going through regular signup, guide them
+                showLoginError('Account created. Please sign in with your email and password.');
+                showSignInForm();
+                document.getElementById('login-email').value = email;
             }
         }
     } catch (err) {
         if (err.message?.includes('already been registered') || err.message?.includes('already registered')) {
-            showLoginError('This email already has an account. Try signing in instead, or check your email for an invite link.');
+            // User already exists (probably from invite) — send them to sign in
+            showLoginError('This email already has an account. Sign in with your password, or click the invite link in your email.');
+            showSignInForm();
+            document.getElementById('login-email').value = email;
         } else {
             showLoginError(err.message || 'Sign up failed. Your email may not be authorized.');
         }
