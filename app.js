@@ -403,24 +403,9 @@ async function showMfaSetup() {
         return;
     }
 
-    // Render QR code — Supabase returns SVG as a data URI
-    const qrContainer = document.getElementById('mfa-setup-qr');
-    const qrData = data.totp.qr_code || '';
-    if (qrData.startsWith('data:image/svg+xml')) {
-        // Decode the SVG and inject it directly so it renders reliably
-        try {
-            const svgMarkup = decodeURIComponent(qrData.split(',')[1] || '');
-            qrContainer.innerHTML = `<div style="display:inline-block;width:200px;height:200px;overflow:hidden">${svgMarkup}</div>`;
-            const svg = qrContainer.querySelector('svg');
-            if (svg) { svg.setAttribute('width', '200'); svg.setAttribute('height', '200'); }
-        } catch(e) {
-            qrContainer.innerHTML = `<img src="${qrData}" style="width:200px;height:200px;display:block;margin:0 auto">`;
-        }
-    } else if (qrData.startsWith('data:image')) {
-        qrContainer.innerHTML = `<img src="${qrData}" style="width:200px;height:200px;display:block;margin:0 auto">`;
-    } else {
-        qrContainer.innerHTML = '<p style="color:var(--slate-400);font-size:13px">QR code could not be loaded. Please refresh and try again.</p>';
-    }
+    // Render QR code as a plain image
+    document.getElementById('mfa-setup-qr').innerHTML =
+        `<img src="${data.totp.qr_code}" style="width:200px;height:200px;display:block;margin:0 auto;image-rendering:pixelated">`;
     document.getElementById('mfa-setup-section').dataset.factorId = data.id;
 
     // Now show the screen
