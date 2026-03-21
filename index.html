@@ -25,7 +25,6 @@
                 <p class="login-toggle">Don't have an account? <a href="#" onclick="showSignUpForm(); return false;">Sign Up</a></p>
             </form>
             <form id="signup-form-section" style="display:none" onsubmit="handleSignUp(); return false;" autocomplete="on">
-                <p id="signup-heading" style="font-size:14px;color:var(--slate-500);margin-bottom:16px;text-align:center">Create your account to get started.</p>
                 <div class="login-field">
                     <input type="email" id="signup-email" placeholder="Email" autocomplete="email" name="email">
                 </div>
@@ -39,7 +38,7 @@
                     <input type="password" id="signup-password-confirm" placeholder="Confirm password" autocomplete="new-password" name="password-confirm">
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%">Create Account</button>
-                <p class="login-toggle" id="signup-toggle-link">Already have an account? <a href="#" onclick="showSignInForm(); return false;">Sign In</a></p>
+                <p class="login-toggle">Already have an account? <a href="#" onclick="showSignInForm(); return false;">Sign In</a></p>
             </form>
             <div id="mfa-setup-section" style="display:none">
                 <h3 style="font-size:15px;color:var(--slate-800);margin-bottom:8px">Set Up Authenticator</h3>

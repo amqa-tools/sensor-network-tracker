@@ -308,33 +308,11 @@ function showLoginScreen() {
 
 function showSignUpForm() {
     hideAllAuthForms();
-    const emailInput = document.getElementById('signup-email');
-    emailInput.readOnly = false;
-    emailInput.value = '';
+    document.getElementById('signup-email').value = '';
     document.getElementById('signup-name').value = '';
     document.getElementById('signup-password').value = '';
     document.getElementById('signup-password-confirm').value = '';
-    document.getElementById('signup-heading').textContent = 'Create your account to get started.';
-    document.getElementById('signup-toggle-link').style.display = '';
     document.getElementById('signup-form-section').style.display = '';
-    document.getElementById('signup-form-section').dataset.invited = '';
-}
-
-function showInviteSignup(email) {
-    document.getElementById('loading-overlay').style.display = 'none';
-    document.getElementById('login-screen').style.display = 'flex';
-    hideAllAuthForms();
-    const emailInput = document.getElementById('signup-email');
-    emailInput.value = email;
-    emailInput.readOnly = true;
-    document.getElementById('signup-name').value = '';
-    document.getElementById('signup-password').value = '';
-    document.getElementById('signup-password-confirm').value = '';
-    document.getElementById('signup-heading').textContent = 'Welcome! Set up your account to get started.';
-    document.getElementById('signup-toggle-link').style.display = 'none';
-    document.getElementById('signup-form-section').style.display = '';
-    document.getElementById('signup-form-section').dataset.invited = 'true';
-    document.getElementById('signup-name').focus();
 }
 
 async function backToSignIn() {
@@ -495,77 +473,33 @@ async function handleSignUp() {
     const email = document.getElementById('signup-email').value.trim();
     const password = document.getElementById('signup-password').value;
     const confirmPassword = document.getElementById('signup-password-confirm').value;
-    const isInvited = document.getElementById('signup-form-section').dataset.invited === 'true';
 
     if (!name || !email || !password) { showLoginError('Please fill in all fields.'); return; }
     if (password.length < 6) { showLoginError('Password must be at least 6 characters.'); return; }
     if (password !== confirmPassword) { showLoginError('Passwords do not match.'); return; }
 
     try {
-        if (isInvited) {
-            // Invited user — they already have a session from the invite link
-            const session = await db.getSession();
-            if (!session?.user) {
-                showLoginError('Your session has expired. Please click the invite link in your email again.');
-                return;
-            }
-            // Set their password and create their profile
-            const { error: updateErr } = await supa.auth.updateUser({ password, data: { name } });
-            if (updateErr) { showLoginError(updateErr.message); return; }
-            await supa.rpc('upsert_profile', {
-                user_id: session.user.id,
-                user_email: email,
-                user_name: name,
-            });
-            await checkMfaAndProceed();
-        } else {
-            // Regular signup (user navigated to site directly, not from invite link)
-            // First check if they're on the approved list
-            const { data: allowed } = await supa.rpc('is_email_allowed', { check_email: email });
-            if (!allowed) {
-                showLoginError('Access denied. Please contact an admin to request access.');
-                return;
-            }
+        // Sign up — creates auth account and profile
+        const result = await db.signUp(email, password, name);
 
-            // Try to sign up — creates new auth account
-            try {
-                const result = await db.signUp(email, password, name);
-                if (result?.session) {
-                    await checkMfaAndProceed();
-                    return;
-                }
-                // No session returned — try signing in (works if email confirm is off)
-                await db.signIn(email, password);
-                await checkMfaAndProceed();
-            } catch (signUpErr) {
-                // If "already registered" — the admin invited them but they're signing up directly
-                // Try signing in with the password they just entered
-                if (signUpErr.message?.includes('already') || signUpErr.message?.includes('registered')) {
-                    try {
-                        await db.signIn(email, password);
-                        // Sign-in worked — create profile if needed
-                        const session = await db.getSession();
-                        const profile = await db.getProfile();
-                        if (!profile && session?.user) {
-                            await supa.rpc('upsert_profile', {
-                                user_id: session.user.id,
-                                user_email: email,
-                                user_name: name,
-                            });
-                        }
-                        await checkMfaAndProceed();
-                    } catch (signInErr) {
-                        // Can't sign in — they were invited but have no password yet
-                        // They need to use the invite link
-                        showLoginError('Your account was created by an invite. Please check your email for the invite link to set your password.');
-                    }
-                } else {
-                    showLoginError(signUpErr.message || 'Sign up failed.');
-                }
-            }
+        if (result?.session) {
+            // Auto-confirmed — go straight to MFA setup
+            await checkMfaAndProceed();
+            return;
+        }
+
+        // No session — try signing in (works if email confirmation is disabled)
+        try {
+            await db.signIn(email, password);
+            await checkMfaAndProceed();
+        } catch(e) {
+            // Email confirmation is required
+            showAlert('Account Created', 'Your account has been created. Please check your email to confirm, then sign in.', () => {
+                showSignInForm();
+            });
         }
     } catch (err) {
-        showLoginError(err.message || 'Sign up failed. Please try again.');
+        showLoginError(err.message || 'Sign up failed. Your email may not be authorized.');
     }
 }
 
@@ -3911,7 +3845,7 @@ async function sendUserInvite(event) {
     btn.disabled = true;
     btn.textContent = 'Sending...';
 
-    // Add to allowed_emails and send invite email via Supabase Auth
+    // Add to allowed_emails only (no Supabase Auth invite — that creates passwordless accounts that block signup)
     const { error } = await supa.rpc('send_user_invite', { invite_email: email, invite_role: role });
     if (error) {
         errEl.textContent = error.message.includes('already an active') ? 'That email is already an active user.' : error.message;
@@ -3921,9 +3855,16 @@ async function sendUserInvite(event) {
         return;
     }
 
+    // Send invite email via mailto
+    const signupUrl = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/');
+    const inviterName = currentUser || 'An administrator';
+    const subject = "You're invited to the AMQA Sensor Network Tracker";
+    const body = `${inviterName} has invited you to the AMQA Community Sensor Network Tracking Platform.\n\nCreate your account:\n\n    ${signupUrl}\n\nSign up with this email (${email}). You'll set up two-factor authentication on your first login.`;
+    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
     // Show success state
     document.getElementById('invite-modal-title').textContent = 'Invite Sent';
-    document.getElementById('invite-success-email').innerHTML = `An invitation email has been sent to <strong>${escapeHtml(email)}</strong>.<br>They'll receive a link to create their account.`;
+    document.getElementById('invite-success-email').innerHTML = `<strong>${escapeHtml(email)}</strong> has been approved.<br>Your email app has opened with the invitation — just hit send.`;
     document.getElementById('invite-step-form').style.display = 'none';
     document.getElementById('invite-step-success').style.display = '';
     btn.disabled = false;
@@ -7164,38 +7105,13 @@ async function importSensors(event) {
         window.history.replaceState(null, '', window.location.pathname);
     }
 
-    // If URL has hash tokens (invite link, signup confirm), wait for Supabase to process them
-    const hasAuthHash = window.location.hash && (
-        window.location.hash.includes('access_token') ||
-        window.location.hash.includes('type=invite') ||
-        window.location.hash.includes('type=signup') ||
-        window.location.hash.includes('type=recovery')
-    );
-
-    if (hasAuthHash) {
-        // Wait for Supabase client to exchange the token for a session
-        await new Promise((resolve) => {
-            const { data: { subscription } } = supa.auth.onAuthStateChange((event, session) => {
-                subscription.unsubscribe();
-                resolve(session);
-            });
-            // Safety timeout — don't wait forever
-            setTimeout(() => { subscription.unsubscribe(); resolve(null); }, 8000);
-        });
+    // Clean up any hash fragments
+    if (window.location.hash) {
         window.history.replaceState(null, '', window.location.pathname);
     }
 
-    // Now check for a session
     const session = await db.getSession();
     if (session) {
-        const profile = await db.getProfile();
-
-        if (!profile) {
-            // First-time user — has auth account but no profile yet
-            showInviteSignup(session.user.email);
-            return;
-        }
-
         // Existing user — check if MFA was recently verified
         const mfaVerifiedAt = sessionStorage.getItem('mfa_verified_at');
         const mfaVerifiedUser = sessionStorage.getItem('mfa_verified_user');
