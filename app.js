@@ -403,9 +403,27 @@ async function showMfaSetup() {
         return;
     }
 
-    // Render QR code as a plain image
-    document.getElementById('mfa-setup-qr').innerHTML =
-        `<img src="${data.totp.qr_code}" style="width:200px;height:200px;display:block;margin:0 auto;image-rendering:pixelated">`;
+    // Render QR code — convert SVG data URI to canvas for reliable scanning
+    const qrContainer = document.getElementById('mfa-setup-qr');
+    const qrSrc = data.totp.qr_code;
+    const img = new Image();
+    img.onload = function() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 300;
+        canvas.height = 300;
+        canvas.style.cssText = 'display:block;margin:0 auto;width:250px;height:250px';
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 300, 300);
+        ctx.drawImage(img, 0, 0, 300, 300);
+        qrContainer.innerHTML = '';
+        qrContainer.appendChild(canvas);
+    };
+    img.onerror = function() {
+        // Fallback to plain img
+        qrContainer.innerHTML = `<img src="${qrSrc}" style="width:250px;height:250px;display:block;margin:0 auto">`;
+    };
+    img.src = qrSrc;
     document.getElementById('mfa-setup-section').dataset.factorId = data.id;
 
     // Now show the screen
