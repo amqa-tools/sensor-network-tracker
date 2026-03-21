@@ -7154,10 +7154,7 @@ async function importSensors(event) {
 
 (async function init() {
     try {
-    // Clean up any auth tokens from the URL (hash or query params)
-    if (window.location.hash && window.location.hash.includes('access_token')) {
-        window.history.replaceState(null, '', window.location.pathname);
-    }
+    // Handle query-param based auth tokens (email confirmation links)
     const params = new URLSearchParams(window.location.search);
     if (params.has('token_hash')) {
         await supa.auth.verifyOtp({
@@ -7167,14 +7164,34 @@ async function importSensors(event) {
         window.history.replaceState(null, '', window.location.pathname);
     }
 
-    // Check if user has a session (from login, invite link, or prior visit)
+    // If URL has hash tokens (invite link, signup confirm), wait for Supabase to process them
+    const hasAuthHash = window.location.hash && (
+        window.location.hash.includes('access_token') ||
+        window.location.hash.includes('type=invite') ||
+        window.location.hash.includes('type=signup') ||
+        window.location.hash.includes('type=recovery')
+    );
+
+    if (hasAuthHash) {
+        // Wait for Supabase client to exchange the token for a session
+        await new Promise((resolve) => {
+            const { data: { subscription } } = supa.auth.onAuthStateChange((event, session) => {
+                subscription.unsubscribe();
+                resolve(session);
+            });
+            // Safety timeout — don't wait forever
+            setTimeout(() => { subscription.unsubscribe(); resolve(null); }, 8000);
+        });
+        window.history.replaceState(null, '', window.location.pathname);
+    }
+
+    // Now check for a session
     const session = await db.getSession();
     if (session) {
         const profile = await db.getProfile();
 
         if (!profile) {
             // First-time user — has auth account but no profile yet
-            // This happens for invited users or users who confirmed email but haven't set up
             showInviteSignup(session.user.email);
             return;
         }
