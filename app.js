@@ -457,25 +457,36 @@ async function handleSignUp() {
     if (password.length < 6) { showLoginError('Password must be at least 6 characters.'); return; }
 
     try {
+        // Check if this email was already invited (auth account exists from invite API)
+        // If so, just update their password and sign them in directly
         const result = await db.signUp(email, password, name);
         hideLoginError();
-        // If Supabase returned a session (auto-confirm enabled), go straight in
+
+        // If we got a session, go straight in
         if (result?.session) {
             await checkMfaAndProceed();
-        } else {
-            // Try signing in directly — works if email confirmation is disabled in Supabase
-            try {
-                await db.signIn(email, password);
-                await checkMfaAndProceed();
-            } catch(e) {
-                // Email confirmation required — tell user to check email
-                showAlert('Account Created', 'Your account has been created. Please check your email to confirm, then sign in.', () => {
-                    showSignInForm();
-                });
-            }
+            return;
+        }
+
+        // If signUp returned a user but no session, the account may already exist
+        // from an invite, or email confirmation is required. Try signing in.
+        try {
+            await db.signIn(email, password);
+            await checkMfaAndProceed();
+        } catch(signInErr) {
+            // If sign-in also fails, the account might exist from invite with a different password.
+            // Tell user to sign in with the invite link or contact admin.
+            showAlert('Check Your Email', 'If you received an invite, click the link in that email to get started. Otherwise, try signing in with your existing password.', () => {
+                showSignInForm();
+            });
         }
     } catch (err) {
-        showLoginError(err.message || 'Sign up failed. Your email may not be authorized.');
+        // signUp failed — could be "email already registered" from invite
+        if (err.message?.includes('already been registered') || err.message?.includes('already registered')) {
+            showLoginError('This email already has an account. Try signing in instead, or check your email for an invite link.');
+        } else {
+            showLoginError(err.message || 'Sign up failed. Your email may not be authorized.');
+        }
     }
 }
 
