@@ -7108,9 +7108,14 @@ async function importSensors(event) {
     }
 
     // Let Supabase client process any hash-fragment tokens BEFORE we clear them.
-    // Supabase v2 uses hash fragments (#access_token=...&type=...) for email
-    // confirmation and magic-link redirects; getSession() detects and consumes them.
-    const session = await db.getSession();
+    let session = null;
+    try {
+        session = await db.getSession();
+    } catch(sessionErr) {
+        // JWT may reference a deleted user — clear stale session and continue
+        console.warn('Session check failed:', sessionErr);
+        await supa.auth.signOut().catch(() => {});
+    }
 
     // Clean up any hash fragments after getSession has consumed them
     if (window.location.hash) {
