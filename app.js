@@ -506,11 +506,10 @@ async function handleSignUp() {
             // Invited user — they already have a session from the invite link
             const session = await db.getSession();
             if (!session?.user) {
-                // Session expired — sign them in with the password they just set
-                showLoginError('Your invite session expired. Please click the invite link in your email again.');
+                showLoginError('Your session has expired. Please click the invite link in your email again.');
                 return;
             }
-            // Update their password and create their profile
+            // Set their password and create their profile
             const { error: updateErr } = await supa.auth.updateUser({ password, data: { name } });
             if (updateErr) { showLoginError(updateErr.message); return; }
             await supa.rpc('upsert_profile', {
@@ -520,36 +519,53 @@ async function handleSignUp() {
             });
             await checkMfaAndProceed();
         } else {
-            // Regular signup — first check if allowed
-            const result = await db.signUp(email, password, name);
-            hideLoginError();
-
-            if (result?.session) {
-                await checkMfaAndProceed();
+            // Regular signup (user navigated to site directly, not from invite link)
+            // First check if they're on the approved list
+            const { data: allowed } = await supa.rpc('is_email_allowed', { check_email: email });
+            if (!allowed) {
+                showLoginError('Access denied. Please contact an admin to request access.');
                 return;
             }
 
-            // signUp may return a user with no session if email confirmation is on
-            // or if user already exists. Try signing in directly.
+            // Try to sign up — creates new auth account
             try {
+                const result = await db.signUp(email, password, name);
+                if (result?.session) {
+                    await checkMfaAndProceed();
+                    return;
+                }
+                // No session returned — try signing in (works if email confirm is off)
                 await db.signIn(email, password);
                 await checkMfaAndProceed();
-            } catch(signInErr) {
-                // If they were invited but going through regular signup, guide them
-                showLoginError('Account created. Please sign in with your email and password.');
-                showSignInForm();
-                document.getElementById('login-email').value = email;
+            } catch (signUpErr) {
+                // If "already registered" — the admin invited them but they're signing up directly
+                // Try signing in with the password they just entered
+                if (signUpErr.message?.includes('already') || signUpErr.message?.includes('registered')) {
+                    try {
+                        await db.signIn(email, password);
+                        // Sign-in worked — create profile if needed
+                        const session = await db.getSession();
+                        const profile = await db.getProfile();
+                        if (!profile && session?.user) {
+                            await supa.rpc('upsert_profile', {
+                                user_id: session.user.id,
+                                user_email: email,
+                                user_name: name,
+                            });
+                        }
+                        await checkMfaAndProceed();
+                    } catch (signInErr) {
+                        // Can't sign in — they were invited but have no password yet
+                        // They need to use the invite link
+                        showLoginError('Your account was created by an invite. Please check your email for the invite link to set your password.');
+                    }
+                } else {
+                    showLoginError(signUpErr.message || 'Sign up failed.');
+                }
             }
         }
     } catch (err) {
-        if (err.message?.includes('already been registered') || err.message?.includes('already registered')) {
-            // User already exists (probably from invite) — send them to sign in
-            showLoginError('This email already has an account. Sign in with your password, or click the invite link in your email.');
-            showSignInForm();
-            document.getElementById('login-email').value = email;
-        } else {
-            showLoginError(err.message || 'Sign up failed. Your email may not be authorized.');
-        }
+        showLoginError(err.message || 'Sign up failed. Please try again.');
     }
 }
 
@@ -7138,53 +7154,32 @@ async function importSensors(event) {
 
 (async function init() {
     try {
-    // Handle auth redirects (email confirmation links, password resets)
-    const hash = window.location.hash;
-    if (hash && (hash.includes('access_token') || hash.includes('type=signup') || hash.includes('type=recovery') || hash.includes('type=invite'))) {
-        const { data } = await supa.auth.getSession();
-        if (data?.session) {
-            window.history.replaceState(null, '', window.location.pathname);
-            const isInvite = hash.includes('type=invite');
-            const profile = await db.getProfile();
-
-            if (isInvite && !profile) {
-                // Invited user arriving for the first time — show signup form to set name/password
-                showInviteSignup(data.session.user.email);
-                return;
-            }
-
-            if (!profile) {
-                const user = data.session.user;
-                await supa.rpc('upsert_profile', {
-                    user_id: user.id,
-                    user_email: user.email,
-                    user_name: user.user_metadata?.name || user.email.split('@')[0],
-                });
-            }
-            await checkMfaAndProceed();
-            return;
-        }
+    // Clean up any auth tokens from the URL (hash or query params)
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+        window.history.replaceState(null, '', window.location.pathname);
     }
-
     const params = new URLSearchParams(window.location.search);
-    if (params.has('token_hash') || params.has('type')) {
-        const { error } = await supa.auth.verifyOtp({
+    if (params.has('token_hash')) {
+        await supa.auth.verifyOtp({
             token_hash: params.get('token_hash'),
             type: params.get('type'),
         });
-        if (!error) {
-            window.history.replaceState(null, '', window.location.pathname);
-            const session = await db.getSession();
-            if (session) {
-                await checkMfaAndProceed();
-                return;
-            }
-        }
+        window.history.replaceState(null, '', window.location.pathname);
     }
 
+    // Check if user has a session (from login, invite link, or prior visit)
     const session = await db.getSession();
     if (session) {
-        // Check if MFA was verified recently (within 1 hour) for THIS user
+        const profile = await db.getProfile();
+
+        if (!profile) {
+            // First-time user — has auth account but no profile yet
+            // This happens for invited users or users who confirmed email but haven't set up
+            showInviteSignup(session.user.email);
+            return;
+        }
+
+        // Existing user — check if MFA was recently verified
         const mfaVerifiedAt = sessionStorage.getItem('mfa_verified_at');
         const mfaVerifiedUser = sessionStorage.getItem('mfa_verified_user');
         const mfaStillValid = mfaVerifiedAt
