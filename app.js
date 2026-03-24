@@ -4625,7 +4625,7 @@ function executeBulkAction() {
             s.status = newStatuses;
         }
         if (doCollocation) {
-            s.collocationDates = `${collocationLocation}, ${formatDate(collocationStart)} – ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}`;
+            s.collocationDates = `${collocationLocation}: ${formatDate(collocationStart)} - ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}`;
         }
         persistSensor(s);
     });
@@ -4634,7 +4634,7 @@ function executeBulkAction() {
         const parts = [];
         if (doMove) parts.push(`moved to ${toName}`);
         if (doStatus) parts.push(`status set to ${newStatuses.join(', ')}`);
-        if (doCollocation) parts.push(`collocation at ${collocationLocation}: ${formatDate(collocationStart)} – ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}`);
+        if (doCollocation) parts.push(`Collocation at ${collocationLocation}: ${formatDate(collocationStart)} - ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}`);
         const noteText = `Bulk action: ${sensorList} ${parts.join(' and ')}.${userNotes ? ' ' + userNotes : ''}`;
         const taggedComms = [...sourceCommunities];
         if (toCommunityId && !taggedComms.includes(toCommunityId)) taggedComms.push(toCommunityId);
@@ -4733,7 +4733,7 @@ function getMostRecentCollocation(sensorId) {
     const location = parts[0] || '';
     const start = parts[1] ? formatDate(parts[1]) : '';
     const end = parts[2] === 'TBD' ? 'TBD' : (parts[2] ? formatDate(parts[2]) : '');
-    return { communityName: location, dateRange: `${start} \u2013 ${end}` };
+    return { communityName: location, dateRange: `${start} - ${end}` };
 }
 
 function openCollocationModal(sensorId) {
