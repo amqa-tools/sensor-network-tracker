@@ -4527,6 +4527,8 @@ function openBulkActionModal() {
     document.getElementById('bulk-do-collocation').checked = false;
     document.getElementById('bulk-collocation-start').value = '';
     document.getElementById('bulk-collocation-end').value = '';
+    document.getElementById('bulk-collocation-end').disabled = false;
+    document.getElementById('bulk-collocation-end-tbd').checked = false;
     populateBulkCollocationDropdown();
     toggleBulkFields();
     openModal('modal-bulk-action');
@@ -4602,10 +4604,12 @@ function executeBulkAction() {
     if (doCollocation) {
         collocationLocation = document.getElementById('bulk-collocation-location').value;
         collocationStart = document.getElementById('bulk-collocation-start').value;
-        collocationEnd = document.getElementById('bulk-collocation-end').value;
+        const endTbd = document.getElementById('bulk-collocation-end-tbd').checked;
+        collocationEnd = endTbd ? 'TBD' : document.getElementById('bulk-collocation-end').value;
         if (!collocationLocation) { showAlert('Validation Error', 'Select a collocation location.'); return; }
-        if (!collocationStart || !collocationEnd) { showAlert('Validation Error', 'Enter collocation start and end dates.'); return; }
-        if (new Date(collocationEnd) < new Date(collocationStart)) { showAlert('Validation Error', 'End date must be after start date.'); return; }
+        if (!collocationStart) { showAlert('Validation Error', 'Enter a collocation start date.'); return; }
+        if (!endTbd && !collocationEnd) { showAlert('Validation Error', 'Enter a collocation end date or check TBD.'); return; }
+        if (!endTbd && collocationEnd && new Date(collocationEnd) < new Date(collocationStart)) { showAlert('Validation Error', 'End date must be after start date.'); return; }
     }
 
     const sourceCommunities = new Set();
@@ -4621,7 +4625,7 @@ function executeBulkAction() {
             s.status = newStatuses;
         }
         if (doCollocation) {
-            s.collocationDates = `${collocationLocation}, ${formatDate(collocationStart)} – ${formatDate(collocationEnd)}`;
+            s.collocationDates = `${collocationLocation}, ${formatDate(collocationStart)} – ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}`;
         }
         persistSensor(s);
     });
@@ -4630,7 +4634,7 @@ function executeBulkAction() {
         const parts = [];
         if (doMove) parts.push(`moved to ${toName}`);
         if (doStatus) parts.push(`status set to ${newStatuses.join(', ')}`);
-        if (doCollocation) parts.push(`collocation at ${collocationLocation}: ${formatDate(collocationStart)} – ${formatDate(collocationEnd)}`);
+        if (doCollocation) parts.push(`collocation at ${collocationLocation}: ${formatDate(collocationStart)} – ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}`);
         const noteText = `Bulk action: ${sensorList} ${parts.join(' and ')}.${userNotes ? ' ' + userNotes : ''}`;
         const taggedComms = [...sourceCommunities];
         if (toCommunityId && !taggedComms.includes(toCommunityId)) taggedComms.push(toCommunityId);
@@ -4640,7 +4644,7 @@ function executeBulkAction() {
             sensorIds.forEach(sensorId => {
                 const s = sensors.find(x => x.id === sensorId);
                 const communityId = s?.community || '';
-                const collocText = `Collocation at ${collocationLocation}: ${formatDate(collocationStart)} – ${formatDate(collocationEnd)}.${userNotes ? ' ' + userNotes : ''}`;
+                const collocText = `Collocation at ${collocationLocation}: ${formatDate(collocationStart)} – ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}.${userNotes ? ' ' + userNotes : ''}`;
                 createNote('Collocation', collocText, {
                     sensors: [sensorId],
                     communities: communityId ? [communityId] : [],
