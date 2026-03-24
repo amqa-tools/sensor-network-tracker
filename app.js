@@ -1652,12 +1652,19 @@ function saveStatusChange(e) {
 
     const mentionedContacts = parseMentionedContacts(additionalInfo);
 
+    const structuredInfo = JSON.stringify({
+        userNotes: additionalInfo || '',
+        beforeStatus: oldStatuses,
+        afterStatus: newStatuses,
+        sensorId: sensorId,
+    });
+
     const note = {
         id: generateId('n'),
         date: statusDate,
         type: 'Status Change',
         text: noteText,
-        additionalInfo: additionalInfo || '',
+        additionalInfo: structuredInfo,
         createdBy: getCurrentUserName(), createdById: currentUserId,
         taggedSensors: [sensorId],
         taggedCommunities: s.community ? [s.community] : [],
@@ -1701,6 +1708,7 @@ function moveSensor(e) {
     const fromId = s.community;
     const fromName = getCommunityName(fromId);
     const toName = getCommunityName(toCommunityId);
+    const beforeDateInstalled = s.dateInstalled || '';
 
     s.community = toCommunityId;
     s.dateInstalled = moveDate.split('T')[0] || nowDatetime().split('T')[0];
@@ -1711,12 +1719,20 @@ function moveSensor(e) {
     const mentionedContacts = parseMentionedContacts(additionalInfo);
     const taggedCommunities = [fromId, toCommunityId].filter(Boolean);
 
+    const structuredInfo = JSON.stringify({
+        userNotes: additionalInfo || '',
+        sensorId: sensorId,
+        fromCommunity: fromId || '',
+        toCommunity: toCommunityId,
+        beforeDateInstalled: beforeDateInstalled,
+    });
+
     const note = {
         id: generateId('n'),
         date: moveDate,
         type: 'Movement',
         text: noteText,
-        additionalInfo: additionalInfo || '',
+        additionalInfo: structuredInfo,
         createdBy: getCurrentUserName(), createdById: currentUserId,
         taggedSensors: [sensorId],
         taggedCommunities: taggedCommunities,
@@ -3124,8 +3140,18 @@ function renderTimeline(containerId, items) {
         const hasFullBody = item.fullBody;
         const expandable = hasFullBody ? `onclick="this.querySelector('.timeline-text-full').classList.toggle('open')" style="cursor:pointer"` : '';
 
-        const additionalInfoHtml = item.additionalInfo
-            ? `<div class="timeline-additional-info"><em>${highlightMentions(escapeHtml(item.additionalInfo))}</em></div>`
+        // Display userNotes from structured JSON additionalInfo, or raw text for legacy notes
+        let additionalInfoDisplay = '';
+        if (item.additionalInfo) {
+            try {
+                const parsed = JSON.parse(item.additionalInfo);
+                additionalInfoDisplay = parsed.userNotes || '';
+            } catch (_) {
+                additionalInfoDisplay = item.additionalInfo;
+            }
+        }
+        const additionalInfoHtml = additionalInfoDisplay
+            ? `<div class="timeline-additional-info"><em>${highlightMentions(escapeHtml(additionalInfoDisplay))}</em></div>`
             : '';
 
         const createdAt = item.createdAt || item.created_at || '';
@@ -3178,22 +3204,147 @@ function editTimelineItem(id, isNote) {
 }
 
 async function deleteTimelineItem(id, isNote) {
-    showConfirm('Delete Event', 'Are you sure? Only delete events that were created by accident.', async () => {
-        try {
-            if (isNote) {
-                notes = notes.filter(n => n.id !== id);
-                await supa.from('note_tags').delete().eq('note_id', id);
-                await supa.from('notes').delete().eq('id', id);
-            } else {
+    // For communications or non-note items, use simple delete
+    if (!isNote) {
+        showConfirm('Delete Event', 'Are you sure? Only delete events that were created by accident.', async () => {
+            try {
                 comms = comms.filter(c => c.id !== id);
                 await supa.from('comm_tags').delete().eq('comm_id', id);
                 await supa.from('comms').delete().eq('id', id);
+            } catch (err) {
+                console.error('Delete error:', err);
+            }
+            refreshCurrentView();
+        }, { danger: true });
+        return;
+    }
+
+    const note = notes.find(n => n.id === id);
+    if (!note) return;
+
+    // Try to parse structured additionalInfo for revertable event types
+    let parsed = null;
+    try {
+        if (note.additionalInfo) parsed = JSON.parse(note.additionalInfo);
+    } catch (_) { /* legacy plain-text or pipe-delimited format — not revertable */ }
+
+    const revertableTypes = ['Status Change', 'Movement', 'Collocation'];
+    const canRevert = parsed && revertableTypes.includes(note.type);
+
+    if (!canRevert) {
+        // Non-revertable note types: just delete normally
+        showConfirm('Delete Event', 'Are you sure? Only delete events that were created by accident.', async () => {
+            try {
+                notes = notes.filter(n => n.id !== id);
+                await supa.from('note_tags').delete().eq('note_id', id);
+                await supa.from('notes').delete().eq('id', id);
+            } catch (err) {
+                console.error('Delete error:', err);
+            }
+            refreshCurrentView();
+        }, { danger: true });
+        return;
+    }
+
+    // Build revert description based on note type
+    let revertDescription = '';
+    if (note.type === 'Status Change') {
+        const sId = parsed.sensorId || (note.taggedSensors && note.taggedSensors[0]) || 'sensor';
+        const beforeStr = (parsed.beforeStatus || []).join(', ') || '(none)';
+        revertDescription = `Revert <strong>${escapeHtml(sId)}</strong>'s status back to <strong>${escapeHtml(beforeStr)}</strong>`;
+    } else if (note.type === 'Movement') {
+        const sId = parsed.sensorId || (note.taggedSensors && note.taggedSensors[0]) || 'sensor';
+        const fromName = parsed.fromCommunity ? getCommunityName(parsed.fromCommunity) : 'its previous community';
+        revertDescription = `Move <strong>${escapeHtml(sId)}</strong> back to <strong>${escapeHtml(fromName)}</strong>`;
+    } else if (note.type === 'Collocation') {
+        const sensorList = (note.taggedSensors || []).join(', ') || 'tagged sensors';
+        revertDescription = `Revert collocation info for <strong>${escapeHtml(sensorList)}</strong>`;
+    }
+
+    const message = `
+        <p>Are you sure? Only delete events that were created by accident.</p>
+        <div style="margin-top:12px; padding:10px; background:var(--navy-50, #f0f2f5); border-radius:6px;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.95em;">
+                <input type="checkbox" id="revert-changes-checkbox" checked style="width:16px; height:16px;">
+                <span>Also revert sensor changes</span>
+            </label>
+            <div style="margin-top:6px; font-size:0.85em; color:var(--navy-600, #4a5568);">${revertDescription}</div>
+        </div>
+    `;
+
+    showConfirm('Delete Event', message, async () => {
+        const doRevert = document.getElementById('revert-changes-checkbox')?.checked;
+
+        try {
+            // Delete the note
+            notes = notes.filter(n => n.id !== id);
+            await supa.from('note_tags').delete().eq('note_id', id);
+            await supa.from('notes').delete().eq('id', id);
+
+            // Revert sensor changes if checkbox was checked
+            if (doRevert) {
+                if (note.type === 'Status Change') {
+                    // Single sensor status revert
+                    const sId = parsed.sensorId || (note.taggedSensors && note.taggedSensors[0]);
+                    if (sId && parsed.beforeStatus) {
+                        const s = sensors.find(x => x.id === sId);
+                        if (s) {
+                            s.status = parsed.beforeStatus;
+                            persistSensor(s);
+                        }
+                    }
+                    // Bulk status revert (from bulk actions)
+                    if (parsed.beforeStatuses) {
+                        for (const [sId, oldStatus] of Object.entries(parsed.beforeStatuses)) {
+                            const s = sensors.find(x => x.id === sId);
+                            if (s) {
+                                s.status = oldStatus;
+                                persistSensor(s);
+                            }
+                        }
+                    }
+                } else if (note.type === 'Movement') {
+                    // Single sensor movement revert
+                    const sId = parsed.sensorId || (note.taggedSensors && note.taggedSensors[0]);
+                    if (sId && parsed.fromCommunity !== undefined) {
+                        const s = sensors.find(x => x.id === sId);
+                        if (s) {
+                            s.community = parsed.fromCommunity;
+                            if (parsed.beforeDateInstalled) s.dateInstalled = parsed.beforeDateInstalled;
+                            persistSensor(s);
+                        }
+                    }
+                    // Bulk movement revert (from bulk actions)
+                    if (parsed.beforeCommunities) {
+                        for (const [sId, oldComm] of Object.entries(parsed.beforeCommunities)) {
+                            const s = sensors.find(x => x.id === sId);
+                            if (s) {
+                                s.community = oldComm;
+                                if (parsed.beforeDateInstalled && parsed.beforeDateInstalled[sId]) {
+                                    s.dateInstalled = parsed.beforeDateInstalled[sId];
+                                }
+                                persistSensor(s);
+                            }
+                        }
+                    }
+                } else if (note.type === 'Collocation') {
+                    // Revert collocationDates for all tagged sensors
+                    if (parsed.beforeCollocationDates) {
+                        for (const [sId, oldValue] of Object.entries(parsed.beforeCollocationDates)) {
+                            const s = sensors.find(x => x.id === sId);
+                            if (s) {
+                                s.collocationDates = oldValue;
+                                persistSensor(s);
+                            }
+                        }
+                    }
+                }
             }
         } catch (err) {
-            console.error('Delete error:', err);
+            console.error('Delete/revert error:', err);
         }
         refreshCurrentView();
-    }, { danger: true });
+    }, { danger: true, confirmText: 'Delete' });
 }
 
 function refreshCurrentView() {
@@ -4613,10 +4764,21 @@ function executeBulkAction() {
     }
 
     const sourceCommunities = new Set();
+    // Capture before-state for each sensor before making changes
+    const beforeCollocationDates = {};
+    const beforeStatuses = {};
+    const beforeCommunities = {};
+    const beforeDateInstalled = {};
     sensorIds.forEach(id => {
         const s = sensors.find(x => x.id === id);
         if (!s) return;
         if (s.community) sourceCommunities.add(s.community);
+        if (doCollocation) beforeCollocationDates[id] = s.collocationDates || '';
+        if (doStatus) beforeStatuses[id] = s.status ? [...s.status] : [];
+        if (doMove) {
+            beforeCommunities[id] = s.community || '';
+            beforeDateInstalled[id] = s.dateInstalled || '';
+        }
         if (doMove) {
             s.community = toCommunityId;
             s.dateInstalled = eventDate.split('T')[0];
@@ -4645,7 +4807,24 @@ function executeBulkAction() {
         else if (doMove) noteType = 'Movement';
         else if (doStatus) noteType = 'Status Change';
 
-        const additionalInfo = doCollocation ? `${collocationLocation}|${collocationStart}|${collocationEnd}` : '';
+        // Build structured additionalInfo based on action type
+        let structuredAdditionalInfo = {};
+        structuredAdditionalInfo.userNotes = userNotes || '';
+        if (doCollocation) {
+            structuredAdditionalInfo.location = collocationLocation;
+            structuredAdditionalInfo.startDate = collocationStart;
+            structuredAdditionalInfo.endDate = collocationEnd;
+            structuredAdditionalInfo.beforeCollocationDates = beforeCollocationDates;
+        }
+        if (doStatus) {
+            structuredAdditionalInfo.afterStatus = newStatuses;
+            structuredAdditionalInfo.beforeStatuses = beforeStatuses;
+        }
+        if (doMove) {
+            structuredAdditionalInfo.toCommunity = toCommunityId;
+            structuredAdditionalInfo.beforeCommunities = beforeCommunities;
+            structuredAdditionalInfo.beforeDateInstalled = beforeDateInstalled;
+        }
 
         const note = {
             id: generateId('n'),
@@ -4656,7 +4835,7 @@ function executeBulkAction() {
             taggedSensors: sensorIds,
             taggedCommunities: taggedComms,
             taggedContacts: [],
-            additionalInfo,
+            additionalInfo: JSON.stringify(structuredAdditionalInfo),
         };
         notes.push(note); persistNote(note);
     }
@@ -4728,11 +4907,20 @@ function getMostRecentCollocation(sensorId) {
         .sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || ''));
     if (collocNotes.length === 0) return null;
     const n = collocNotes[0];
-    // additionalInfo stores "location|startDate|endDate"
-    const parts = (n.additionalInfo || '').split('|');
-    const location = parts[0] || '';
-    const start = parts[1] ? formatDate(parts[1]) : '';
-    const end = parts[2] === 'TBD' ? 'TBD' : (parts[2] ? formatDate(parts[2]) : '');
+    // Try JSON format first, fall back to legacy pipe-delimited format
+    let location = '', start = '', end = '';
+    try {
+        const parsed = JSON.parse(n.additionalInfo);
+        location = parsed.location || '';
+        start = parsed.startDate ? formatDate(parsed.startDate) : '';
+        end = parsed.endDate === 'TBD' ? 'TBD' : (parsed.endDate ? formatDate(parsed.endDate) : '');
+    } catch (_) {
+        // Legacy pipe-delimited format: "location|startDate|endDate"
+        const parts = (n.additionalInfo || '').split('|');
+        location = parts[0] || '';
+        start = parts[1] ? formatDate(parts[1]) : '';
+        end = parts[2] === 'TBD' ? 'TBD' : (parts[2] ? formatDate(parts[2]) : '');
+    }
     return { communityName: location, dateRange: `${start} - ${end}` };
 }
 
@@ -4761,13 +4949,22 @@ function saveCollocation(e) {
 
     const s = sensors.find(x => x.id === sensorId);
     const communityId = s?.community || '';
+    const beforeCollocationDates = {};
+    beforeCollocationDates[sensorId] = s.collocationDates || '';
 
     // Create note with structured additionalInfo for getMostRecentCollocation
     const noteText = `Collocation at ${location}: ${formatDate(startDate)} \u2013 ${formatDate(endDate)}.${extraNotes ? ' ' + extraNotes : ''}`;
+    const structuredInfo = JSON.stringify({
+        userNotes: extraNotes || '',
+        location: location,
+        startDate: startDate,
+        endDate: endDate,
+        beforeCollocationDates: beforeCollocationDates,
+    });
     createNote('Collocation', noteText, {
         sensors: [sensorId],
         communities: communityId ? [communityId] : [],
-    }, `${location}|${startDate}|${endDate}`);
+    }, structuredInfo);
 
     // Update the sensor's collocationDates field for backward compatibility
     s.collocationDates = `${location}, ${formatDate(startDate)} \u2013 ${formatDate(endDate)}`;
