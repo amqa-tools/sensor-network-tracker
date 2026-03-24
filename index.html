@@ -937,15 +937,15 @@
                 <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-bulk-action')">&times;</button>
             </div>
             <div class="form-group" style="margin-top:16px">
-                <label><input type="checkbox" id="bulk-do-move" onchange="toggleBulkFields()" checked> Move to Community</label>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="bulk-do-move" onchange="toggleBulkFields()" checked style="width:16px;height:16px;margin:0"> Move to Community</label>
                 <select id="bulk-move-community" style="margin-top:6px"></select>
             </div>
             <div class="form-group">
-                <label><input type="checkbox" id="bulk-do-status" onchange="toggleBulkFields()"> Change Status</label>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="bulk-do-status" onchange="toggleBulkFields()" style="width:16px;height:16px;margin:0"> Change Status</label>
                 <div id="bulk-status-list" class="status-toggle-list" style="margin-top:6px;display:none"></div>
             </div>
             <div class="form-group">
-                <label><input type="checkbox" id="bulk-do-collocation" onchange="toggleBulkFields()"> Log as Collocation</label>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="bulk-do-collocation" onchange="toggleBulkFields()" style="width:16px;height:16px;margin:0"> Log as Collocation</label>
                 <div id="bulk-collocation-fields" style="margin-top:6px;display:none">
                     <div class="form-group" style="margin-bottom:8px">
                         <label style="font-size:12px;font-weight:600;color:var(--slate-500)">Collocation Location</label>
