@@ -34,7 +34,7 @@ function showConfirm(title, message, onConfirm, options = {}) {
         okBtn.className = 'btn btn-primary';
     }
     _confirmCallback = onConfirm;
-    _confirmDismissCallback = null;
+    _confirmDismissCallback = options.onCancel || null;
     modal.classList.add('open');
 }
 
@@ -4117,20 +4117,6 @@ async function renderAllowedUsers(currentEmail) {
         archivedSection.style.display = 'none';
     }
 
-    // MFA admin toggle
-    const mfaAdminSection = document.getElementById('settings-mfa-admin-section');
-    if (mfaAdminSection) {
-        mfaAdminSection.style.display = isAdmin ? '' : 'none';
-        if (isAdmin) {
-            document.getElementById('settings-mfa-toggle').innerHTML = `
-                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px">
-                    <input type="checkbox" ${mfaRequired ? 'checked' : ''} onchange="toggleMfaRequirement(this.checked)" style="width:18px;height:18px">
-                    <span>Require MFA for all users</span>
-                </label>
-                <p style="font-size:12px;color:var(--slate-400);margin-top:6px">${mfaRequired ? 'MFA is currently required. All users must set up an authenticator app.' : 'MFA is currently disabled. Users can sign in with just email and password.'}</p>
-            `;
-        }
-    }
 }
 
 function openInviteUserModal() {
@@ -4269,8 +4255,6 @@ async function toggleMfaRequirement(enabled) {
     try {
         await db.setAppSetting('mfa_required', enabled ? 'true' : 'false');
         mfaRequired = enabled;
-        const session = await db.getSession();
-        await renderAllowedUsers(session?.user?.email || '');
     } catch (err) {
         showAlert('Error', 'Failed to update MFA setting: ' + err.message);
     }
@@ -4400,12 +4384,80 @@ async function renderMfaSettings() {
     const { data: factors } = await supa.auth.mfa.listFactors();
     const totp = factors?.totp?.find(f => f.status === 'verified');
     const container = document.getElementById('settings-mfa');
+    const isAdmin = currentUserRole === 'admin';
 
-    if (totp) {
-        container.innerHTML = `<p style="color:var(--aurora-green);font-weight:600">MFA is enabled. A 6-digit code is required on every sign-in.</p>`;
+    let html = '';
+
+    // Status message
+    if (mfaRequired) {
+        html += `<p style="color:#16a34a;font-weight:600;font-size:14px;margin-bottom:12px">MFA is enabled. A 6-digit authenticator code is required on every sign-in.</p>`;
     } else {
-        container.innerHTML = `<p style="color:var(--aurora-amber);font-weight:600">MFA setup is pending. You will be prompted to complete it on your next sign-in.</p>`;
+        html += `<p style="color:#dc2626;font-weight:600;font-size:14px;margin-bottom:12px">MFA is disabled. No code is required on sign-in, but all users are required to set up MFA when creating their account.</p>`;
     }
+
+    // User's own MFA status
+    if (totp) {
+        html += `<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;padding:12px 16px;margin-bottom:16px">
+            <p style="font-size:13px;color:var(--slate-600)">Your authenticator is set up and active.</p>
+            <button class="btn btn-sm" style="margin-top:8px;color:#dc2626;border-color:#fecdd3" onclick="resetMfaSetup()">Reset MFA</button>
+            <p style="font-size:11px;color:var(--slate-400);margin-top:6px">Use this if you lost access to your authenticator app and need to set up a new one.</p>
+        </div>`;
+    } else {
+        html += `<div style="background:#fff8e8;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px">
+            <p style="font-size:13px;color:#8a6d20;font-weight:600">Your MFA setup is pending.</p>
+            <p style="font-size:12px;color:#8a6d20;margin-top:4px">You'll be prompted to set up your authenticator app on your next sign-in.</p>
+        </div>`;
+    }
+
+    // Admin toggle
+    if (isAdmin) {
+        html += `<div style="border-top:1px solid var(--slate-200);padding-top:16px;margin-top:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <div>
+                    <p style="font-size:13px;font-weight:600;color:var(--slate-700)">Require MFA on every sign-in</p>
+                    <p style="font-size:11px;color:var(--slate-400)">Only administrators can change this setting.</p>
+                </div>
+                <label class="mfa-toggle-switch">
+                    <input type="checkbox" ${mfaRequired ? 'checked' : ''} onchange="confirmMfaToggle(this.checked, this)">
+                    <span class="mfa-toggle-slider"></span>
+                </label>
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+async function confirmMfaToggle(enabled, checkbox) {
+    const action = enabled ? 'enable' : 'disable';
+    const message = enabled
+        ? 'This will require <strong>all users</strong> to enter a 6-digit authenticator code every time they sign in.<br><br>Are you sure you want to enable MFA enforcement?'
+        : 'This will allow users to sign in <strong>without</strong> an authenticator code. All users still have MFA set up from account creation and can re-enable it at any time.<br><br>Are you sure you want to disable MFA enforcement?';
+
+    showConfirm(`${enabled ? 'Enable' : 'Disable'} MFA for All Users`, message, async () => {
+        await toggleMfaRequirement(enabled);
+        await renderMfaSettings();
+    }, {
+        confirmText: `Yes, ${action} MFA`,
+        danger: !enabled,
+        onCancel: () => { checkbox.checked = !enabled; }
+    });
+}
+
+async function resetMfaSetup() {
+    showConfirm('Reset MFA', 'This will remove your current authenticator setup. You will need to set up a new authenticator app on your next sign-in.<br><br>Are you sure?', async () => {
+        try {
+            const { data: factors } = await supa.auth.mfa.listFactors();
+            const totp = factors?.totp?.find(f => f.status === 'verified');
+            if (totp) {
+                await supa.auth.mfa.unenroll({ factorId: totp.id });
+            }
+            showAlert('MFA Reset', 'Your authenticator has been removed. You will be prompted to set up a new one on your next sign-in.');
+            await renderMfaSettings();
+        } catch (err) {
+            showAlert('Error', 'Failed to reset MFA: ' + err.message);
+        }
+    }, { danger: true, confirmText: 'Reset MFA' });
 }
 
 // ===== SENSOR TAGS & SIDEBAR =====
