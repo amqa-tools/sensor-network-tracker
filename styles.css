@@ -517,14 +517,14 @@ body {
     cursor: pointer;
     font-size: 12px;
     font-weight: 500;
-    color: var(--slate-500);
+    color: var(--slate-300);
     border: 1px solid rgba(255, 255, 255, 0.06);
     transition: all 0.2s var(--ease-out);
 }
 
 .setup-mode-toggle:hover {
     background: rgba(255, 255, 255, 0.04);
-    color: var(--slate-400);
+    color: #ffffff;
 }
 
 .setup-mode-toggle.active {
@@ -3259,7 +3259,7 @@ tr:last-child td {
 
 .sidebar-settings-btn {
     font-size: 20px;
-    color: var(--slate-400);
+    color: var(--slate-300);
     cursor: pointer;
     transition: all 0.2s ease;
     padding: 4px;
@@ -3273,13 +3273,13 @@ tr:last-child td {
 
 .sidebar-user .user-logout {
     font-size: 11px;
-    color: var(--slate-500);
+    color: var(--slate-400);
     cursor: pointer;
     transition: color 0.15s ease;
 }
 
 .sidebar-user .user-logout:hover {
-    color: var(--slate-300);
+    color: #ffffff;
 }
 
 /* ===== CHANGE ATTRIBUTION ===== */

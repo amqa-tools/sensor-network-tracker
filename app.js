@@ -5830,30 +5830,13 @@ function revertAuditStatus(auditId) {
 let analysisChartInstances = [];
 let analysisDataCache = {}; // keyed by auditId — raw parsed data, not persisted
 
-const DQO_THRESHOLDS_PM = {
+const DQO_THRESHOLDS = {
     r2: { min: 0.70 },
     slope: { min: 0.65, max: 1.35 },
     intercept: { min: -5, max: 5 },
     sd: { max: 5 },
     rmse: { max: 7 },
 };
-
-const DQO_THRESHOLDS_GAS = {
-    r2: { min: 0.70 },
-    slope: { min: 0.65, max: 1.35 },
-    intercept: { min: -15, max: 15 },
-    sd: { max: 15 },
-    rmse: { max: 20 },
-};
-
-const PM_PARAM_KEYS = ['pm25', 'pm10'];
-
-function getDQOThresholds(paramKey) {
-    return PM_PARAM_KEYS.includes(paramKey) ? DQO_THRESHOLDS_PM : DQO_THRESHOLDS_GAS;
-}
-
-// Legacy alias for any code referencing the old constant (defaults to PM thresholds)
-const DQO_THRESHOLDS = DQO_THRESHOLDS_PM;
 
 // Column name mapping: match QuantAQ AirVision export columns to our parameter keys
 const PARAM_COLUMN_MAP = {
@@ -6107,6 +6090,7 @@ function _promptAnalysisNote(context, callback) {
 function _buildDataIntegrityWarnings(parsed, audit) {
     const warnings = [];
     const results = audit.analysisResults || {};
+    const totalRows = parsed.trimmedRows.length;
 
     // Low data count warnings
     for (const p of AUDIT_PARAMETERS) {
@@ -6116,21 +6100,72 @@ function _buildDataIntegrityWarnings(parsed, audit) {
         }
     }
 
-    // Negative PM values
-    let hasNegativePM = false;
+    // >25% NaN/missing values per parameter
+    if (totalRows > 0) {
+        for (const p of AUDIT_PARAMETERS) {
+            let missingCount = 0;
+            for (const row of parsed.trimmedRows) {
+                const a = row.values[p.key]?.a;
+                const b = row.values[p.key]?.b;
+                if (isNaN(a) || isNaN(b) || !isFinite(a) || !isFinite(b)) missingCount++;
+            }
+            const missingPct = Math.round((missingCount / totalRows) * 100);
+            if (missingPct > 25) {
+                warnings.push({ type: 'warning', msg: `${p.label} has ${missingPct}% missing values \u2014 data may be incomplete` });
+            }
+        }
+    }
+
+    // Negative PM values (with count)
+    let negativePMCount = 0;
     for (const row of parsed.trimmedRows) {
         for (const pmKey of ['pm25', 'pm10']) {
             const a = row.values[pmKey]?.a;
             const b = row.values[pmKey]?.b;
-            if ((!isNaN(a) && a < 0) || (!isNaN(b) && b < 0)) { hasNegativePM = true; break; }
+            if (!isNaN(a) && a < 0) negativePMCount++;
+            if (!isNaN(b) && b < 0) negativePMCount++;
         }
-        if (hasNegativePM) break;
     }
-    if (hasNegativePM) {
-        warnings.push({ type: 'warning', msg: 'Negative PM values detected \u2014 these are physically impossible and may indicate sensor issues' });
+    if (negativePMCount > 0) {
+        warnings.push({ type: 'warning', msg: `Negative PM values detected (${negativePMCount} occurrences) \u2014 these are physically impossible and may indicate sensor malfunction` });
     }
 
-    // Sensor ID mismatch
+    // Duplicate timestamps
+    const timestampStrings = parsed.trimmedRows.map(r => r.timestamp?.getTime?.() || r.timestamp);
+    const seen = new Set();
+    let duplicateCount = 0;
+    for (const ts of timestampStrings) {
+        if (seen.has(ts)) {
+            duplicateCount++;
+        } else {
+            seen.add(ts);
+        }
+    }
+    if (duplicateCount > 0) {
+        warnings.push({ type: 'warning', msg: `${duplicateCount} duplicate timestamps found \u2014 data may have been exported incorrectly` });
+    }
+
+    // Hourly interval validation
+    if (parsed.trimmedRows.length >= 3) {
+        const intervals = [];
+        for (let i = 1; i < parsed.trimmedRows.length; i++) {
+            const t1 = parsed.trimmedRows[i - 1].timestamp?.getTime?.() || parsed.trimmedRows[i - 1].timestamp;
+            const t2 = parsed.trimmedRows[i].timestamp?.getTime?.() || parsed.trimmedRows[i].timestamp;
+            if (t1 && t2) {
+                const diffMin = Math.abs(t2 - t1) / 60000;
+                if (diffMin > 0) intervals.push(diffMin);
+            }
+        }
+        if (intervals.length > 0) {
+            const sorted = intervals.slice().sort((a, b) => a - b);
+            const medianInterval = sorted[Math.floor(sorted.length / 2)];
+            if (medianInterval < 55 || medianInterval > 65) {
+                warnings.push({ type: 'warning', msg: `Data interval appears to be ${Math.round(medianInterval)} minutes instead of hourly \u2014 verify correct data resolution` });
+            }
+        }
+    }
+
+    // Sensor ID cross-check
     const fileSensorA = parsed.sensorA?.id || '';
     const fileSensorB = parsed.sensorB?.id || '';
     const auditPodNorm = (audit.auditPodId || '').replace(/[-_\s]/g, '').toUpperCase();
@@ -6143,7 +6178,6 @@ function _buildDataIntegrityWarnings(parsed, audit) {
     }
 
     // Data coverage per parameter
-    const totalRows = parsed.trimmedRows.length;
     if (totalRows > 0) {
         const coverageLines = [];
         for (const p of AUDIT_PARAMETERS) {
@@ -6468,9 +6502,9 @@ function runLinearRegression(xArr, yArr) {
     };
 }
 
-function checkDQO(result, paramKey) {
+function checkDQO(result) {
     if (!result) return { r2: false, slope: false, intercept: false, sd: false, rmse: false, pass: false };
-    const T = getDQOThresholds(paramKey);
+    const T = DQO_THRESHOLDS;
     const dqo = {
         r2: result.r2 >= T.r2.min,
         slope: result.slope >= T.slope.min && result.slope <= T.slope.max,
@@ -6500,7 +6534,7 @@ function rebuildCacheFromSaved(audit) {
         trimmedRows: allRows.slice(trimIndex),
     };
 
-    // Rebuild regression results — reconstruct pairs from row data if missing, re-evaluate DQO with per-parameter thresholds
+    // Rebuild regression results — reconstruct pairs from row data if missing, re-evaluate DQO
     const savedResults = audit.analysisResults || {};
     AUDIT_PARAMETERS.forEach(p => {
         const r = savedResults[p.key];
@@ -6516,9 +6550,9 @@ function rebuildCacheFromSaved(audit) {
             }
             r.pairs = pairs;
         }
-        // Re-evaluate DQO with per-parameter thresholds (in case old data used single thresholds)
+        // Re-evaluate DQO
         if (r) {
-            r.dqo = checkDQO(r, p.key);
+            r.dqo = checkDQO(r);
             r.pass = r.dqo.pass;
         }
     });
@@ -6543,7 +6577,7 @@ function runAllAnalyses(parsed) {
                     tIdx++;
                 }
             }
-            const dqo = checkDQO(reg, param.key);
+            const dqo = checkDQO(reg);
             results[param.key] = { ...reg, dqo, pass: dqo.pass };
         }
     }
@@ -6676,7 +6710,7 @@ function renderSavedAnalysisView(auditId) {
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
-                    const T = getDQOThresholds(p.key);
+                    const T = DQO_THRESHOLDS;
                     if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
                     const cls = (pass) => pass ? 'dqo-cell-pass' : 'dqo-cell-fail';
@@ -6694,7 +6728,7 @@ function renderSavedAnalysisView(auditId) {
             </tbody>
         </table>
         </div>
-        <div class="analysis-dqo-thresholds"><span style="font-size:10px">PM thresholds: Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. Gas thresholds: Intercept \u00B115, SD \u2264 15, RMSE \u2264 20. All: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35.</span></div>
+        <div class="analysis-dqo-thresholds"><span style="font-size:10px">DQO Thresholds: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35, Intercept \u00B15, SD \u2264 5, RMSE \u2264 7.</span></div>
         <p style="font-size:13px;color:var(--slate-400);margin-top:16px">To view scatter plots, time series, and raw data, re-upload the original Excel file.</p>
         <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
             <button class="btn btn-primary" onclick="generateAuditReport('${auditId}')">Generate Report</button>
@@ -6722,7 +6756,7 @@ function renderDQOSection(results, overallPass) {
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
-                    const T = getDQOThresholds(p.key);
+                    const T = DQO_THRESHOLDS;
                     if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
                     const cls = (pass) => pass ? 'dqo-cell-pass' : 'dqo-cell-fail';
@@ -6740,7 +6774,7 @@ function renderDQOSection(results, overallPass) {
             </tbody>
         </table>
         </div>
-        <div class="analysis-dqo-thresholds"><span style="font-size:10px">PM thresholds: Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. Gas thresholds: Intercept \u00B115, SD \u2264 15, RMSE \u2264 20. All: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35. PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated before analysis.</span></div>
+        <div class="analysis-dqo-thresholds"><span style="font-size:10px">DQO Thresholds: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35, Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated before analysis.</span></div>
     `;
 }
 
@@ -7244,10 +7278,10 @@ function generateAuditReport(auditId) {
         ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
         : '\u2014';
 
-    // DQO table rows — using labelHtml for subscripts, per-parameter thresholds
+    // DQO table rows — using labelHtml for subscripts
     const dqoRows = AUDIT_PARAMETERS.map(p => {
         const r = results[p.key];
-        const T = getDQOThresholds(p.key);
+        const T = DQO_THRESHOLDS;
         if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:#64748b">No data</td></tr>`;
         const d = r.dqo || {};
         const cls = (pass) => pass ? 'color:#1a7f37' : 'color:#c53030;font-weight:700';
@@ -7567,7 +7601,7 @@ function generateAuditReport(auditId) {
         <tbody>${dqoRows}</tbody>
     </table>
     ${audit.analysisNotes ? '<div class="thresholds" style="margin-bottom:8px"><strong>Analysis Note:</strong> ' + escapeHtml(audit.analysisNotes) + '</div>' : ''}
-    <div class="thresholds">PM thresholds: Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. Gas thresholds: Intercept \u00B115, SD \u2264 15, RMSE \u2264 20. All parameters: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35. Intercept, SD, and RMSE in parameter units (ppb for gases, \u00B5g/m\u00B3 for PM). PM<sub>10</sub> values exceeding 1000 \u00B5g/m\u00B3 were invalidated prior to analysis.</div>
+    <div class="thresholds">DQO Thresholds (all parameters): R\u00B2 \u2265 0.70, Slope 0.65\u20131.35, Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. PM<sub>10</sub> values exceeding 1000 \u00B5g/m\u00B3 were invalidated prior to analysis.</div>
     </section>
 
     ${tsHtml ? `
