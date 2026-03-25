@@ -4059,7 +4059,7 @@ async function renderAllowedUsers(currentEmail) {
         const isYou = row.email.toLowerCase() === currentEmail.toLowerCase();
         const roleBadge = row.role === 'admin'
             ? '<span style="background:var(--navy-800);color:white;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px">Admin</span>'
-            : '<span style="background:var(--slate-100);color:var(--slate-500);padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px">User</span>';
+            : '';
         const roleToggle = isAdmin && !isYou
             ? `<select class="btn btn-sm" onchange="changeUserRole('${row.id}', this.value)" style="font-size:11px;padding:2px 6px">
                 <option value="user" ${row.role !== 'admin' ? 'selected' : ''}>User</option>
