@@ -74,30 +74,14 @@ async function runQuantAQCheck() {
     renderCheckButtons();
 
     try {
-        // Call the Edge Function
-        const session = await db.getSession();
-        const token = session?.access_token;
-
-        if (!token) {
-            throw new Error('Not authenticated. Please sign in first.');
-        }
-
-        const resp = await fetch(SUPABASE_URL + '/functions/v1/quantaq-check', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + token,
-                'apikey': SUPABASE_ANON_KEY,
-                'Content-Type': 'application/json',
-            },
-            body: '{}',
+        // Call the Edge Function via Supabase client (handles auth automatically)
+        const { data: result, error: fnError } = await supa.functions.invoke('quantaq-check', {
+            body: {},
         });
 
-        if (!resp.ok) {
-            const errBody = await resp.text();
-            throw new Error(`Edge Function error ${resp.status}: ${errBody.slice(0, 200)}`);
+        if (fnError) {
+            throw new Error(fnError.message || 'Edge Function call failed');
         }
-
-        const result = await resp.json();
         console.log('[QuantAQ] Check result:', result);
 
         updateQuantAQStatus(
