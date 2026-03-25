@@ -5830,13 +5830,30 @@ function revertAuditStatus(auditId) {
 let analysisChartInstances = [];
 let analysisDataCache = {}; // keyed by auditId — raw parsed data, not persisted
 
-const DQO_THRESHOLDS = {
-    r2: { min: 0.70, label: 'R\u00B2 \u2265 0.70' },
-    slope: { min: 0.65, max: 1.35, label: 'Slope: 1.0 \u00B1 0.35' },
-    intercept: { min: -5, max: 5, label: '\u22125 \u2264 Intercept \u2264 5' },
-    sd: { max: 5, label: 'SD \u2264 5' },
-    rmse: { max: 7, label: 'RMSE \u2264 7' },
+const DQO_THRESHOLDS_PM = {
+    r2: { min: 0.70 },
+    slope: { min: 0.65, max: 1.35 },
+    intercept: { min: -5, max: 5 },
+    sd: { max: 5 },
+    rmse: { max: 7 },
 };
+
+const DQO_THRESHOLDS_GAS = {
+    r2: { min: 0.70 },
+    slope: { min: 0.65, max: 1.35 },
+    intercept: { min: -15, max: 15 },
+    sd: { max: 15 },
+    rmse: { max: 20 },
+};
+
+const PM_PARAM_KEYS = ['pm25', 'pm10'];
+
+function getDQOThresholds(paramKey) {
+    return PM_PARAM_KEYS.includes(paramKey) ? DQO_THRESHOLDS_PM : DQO_THRESHOLDS_GAS;
+}
+
+// Legacy alias for any code referencing the old constant (defaults to PM thresholds)
+const DQO_THRESHOLDS = DQO_THRESHOLDS_PM;
 
 // Column name mapping: match QuantAQ AirVision export columns to our parameter keys
 const PARAM_COLUMN_MAP = {
@@ -5985,90 +6002,276 @@ function handleAnalysisUpload(auditId, file) {
                 return;
             }
 
-            // Run regression on trimmed data (excluding first 24 hours)
-            const results = runAllAnalyses(parsed);
+            // Start the validation chain: missing params → duration → run analysis
+            _analysisValidationChain(auditId, audit, parsed, analysisName, body, []);
 
-            // Save results including pairs for scatter plots
-            audit.analysisResults = {};
-            AUDIT_PARAMETERS.forEach(p => {
-                if (results[p.key]) {
-                    audit.analysisResults[p.key] = results[p.key];
-                }
-            });
-            audit.analysisName = analysisName;
-            audit.analysisUploadDate = nowDatetime();
-            audit.analysisUploadedBy = getCurrentUserName();
-
-            // Build compact chart data for persistence (timestamps + all param values)
-            audit.analysisChartData = {
-                sensorA: parsed.sensorA,
-                sensorB: parsed.sensorB,
-                trimIndex: parsed.trimIndex,
-                rows: parsed.allRows.map(r => ({
-                    t: r.timestamp.getTime(),
-                    v: Object.fromEntries(AUDIT_PARAMETERS.map(p => [p.key, { a: r.values[p.key]?.a, b: r.values[p.key]?.b }]).filter(([k, v]) => !isNaN(v.a) || !isNaN(v.b)))
-                })),
-            };
-
-            persistAuditUpdate(auditId, {
-                analysisResults: audit.analysisResults,
-                analysisName: audit.analysisName,
-                analysisUploadDate: audit.analysisUploadDate,
-                analysisUploadedBy: audit.analysisUploadedBy,
-                analysisChartData: audit.analysisChartData,
-            });
-
-            // Cache in memory
-            analysisDataCache[auditId] = parsed;
-            analysisDataCache[auditId].regressionResults = results;
-
-            // Advance status based on DQO results
-            const allPass = AUDIT_PARAMETERS.every(p => audit.analysisResults[p.key]?.pass);
-            if (audit.status === 'Complete' || audit.status === 'Analysis Pending') {
-                const oldStatus = audit.status;
-                const newStatus = allPass ? 'Audit Complete' : 'Analysis Pending';
-                audit.status = newStatus;
-                persistAuditUpdate(auditId, { status: newStatus });
-
-                if (allPass) {
-                    // Update sensor statuses (same as advanceAuditStatus)
-                    const auditStatusPrefix = 'Audit: ';
-                    const communityPod = sensors.find(x => x.id === audit.communityPodId);
-                    const auditPod = sensors.find(x => x.id === audit.auditPodId);
-                    if (communityPod) {
-                        communityPod.status = getStatusArray(communityPod).filter(st => !st.startsWith(auditStatusPrefix));
-                        if (communityPod.status.length === 0) communityPod.status = ['Online'];
-                        persistSensor(communityPod);
-                    }
-                    if (auditPod) {
-                        auditPod.status = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
-                        if (auditPod.status.length === 0) auditPod.status = ['Online'];
-                        persistSensor(auditPod);
-                    }
-                    buildSensorSidebar();
-                }
-
-                const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
-                const dqoNote = allPass
-                    ? `Audit analysis complete: all parameters pass DQO. "${oldStatus}" \u2192 "Audit Complete" for ${communityName}.`
-                    : `Audit analysis uploaded for ${communityName}: one or more parameters fail DQO. Review required.`;
-                createNote('Audit', dqoNote, {
-                    sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
-                updateSidebarAuditCount();
-            }
-
-            // Render
-            document.getElementById('analysis-modal-title').textContent = analysisName;
-            renderAnalysisResults(auditId, parsed);
-
-            // Update audit detail if open
-            if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
         } catch (err) {
             console.error('Analysis error:', err);
             body.innerHTML = `<div class="analysis-processing" style="color:var(--aurora-rose)">Error processing file: ${escapeHtml(err.message)}</div>`;
         }
     };
     reader.readAsArrayBuffer(file);
+}
+
+// Determine which parameters are required based on sensor model (PM-only vs full Modulair)
+function _getRequiredParams(audit) {
+    const pmOnlyPattern1 = /MOD-?\d{2,}-PM-/i;
+    const pmOnlyPattern2 = /MOD-.*PM.*\d{4,}/i;
+    const sensorIds = [audit.auditPodId || '', audit.communityPodId || ''];
+    const isPmOnly = sensorIds.some(id => pmOnlyPattern1.test(id) || pmOnlyPattern2.test(id));
+    if (isPmOnly) return ['pm25', 'pm10'];
+    return ['pm25', 'pm10', 'co', 'no', 'no2', 'o3'];
+}
+
+// Check which required params are missing valid paired data
+function _findMissingParams(parsed, requiredKeys) {
+    const missing = [];
+    for (const key of requiredKeys) {
+        let validPairs = 0;
+        for (const row of parsed.trimmedRows) {
+            const a = row.values[key]?.a;
+            const b = row.values[key]?.b;
+            if (!isNaN(a) && !isNaN(b) && isFinite(a) && isFinite(b)) validPairs++;
+        }
+        if (validPairs === 0) missing.push(key);
+    }
+    return missing;
+}
+
+// Validation chain: step 1 — missing parameters
+function _analysisValidationChain(auditId, audit, parsed, analysisName, body, collectedNotes) {
+    const requiredKeys = _getRequiredParams(audit);
+    const missingKeys = _findMissingParams(parsed, requiredKeys);
+
+    if (missingKeys.length > 0) {
+        const paramLabels = missingKeys.map(k => {
+            const p = AUDIT_PARAMETERS.find(x => x.key === k);
+            return p ? p.label : k.toUpperCase();
+        });
+        const msg = `The uploaded dataset is missing data for: <strong>${paramLabels.join(', ')}</strong>.<br><br>This may indicate an incomplete export or a PM-only sensor. Do you want to proceed with the available data?`;
+        showConfirm('Missing Parameters', msg, () => {
+            // User clicked "Proceed Anyway" — prompt for optional note
+            _promptAnalysisNote('Missing parameters: ' + paramLabels.join(', '), (note) => {
+                const notes = [...collectedNotes];
+                if (note) notes.push(note);
+                _analysisValidationChainStep2(auditId, audit, parsed, analysisName, body, notes);
+            });
+        }, { confirmText: 'Proceed Anyway', cancelText: 'Cancel' });
+        // On cancel, restore the upload UI
+        _confirmDismissCallback = () => {
+            body.innerHTML = '<div class="analysis-processing" style="color:var(--slate-400)">Upload cancelled.</div>';
+            setTimeout(() => rerunAnalysisUpload(auditId), 600);
+        };
+    } else {
+        _analysisValidationChainStep2(auditId, audit, parsed, analysisName, body, collectedNotes);
+    }
+}
+
+// Validation chain: step 2 — dataset duration
+function _analysisValidationChainStep2(auditId, audit, parsed, analysisName, body, collectedNotes) {
+    const firstTs = parsed.allRows[0]?.timestamp?.getTime();
+    const lastTs = parsed.allRows[parsed.allRows.length - 1]?.timestamp?.getTime();
+    const durationDays = (lastTs && firstTs) ? (lastTs - firstTs) / (1000 * 60 * 60 * 24) : 0;
+
+    if (durationDays < 7 && durationDays > 0) {
+        const daysStr = durationDays.toFixed(1);
+        const msg = `This dataset covers only <strong>${daysStr} days</strong>. Audits typically run for at least 7 days for reliable results.<br><br>Do you want to proceed anyway?`;
+        showConfirm('Short Dataset Duration', msg, () => {
+            _promptAnalysisNote('Short duration: ' + daysStr + ' days', (note) => {
+                const notes = [...collectedNotes];
+                if (note) notes.push(note);
+                _finalizeAnalysis(auditId, audit, parsed, analysisName, body, notes);
+            });
+        }, { confirmText: 'Proceed Anyway', cancelText: 'Cancel' });
+        _confirmDismissCallback = () => {
+            body.innerHTML = '<div class="analysis-processing" style="color:var(--slate-400)">Upload cancelled.</div>';
+            setTimeout(() => rerunAnalysisUpload(auditId), 600);
+        };
+    } else {
+        _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collectedNotes);
+    }
+}
+
+// Prompt for an optional note after a warning
+function _promptAnalysisNote(context, callback) {
+    const msg = `<p style="margin-bottom:12px">You can add an optional note explaining the situation (${escapeHtml(context)}):</p>
+        <textarea id="analysis-warning-note" rows="3" style="width:100%;padding:8px 12px;border:1px solid var(--slate-200);border-radius:6px;font-family:var(--font-sans);font-size:13px;resize:vertical" placeholder="Optional note (e.g., reason for missing data or short duration)..."></textarea>`;
+    showConfirm('Add Note (Optional)', msg, () => {
+        const note = document.getElementById('analysis-warning-note')?.value?.trim() || '';
+        callback(note);
+    }, { confirmText: 'Continue', cancelText: 'Skip' });
+    _confirmDismissCallback = () => { callback(''); };
+}
+
+// Build data integrity warnings for the analysis view
+function _buildDataIntegrityWarnings(parsed, audit) {
+    const warnings = [];
+    const results = audit.analysisResults || {};
+
+    // Low data count warnings
+    for (const p of AUDIT_PARAMETERS) {
+        const r = results[p.key];
+        if (r && r.n < 20) {
+            warnings.push({ type: 'warning', msg: `Low data count for ${p.label}: only ${r.n} valid data pairs` });
+        }
+    }
+
+    // Negative PM values
+    let hasNegativePM = false;
+    for (const row of parsed.trimmedRows) {
+        for (const pmKey of ['pm25', 'pm10']) {
+            const a = row.values[pmKey]?.a;
+            const b = row.values[pmKey]?.b;
+            if ((!isNaN(a) && a < 0) || (!isNaN(b) && b < 0)) { hasNegativePM = true; break; }
+        }
+        if (hasNegativePM) break;
+    }
+    if (hasNegativePM) {
+        warnings.push({ type: 'warning', msg: 'Negative PM values detected \u2014 these are physically impossible and may indicate sensor issues' });
+    }
+
+    // Sensor ID mismatch
+    const fileSensorA = parsed.sensorA?.id || '';
+    const fileSensorB = parsed.sensorB?.id || '';
+    const auditPodNorm = (audit.auditPodId || '').replace(/[-_\s]/g, '').toUpperCase();
+    const communityPodNorm = (audit.communityPodId || '').replace(/[-_\s]/g, '').toUpperCase();
+    const fileIds = [fileSensorA, fileSensorB].map(s => s.replace(/[-_\s]/g, '').toUpperCase());
+    const matchesAudit = fileIds.some(fid => fid.includes(auditPodNorm.replace('MOD', '')) || auditPodNorm.includes(fid.replace('MOD', '')));
+    const matchesCommunity = fileIds.some(fid => fid.includes(communityPodNorm.replace('MOD', '')) || communityPodNorm.includes(fid.replace('MOD', '')));
+    if (!matchesAudit || !matchesCommunity) {
+        warnings.push({ type: 'warning', msg: `Sensor IDs in file (${fileSensorA}, ${fileSensorB}) don't match the audit's assigned pods (${audit.auditPodId}, ${audit.communityPodId})` });
+    }
+
+    // Data coverage per parameter
+    const totalRows = parsed.trimmedRows.length;
+    if (totalRows > 0) {
+        const coverageLines = [];
+        for (const p of AUDIT_PARAMETERS) {
+            let validPairs = 0;
+            for (const row of parsed.trimmedRows) {
+                const a = row.values[p.key]?.a;
+                const b = row.values[p.key]?.b;
+                if (!isNaN(a) && !isNaN(b) && isFinite(a) && isFinite(b)) validPairs++;
+            }
+            const pct = Math.round((validPairs / totalRows) * 100);
+            coverageLines.push(`${p.label}: ${pct}% (${validPairs}/${totalRows})`);
+        }
+        warnings.push({ type: 'info', msg: 'Data coverage: ' + coverageLines.join(', ') });
+    }
+
+    return warnings;
+}
+
+// Render data integrity warnings HTML
+function _renderIntegrityWarnings(warnings) {
+    if (!warnings || warnings.length === 0) return '';
+    return `<div class="analysis-integrity-warnings" style="margin-bottom:16px">
+        ${warnings.map(w => {
+            const color = w.type === 'warning' ? 'var(--aurora-rose, #c53030)' : 'var(--slate-500, #64748b)';
+            const bg = w.type === 'warning' ? '#fef2f2' : 'var(--slate-50, #f8fafc)';
+            const icon = w.type === 'warning' ? '\u26A0' : '\u2139';
+            const border = w.type === 'warning' ? '#fecaca' : 'var(--slate-200, #e2e8f0)';
+            return `<div style="padding:8px 12px;margin-bottom:6px;border-radius:6px;font-size:12px;background:${bg};color:${color};border:1px solid ${border}">
+                <span style="margin-right:6px">${icon}</span>${escapeHtml(w.msg)}
+            </div>`;
+        }).join('')}
+    </div>`;
+}
+
+// Finalize: run analysis, save, render
+function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collectedNotes) {
+    body.innerHTML = '<div class="analysis-processing">Running regression analysis...</div>';
+
+    // Run regression on trimmed data (excluding first 24 hours)
+    const results = runAllAnalyses(parsed);
+
+    // Save results including pairs for scatter plots
+    audit.analysisResults = {};
+    AUDIT_PARAMETERS.forEach(p => {
+        if (results[p.key]) {
+            audit.analysisResults[p.key] = results[p.key];
+        }
+    });
+    audit.analysisName = analysisName;
+    audit.analysisUploadDate = nowDatetime();
+    audit.analysisUploadedBy = getCurrentUserName();
+
+    // Store any collected notes
+    if (collectedNotes.length > 0) {
+        audit.analysisNotes = collectedNotes.join(' | ');
+    } else {
+        audit.analysisNotes = '';
+    }
+
+    // Build compact chart data for persistence (timestamps + all param values)
+    audit.analysisChartData = {
+        sensorA: parsed.sensorA,
+        sensorB: parsed.sensorB,
+        trimIndex: parsed.trimIndex,
+        rows: parsed.allRows.map(r => ({
+            t: r.timestamp.getTime(),
+            v: Object.fromEntries(AUDIT_PARAMETERS.map(p => [p.key, { a: r.values[p.key]?.a, b: r.values[p.key]?.b }]).filter(([k, v]) => !isNaN(v.a) || !isNaN(v.b)))
+        })),
+    };
+
+    persistAuditUpdate(auditId, {
+        analysisResults: audit.analysisResults,
+        analysisName: audit.analysisName,
+        analysisUploadDate: audit.analysisUploadDate,
+        analysisUploadedBy: audit.analysisUploadedBy,
+        analysisChartData: audit.analysisChartData,
+        analysisNotes: audit.analysisNotes,
+    });
+
+    // Cache in memory
+    analysisDataCache[auditId] = parsed;
+    analysisDataCache[auditId].regressionResults = results;
+
+    // Build data integrity warnings for display
+    const integrityWarnings = _buildDataIntegrityWarnings(parsed, audit);
+    analysisDataCache[auditId].integrityWarnings = integrityWarnings;
+
+    // Advance status based on DQO results
+    const allPass = AUDIT_PARAMETERS.every(p => audit.analysisResults[p.key]?.pass);
+    if (audit.status === 'Complete' || audit.status === 'Analysis Pending') {
+        const oldStatus = audit.status;
+        const newStatus = allPass ? 'Audit Complete' : 'Analysis Pending';
+        audit.status = newStatus;
+        persistAuditUpdate(auditId, { status: newStatus });
+
+        if (allPass) {
+            // Update sensor statuses (same as advanceAuditStatus)
+            const auditStatusPrefix = 'Audit: ';
+            const communityPod = sensors.find(x => x.id === audit.communityPodId);
+            const auditPod = sensors.find(x => x.id === audit.auditPodId);
+            if (communityPod) {
+                communityPod.status = getStatusArray(communityPod).filter(st => !st.startsWith(auditStatusPrefix));
+                if (communityPod.status.length === 0) communityPod.status = ['Online'];
+                persistSensor(communityPod);
+            }
+            if (auditPod) {
+                auditPod.status = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
+                if (auditPod.status.length === 0) auditPod.status = ['Online'];
+                persistSensor(auditPod);
+            }
+            buildSensorSidebar();
+        }
+
+        const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
+        const dqoNote = allPass
+            ? `Audit analysis complete: all parameters pass DQO. "${oldStatus}" \u2192 "Audit Complete" for ${communityName}.`
+            : `Audit analysis uploaded for ${communityName}: one or more parameters fail DQO. Review required.`;
+        createNote('Audit', dqoNote, {
+            sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
+        updateSidebarAuditCount();
+    }
+
+    // Render
+    document.getElementById('analysis-modal-title').textContent = analysisName;
+    renderAnalysisResults(auditId, parsed);
+
+    // Update audit detail if open
+    if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
 }
 
 function parseAuditData(rows, audit) {
@@ -6265,14 +6468,15 @@ function runLinearRegression(xArr, yArr) {
     };
 }
 
-function checkDQO(result) {
+function checkDQO(result, paramKey) {
     if (!result) return { r2: false, slope: false, intercept: false, sd: false, rmse: false, pass: false };
+    const T = getDQOThresholds(paramKey);
     const dqo = {
-        r2: result.r2 >= DQO_THRESHOLDS.r2.min,
-        slope: result.slope >= DQO_THRESHOLDS.slope.min && result.slope <= DQO_THRESHOLDS.slope.max,
-        intercept: result.intercept >= DQO_THRESHOLDS.intercept.min && result.intercept <= DQO_THRESHOLDS.intercept.max,
-        sd: result.sd <= DQO_THRESHOLDS.sd.max,
-        rmse: result.rmse <= DQO_THRESHOLDS.rmse.max,
+        r2: result.r2 >= T.r2.min,
+        slope: result.slope >= T.slope.min && result.slope <= T.slope.max,
+        intercept: result.intercept >= T.intercept.min && result.intercept <= T.intercept.max,
+        sd: result.sd <= T.sd.max,
+        rmse: result.rmse <= T.rmse.max,
     };
     dqo.pass = dqo.r2 && dqo.slope && dqo.intercept && dqo.sd && dqo.rmse;
     return dqo;
@@ -6296,7 +6500,7 @@ function rebuildCacheFromSaved(audit) {
         trimmedRows: allRows.slice(trimIndex),
     };
 
-    // Rebuild regression results — reconstruct pairs from row data if missing
+    // Rebuild regression results — reconstruct pairs from row data if missing, re-evaluate DQO with per-parameter thresholds
     const savedResults = audit.analysisResults || {};
     AUDIT_PARAMETERS.forEach(p => {
         const r = savedResults[p.key];
@@ -6311,6 +6515,11 @@ function rebuildCacheFromSaved(audit) {
                 }
             }
             r.pairs = pairs;
+        }
+        // Re-evaluate DQO with per-parameter thresholds (in case old data used single thresholds)
+        if (r) {
+            r.dqo = checkDQO(r, p.key);
+            r.pass = r.dqo.pass;
         }
     });
     parsed.regressionResults = savedResults;
@@ -6334,7 +6543,7 @@ function runAllAnalyses(parsed) {
                     tIdx++;
                 }
             }
-            const dqo = checkDQO(reg);
+            const dqo = checkDQO(reg, param.key);
             results[param.key] = { ...reg, dqo, pass: dqo.pass };
         }
     }
@@ -6355,17 +6564,27 @@ function renderAnalysisResults(auditId, parsed) {
     const analysisCount = parsed.trimmedRows.length;
     const overallPass = AUDIT_PARAMETERS.every(p => results[p.key]?.pass);
 
+    // Build integrity warnings (from cache or compute fresh)
+    let integrityWarnings = analysisDataCache[auditId]?.integrityWarnings;
+    if (!integrityWarnings) {
+        integrityWarnings = _buildDataIntegrityWarnings(parsed, audit);
+        if (analysisDataCache[auditId]) analysisDataCache[auditId].integrityWarnings = integrityWarnings;
+    }
+    const warningsHtml = _renderIntegrityWarnings(integrityWarnings);
+
     const body = document.getElementById('audit-analysis-body');
     body.innerHTML = `
         <div style="margin-top:16px">
             <span class="analysis-trim-note">First 24 hours excluded from DQO analysis (${trimCount} of ${totalCount} rows trimmed) \u2014 regression and DQO calculated on ${analysisCount} rows</span>
             ${audit.analysisUploadDate ? `<span style="float:right;font-size:11px;color:var(--slate-400)">Uploaded ${formatDate(audit.analysisUploadDate)} by ${escapeHtml(audit.analysisUploadedBy || '')}</span>` : ''}
         </div>
+        ${audit.analysisNotes ? `<div style="margin-top:8px;font-size:12px;color:var(--slate-500);background:var(--slate-50);padding:8px 12px;border-radius:6px;border-left:3px solid var(--gold)"><strong>Analysis Note:</strong> ${escapeHtml(audit.analysisNotes)}</div>` : ''}
         <div class="analysis-tabs">
             <button class="analysis-tab active" onclick="switchAnalysisTab(this, 'analysis')">Analysis</button>
             <button class="analysis-tab" onclick="switchAnalysisTab(this, 'rawdata')">Raw Data</button>
         </div>
         <div id="analysis-panel-analysis" class="analysis-tab-panel active">
+            <div id="analysis-section-warnings">${warningsHtml}</div>
             <div id="analysis-section-dqo"></div>
             <div id="analysis-section-timeseries" style="margin-top:28px"></div>
             <div id="analysis-section-scatter" style="margin-top:28px"></div>
@@ -6435,44 +6654,47 @@ function renderSavedAnalysisView(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
     const results = audit.analysisResults || {};
-    const T = DQO_THRESHOLDS;
 
     const body = document.getElementById('audit-analysis-body');
     body.innerHTML = `
         <div style="margin-top:16px">
             ${audit.analysisUploadDate ? `<span style="font-size:11px;color:var(--slate-400)">Uploaded ${formatDate(audit.analysisUploadDate)} by ${escapeHtml(audit.analysisUploadedBy || '')}</span>` : ''}
+            ${audit.analysisNotes ? `<div style="margin-top:8px;font-size:12px;color:var(--slate-500);background:var(--slate-50);padding:8px 12px;border-radius:6px;border-left:3px solid var(--gold)"><strong>Analysis Note:</strong> ${escapeHtml(audit.analysisNotes)}</div>` : ''}
         </div>
         <div style="overflow-x:auto;margin-top:16px">
         <table class="dqo-summary-table">
             <thead><tr>
-                <th scope="col">Parameter<br><span class="dqo-thresh">(DQO Threshold)</span></th>
-                <th>R\u00B2 <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></th>
-                <th>Slope <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></th>
-                <th>Intercept <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></th>
-                <th>SD <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></th>
-                <th>RMSE <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></th>
+                <th scope="col">Parameter</th>
+                <th>R\u00B2</th>
+                <th>Slope</th>
+                <th>Intercept</th>
+                <th>SD</th>
+                <th>RMSE</th>
+                <th>n</th>
                 <th>Result</th>
             </tr></thead>
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
-                    if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="6" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
+                    const T = getDQOThresholds(p.key);
+                    if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
                     const cls = (pass) => pass ? 'dqo-cell-pass' : 'dqo-cell-fail';
                     return `<tr>
                         <td>${p.labelHtml} (${p.unit})</td>
-                        <td class="${cls(d.r2)}">${r.r2}</td>
-                        <td class="${cls(d.slope)}">${r.slope}</td>
-                        <td class="${cls(d.intercept)}">${r.intercept}</td>
-                        <td class="${cls(d.sd)}">${r.sd}</td>
-                        <td class="${cls(d.rmse)}">${r.rmse}</td>
+                        <td class="${cls(d.r2)}">${r.r2} <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></td>
+                        <td class="${cls(d.slope)}">${r.slope} <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></td>
+                        <td class="${cls(d.intercept)}">${r.intercept} <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></td>
+                        <td class="${cls(d.sd)}">${r.sd} <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></td>
+                        <td class="${cls(d.rmse)}">${r.rmse} <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></td>
+                        <td style="text-align:center">${r.n || '\u2014'}</td>
                         <td>${r.pass ? '<span class="dqo-pass">PASS</span>' : '<span class="dqo-fail">FAIL</span>'}</td>
                     </tr>`;
                 }).join('')}
             </tbody>
         </table>
         </div>
-        <div class="analysis-dqo-thresholds"><span style="font-size:10px">Intercept, SD, and RMSE in parameter units. PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated.</span></div>
+        <div class="analysis-dqo-thresholds"><span style="font-size:10px">PM thresholds: Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. Gas thresholds: Intercept \u00B115, SD \u2264 15, RMSE \u2264 20. All: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35.</span></div>
         <p style="font-size:13px;color:var(--slate-400);margin-top:16px">To view scatter plots, time series, and raw data, re-upload the original Excel file.</p>
         <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
             <button class="btn btn-primary" onclick="generateAuditReport('${auditId}')">Generate Report</button>
@@ -6483,40 +6705,42 @@ function renderSavedAnalysisView(auditId) {
 
 function renderDQOSection(results, overallPass) {
     const el = document.getElementById('analysis-section-dqo');
-    const T = DQO_THRESHOLDS;
 
     el.innerHTML = `
         <div style="overflow-x:auto">
         <table class="dqo-summary-table">
             <thead><tr>
-                <th scope="col">Parameter<br><span class="dqo-thresh">(DQO Threshold)</span></th>
-                <th>R\u00B2 <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></th>
-                <th>Slope <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></th>
-                <th>Intercept <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></th>
-                <th>SD <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></th>
-                <th>RMSE <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></th>
+                <th scope="col">Parameter</th>
+                <th>R\u00B2</th>
+                <th>Slope</th>
+                <th>Intercept</th>
+                <th>SD</th>
+                <th>RMSE</th>
+                <th>n</th>
                 <th>Result</th>
             </tr></thead>
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
-                    if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="6" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
+                    const T = getDQOThresholds(p.key);
+                    if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
                     const cls = (pass) => pass ? 'dqo-cell-pass' : 'dqo-cell-fail';
                     return `<tr>
                         <td>${p.labelHtml} (${p.unit})</td>
-                        <td class="${cls(d.r2)}">${r.r2}</td>
-                        <td class="${cls(d.slope)}">${r.slope}</td>
-                        <td class="${cls(d.intercept)}">${r.intercept}</td>
-                        <td class="${cls(d.sd)}">${r.sd}</td>
-                        <td class="${cls(d.rmse)}">${r.rmse}</td>
+                        <td class="${cls(d.r2)}">${r.r2} <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></td>
+                        <td class="${cls(d.slope)}">${r.slope} <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></td>
+                        <td class="${cls(d.intercept)}">${r.intercept} <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></td>
+                        <td class="${cls(d.sd)}">${r.sd} <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></td>
+                        <td class="${cls(d.rmse)}">${r.rmse} <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></td>
+                        <td style="text-align:center">${r.n || '\u2014'}</td>
                         <td>${r.pass ? '<span class="dqo-pass">PASS</span>' : '<span class="dqo-fail">FAIL</span>'}</td>
                     </tr>`;
                 }).join('')}
             </tbody>
         </table>
         </div>
-        <div class="analysis-dqo-thresholds"><span style="font-size:10px">Intercept, SD, and RMSE are in the units of the measured parameter (ppb for gases, \u00B5g/m\u00B3 for PM). PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated before analysis.</span></div>
+        <div class="analysis-dqo-thresholds"><span style="font-size:10px">PM thresholds: Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. Gas thresholds: Intercept \u00B115, SD \u2264 15, RMSE \u2264 20. All: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35. PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated before analysis.</span></div>
     `;
 }
 
@@ -7006,7 +7230,6 @@ function generateAuditReport(auditId) {
     const cached = analysisDataCache[auditId];
     const results = audit.analysisResults || {};
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
-    const T = DQO_THRESHOLDS;
 
     // Build descriptive sensor labels
     const auditPodSensor = sensors.find(s => s.id === audit.auditPodId);
@@ -7021,19 +7244,21 @@ function generateAuditReport(auditId) {
         ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
         : '\u2014';
 
-    // DQO table rows — using labelHtml for subscripts
+    // DQO table rows — using labelHtml for subscripts, per-parameter thresholds
     const dqoRows = AUDIT_PARAMETERS.map(p => {
         const r = results[p.key];
-        if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="6" style="color:#64748b">No data</td></tr>`;
+        const T = getDQOThresholds(p.key);
+        if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:#64748b">No data</td></tr>`;
         const d = r.dqo || {};
         const cls = (pass) => pass ? 'color:#1a7f37' : 'color:#c53030;font-weight:700';
         return `<tr>
             <td style="font-family:'DM Sans',sans-serif;font-weight:600">${p.labelHtml} (${p.unit})</td>
-            <td style="${cls(d.r2)}">${r.r2}</td>
-            <td style="${cls(d.slope)}">${r.slope}</td>
-            <td style="${cls(d.intercept)}">${r.intercept}</td>
-            <td style="${cls(d.sd)}">${r.sd}</td>
-            <td style="${cls(d.rmse)}">${r.rmse}</td>
+            <td style="${cls(d.r2)}">${r.r2} <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></td>
+            <td style="${cls(d.slope)}">${r.slope} <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></td>
+            <td style="${cls(d.intercept)}">${r.intercept} <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></td>
+            <td style="${cls(d.sd)}">${r.sd} <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></td>
+            <td style="${cls(d.rmse)}">${r.rmse} <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></td>
+            <td style="text-align:center">${r.n || '\u2014'}</td>
             <td style="text-align:center">${r.pass
                 ? '<span style="background:#e6f9ed;color:#1a7f37;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">PASS</span>'
                 : '<span style="background:#fde8e8;color:#c53030;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">FAIL</span>'}</td>
@@ -7330,17 +7555,19 @@ function generateAuditReport(auditId) {
     <span class="trim-note">${trimInfo}</span>
     <table class="dqo">
         <thead><tr>
-            <th scope="col">Parameter<br><span class="dqo-thresh">(DQO Threshold)</span></th>
-            <th>R\u00B2 <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></th>
-            <th>Slope <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></th>
-            <th>Intercept <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></th>
-            <th>SD <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></th>
-            <th>RMSE <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></th>
+            <th scope="col">Parameter</th>
+            <th>R\u00B2</th>
+            <th>Slope</th>
+            <th>Intercept</th>
+            <th>SD</th>
+            <th>RMSE</th>
+            <th>n</th>
             <th>Result</th>
         </tr></thead>
         <tbody>${dqoRows}</tbody>
     </table>
-    <div class="thresholds">Intercept, SD, and RMSE are expressed in the units of the measured parameter (ppb for gases, \u00B5g/m\u00B3 for particulate matter). PM<sub>10</sub> values exceeding 1000 \u00B5g/m\u00B3 were invalidated prior to analysis.</div>
+    ${audit.analysisNotes ? '<div class="thresholds" style="margin-bottom:8px"><strong>Analysis Note:</strong> ' + escapeHtml(audit.analysisNotes) + '</div>' : ''}
+    <div class="thresholds">PM thresholds: Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. Gas thresholds: Intercept \u00B115, SD \u2264 15, RMSE \u2264 20. All parameters: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35. Intercept, SD, and RMSE in parameter units (ppb for gases, \u00B5g/m\u00B3 for PM). PM<sub>10</sub> values exceeding 1000 \u00B5g/m\u00B3 were invalidated prior to analysis.</div>
     </section>
 
     ${tsHtml ? `
