@@ -1,236 +1,134 @@
 // ===== QUANTAQ INTEGRATION =====
-// Connects to QuantAQ API to auto-detect sensor issues
+// Loads alerts from quantaq_alerts Supabase table.
+// The actual QuantAQ API calls happen in the Edge Function (quantaq-check).
+// This file handles: loading, rendering, filtering, acknowledging, and notes.
 
-const QUANTAQ_API = '/quantaq-api'; // Local proxy — will be Supabase Edge Function in production
 const QUANTAQ_OFFLINE_THRESHOLD_MIN = 60;
 
-// QuantAQ flag bitmask values
-const QUANTAQ_FLAGS = {
-    FLAG_STARTUP: 1,
-    FLAG_OPC: 2,        // PM sensor (optical particle counter)
-    FLAG_NEPH: 4,       // PM sensor (nephelometer)
-    FLAG_RHTP: 8,       // Temperature/humidity sensor
-    FLAG_CO: 16,
-    FLAG_NO: 32,
-    FLAG_NO2: 64,
-    FLAG_O3: 128,
-    FLAG_SD: 8192,      // SD card failure
-};
-
-// Map QuantAQ flags to app status names
-const QUANTAQ_FLAG_TO_STATUS = {
-    FLAG_OPC: 'PM Sensor Issue',
-    FLAG_NEPH: 'PM Sensor Issue',
-    FLAG_CO: 'Gaseous Sensor Issue',
-    FLAG_NO: 'Gaseous Sensor Issue',
-    FLAG_NO2: 'Gaseous Sensor Issue',
-    FLAG_O3: 'Gaseous Sensor Issue',
-    FLAG_SD: 'SD Card Issue',
-};
-
-// In-memory alert state
+// In-memory alert state (loaded from DB)
 let quantaqAlerts = [];
 let quantaqLastCheck = null;
 let quantaqChecking = false;
 let quantaqFilter = ''; // '' = all, or 'Offline', 'PM Sensor Issue', etc.
 
-// ===== API CALLS =====
+// ===== LOAD ALERTS FROM DATABASE =====
 
-async function quantaqApiCall(path) {
-    const resp = await fetch(QUANTAQ_API + path);
-    if (!resp.ok) throw new Error(`QuantAQ API error: ${resp.status}`);
-    return resp.json();
-}
-
-async function quantaqGetAllDevices() {
-    let all = [];
-    let page = 1;
-    let pages = 1;
-    while (page <= pages) {
-        const data = await quantaqApiCall(`/devices/?per_page=100&page=${page}`);
-        all = all.concat(data.data);
-        pages = data.meta.pages;
-        page++;
-    }
-    return all;
-}
-
-async function quantaqGetLatestRaw(sn) {
+async function loadQuantAQAlerts() {
     try {
-        const data = await quantaqApiCall(`/devices/${sn}/data/raw/?per_page=1&sort=timestamp,desc`);
-        return data.data?.[0] || null;
-    } catch(e) {
-        return null;
+        // Load all non-ancient alerts (active + recently resolved/acknowledged)
+        const { data, error } = await supa
+            .from('quantaq_alerts')
+            .select('*')
+            .order('detected_at', { ascending: false });
+
+        if (error) throw error;
+
+        quantaqAlerts = (data || []).map(row => ({
+            id: row.id,
+            sensorSn: row.sensor_sn,
+            sensorModel: row.sensor_model || '',
+            communityName: row.community_name || '',
+            issueType: row.issue_type,
+            detail: row.detail || '',
+            status: row.status,
+            isNew: row.is_new,
+            detectedAt: row.detected_at,
+            resolvedAt: row.resolved_at,
+            lastChecked: row.last_checked,
+            acknowledgedBy: row.acknowledged_by,
+            notes: row.notes || [],
+        }));
+
+        console.log(`[QuantAQ] Loaded ${quantaqAlerts.length} alerts from database`);
+    } catch (err) {
+        console.error('[QuantAQ] Failed to load alerts:', err);
     }
 }
 
-// ===== FLAG DECODING =====
-
-function quantaqDecodeFlags(flagValue) {
-    const active = [];
-    for (const [name, val] of Object.entries(QUANTAQ_FLAGS)) {
-        if (flagValue & val) active.push(name);
+async function loadQuantAQLastCheck() {
+    try {
+        const value = await db.getAppSetting('quantaq_last_check');
+        quantaqLastCheck = value || null;
+    } catch (err) {
+        console.error('[QuantAQ] Failed to load last check time:', err);
     }
-    return active;
 }
 
-function quantaqFlagsToStatuses(flags) {
-    const statuses = new Set();
-    for (const flag of flags) {
-        if (QUANTAQ_FLAG_TO_STATUS[flag]) statuses.add(QUANTAQ_FLAG_TO_STATUS[flag]);
+async function initQuantAQ() {
+    await Promise.all([
+        loadQuantAQAlerts(),
+        loadQuantAQLastCheck(),
+    ]);
+    renderDashboard();
+    if (document.getElementById('view-quantaq-alerts')?.classList.contains('active')) {
+        renderQuantAQAlertsView();
     }
-    return [...statuses];
 }
 
-// ===== MAIN CHECK =====
+// ===== RUN CHECK (calls Edge Function, then reloads from DB) =====
 
 async function runQuantAQCheck() {
     if (quantaqChecking) return;
     quantaqChecking = true;
-
-    const previousAlerts = [...quantaqAlerts];
-    const newAlerts = [];
-    const now = new Date();
+    updateQuantAQStatus('Running QuantAQ check...');
+    renderCheckButtons();
 
     try {
-        updateQuantAQStatus('Fetching sensor list...');
-        const devices = await quantaqGetAllDevices();
+        // Call the Edge Function
+        const session = await db.getSession();
+        const token = session?.access_token;
 
-        // Process in parallel batches of 10
-        const BATCH = 10;
-        for (let b = 0; b < devices.length; b += BATCH) {
-            const batch = devices.slice(b, b + BATCH);
-            updateQuantAQStatus(`Checking sensors ${b+1}–${Math.min(b+BATCH, devices.length)} of ${devices.length}...`);
-
-            await Promise.all(batch.map(async (d) => {
-                // Match to app sensor
-                const appSensor = sensors.find(s => s.id === d.sn);
-                const issues = [];
-
-                // Offline check
-                const lastSeen = new Date(d.last_seen + 'Z');
-                const minsSinceLastSeen = (now - lastSeen) / 60000;
-                if (minsSinceLastSeen > QUANTAQ_OFFLINE_THRESHOLD_MIN) {
-                    issues.push({
-                        type: 'Offline',
-                        detail: `Last seen ${quantaqTimeSince(d.last_seen)}`,
-                    });
-                }
-
-                // Flag check (only for online sensors — offline ones won't have fresh data)
-                if (minsSinceLastSeen <= QUANTAQ_OFFLINE_THRESHOLD_MIN) {
-                    const raw = await quantaqGetLatestRaw(d.sn);
-                    if (raw && raw.flag && raw.flag > 0) {
-                        const activeFlags = quantaqDecodeFlags(raw.flag);
-                        const nonStartup = activeFlags.filter(f => f !== 'FLAG_STARTUP');
-                        const statuses = quantaqFlagsToStatuses(nonStartup);
-                        for (const status of statuses) {
-                            issues.push({
-                                type: status,
-                                detail: `Flags: ${nonStartup.join(', ')} (raw: ${raw.flag})`,
-                                dataTimestamp: raw.timestamp,
-                            });
-                        }
-                    }
-                }
-
-                for (const issue of issues) {
-                    // Check if this alert already existed
-                    const existing = previousAlerts.find(a =>
-                        a.sensorSn === d.sn && a.issueType === issue.type && a.status === 'active'
-                    );
-
-                    if (existing) {
-                        // Ongoing alert — carry it forward
-                        newAlerts.push({ ...existing, lastChecked: now.toISOString(), detail: issue.detail });
-                    } else {
-                        // New alert
-                        newAlerts.push({
-                            id: 'qa_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                            sensorSn: d.sn,
-                            sensorModel: d.model,
-                            communityName: appSensor ? getCommunityName(appSensor.community) : (d.city || ''),
-                            issueType: issue.type,
-                            detail: issue.detail,
-                            status: 'active',
-                            isNew: true,
-                            detectedAt: now.toISOString(),
-                            lastChecked: now.toISOString(),
-                            acknowledgedBy: null,
-                            notes: [],
-                        });
-
-                        // Auto-update sensor status in the app
-                        if (appSensor && issue.type !== 'Offline') {
-                            const currentStatuses = getStatusArray(appSensor);
-                            if (!currentStatuses.includes(issue.type)) {
-                                appSensor.status = [...currentStatuses, issue.type];
-                                persistSensor(appSensor);
-                            }
-                        }
-                    }
-                }
-            }));
+        if (!token) {
+            throw new Error('Not authenticated. Please sign in first.');
         }
 
-        // Find resolved alerts (were active before, not in new alerts)
-        for (const prev of previousAlerts) {
-            if (prev.status === 'active') {
-                const stillActive = newAlerts.find(a =>
-                    a.sensorSn === prev.sensorSn && a.issueType === prev.issueType && a.status === 'active'
-                );
-                if (!stillActive) {
-                    // Resolved!
-                    newAlerts.push({
-                        ...prev,
-                        status: 'resolved',
-                        resolvedAt: now.toISOString(),
-                        isNew: true,
-                    });
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/quantaq-check', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json',
+            },
+            body: '{}',
+        });
 
-                    // Auto-remove status from sensor
-                    const appSensor = sensors.find(s => s.id === prev.sensorSn);
-                    if (appSensor && prev.issueType !== 'Offline') {
-                        const currentStatuses = getStatusArray(appSensor);
-                        const updated = currentStatuses.filter(st => st !== prev.issueType);
-                        if (updated.length !== currentStatuses.length) {
-                            appSensor.status = updated.length > 0 ? updated : ['Online'];
-                            persistSensor(appSensor);
-                        }
-                    }
-                }
-            }
+        if (!resp.ok) {
+            const errBody = await resp.text();
+            throw new Error(`Edge Function error ${resp.status}: ${errBody.slice(0, 200)}`);
         }
 
-        // Also carry forward acknowledged/resolved alerts from before (for history)
-        for (const prev of previousAlerts) {
-            if (prev.status === 'resolved' || prev.status === 'acknowledged') {
-                if (!newAlerts.find(a => a.id === prev.id)) {
-                    newAlerts.push({ ...prev, isNew: false });
-                }
-            }
-        }
+        const result = await resp.json();
+        console.log('[QuantAQ] Check result:', result);
 
-        quantaqAlerts = newAlerts;
-        quantaqLastCheck = now.toISOString();
-        updateQuantAQStatus('');
+        updateQuantAQStatus(
+            result.success
+                ? `Check complete: ${result.devices_checked} devices, ${result.new_alerts} new alerts, ${result.resolved_alerts} resolved`
+                : 'Check failed: ' + (result.error || 'Unknown error')
+        );
+
+        // Reload alerts from database
+        await loadQuantAQAlerts();
+        await loadQuantAQLastCheck();
+
+        // Re-render
         renderDashboard();
         if (document.getElementById('view-quantaq-alerts')?.classList.contains('active')) {
             renderQuantAQAlertsView();
         }
 
-    } catch(err) {
-        console.error('QuantAQ check failed:', err);
+    } catch (err) {
+        console.error('[QuantAQ] Check failed:', err);
         updateQuantAQStatus('Check failed: ' + err.message);
     } finally {
         quantaqChecking = false;
+        renderCheckButtons();
     }
 }
 
 // ===== HELPERS =====
 
 function quantaqTimeSince(dateStr) {
-    const diff = Date.now() - new Date(dateStr + 'Z').getTime();
+    const d = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+    const diff = Date.now() - new Date(d).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
@@ -242,6 +140,21 @@ function quantaqTimeSince(dateStr) {
 function updateQuantAQStatus(msg) {
     const el = document.getElementById('quantaq-status');
     if (el) el.textContent = msg;
+}
+
+function renderCheckButtons() {
+    // Update all "Run Check" buttons across dashboard and alerts view
+    const btns = document.querySelectorAll('[data-quantaq-check-btn]');
+    btns.forEach(btn => {
+        btn.disabled = quantaqChecking;
+        btn.textContent = quantaqChecking ? 'Checking...' : 'Run QuantAQ Check';
+    });
+    // Also the full-view button
+    const fullBtn = document.querySelector('#quantaq-alerts-content .btn-primary[onclick*="runQuantAQCheck"]');
+    if (fullBtn) {
+        fullBtn.disabled = quantaqChecking;
+        fullBtn.textContent = quantaqChecking ? 'Checking...' : 'Run Check Now';
+    }
 }
 
 // ===== DASHBOARD ALERTS (inline on dashboard) =====
@@ -424,7 +337,7 @@ function renderQuantAQAlertList(alerts, isNew) {
             : 'quantaq-badge-sd';
 
         const detectedStr = new Date(a.detectedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-        const duration = quantaqTimeSince(a.detectedAt.replace('Z', ''));
+        const duration = quantaqTimeSince(a.detectedAt);
 
         const notesHtml = a.notes.length > 0
             ? a.notes.map(n => `<div class="quantaq-note"><strong>${escapeHtml(n.by)}</strong> <span style="color:var(--slate-400)">${new Date(n.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span><br>${escapeHtml(n.text)}</div>`).join('')
@@ -462,25 +375,72 @@ function filterQuantAQAlerts(type) {
     }
 }
 
-// ===== ALERT ACTIONS =====
+// ===== ALERT ACTIONS (persisted to database) =====
 
-function acknowledgeQuantAQAlert(alertId) {
+async function acknowledgeQuantAQAlert(alertId) {
     const alert = quantaqAlerts.find(a => a.id === alertId);
     if (!alert) return;
-    alert.acknowledgedBy = currentUser || 'Unknown';
+
+    const userName = currentUser || 'Unknown';
+    alert.acknowledgedBy = userName;
+    alert.status = 'acknowledged';
+
+    // Persist to database
+    try {
+        const { error } = await supa
+            .from('quantaq_alerts')
+            .update({
+                acknowledged_by: userName,
+                status: 'acknowledged',
+            })
+            .eq('id', alertId);
+
+        if (error) {
+            console.error('[QuantAQ] Failed to persist acknowledge:', error);
+            alert.status = 'active'; // revert on failure
+            alert.acknowledgedBy = null;
+        }
+    } catch (err) {
+        console.error('[QuantAQ] Failed to persist acknowledge:', err);
+        alert.status = 'active';
+        alert.acknowledgedBy = null;
+    }
+
     renderQuantAQAlertsView();
+    renderDashboardAlerts();
 }
 
-function addQuantAQNote(alertId) {
+async function addQuantAQNote(alertId) {
     const alert = quantaqAlerts.find(a => a.id === alertId);
     if (!alert) return;
+
     const text = prompt('Add a note to this alert:');
     if (!text || !text.trim()) return;
-    alert.notes.push({
+
+    const noteEntry = {
         by: currentUser || 'Unknown',
         at: new Date().toISOString(),
         text: text.trim(),
-    });
-    renderQuantAQAlertsView();
-}
+    };
 
+    alert.notes.push(noteEntry);
+
+    // Persist to database (notes is a JSONB array)
+    try {
+        const { error } = await supa
+            .from('quantaq_alerts')
+            .update({ notes: alert.notes })
+            .eq('id', alertId);
+
+        if (error) {
+            console.error('[QuantAQ] Failed to persist note:', error);
+            alert.notes.pop(); // revert on failure
+        }
+    } catch (err) {
+        console.error('[QuantAQ] Failed to persist note:', err);
+        alert.notes.pop();
+    }
+
+    renderQuantAQAlertsView();
+    renderDashboardAlerts();
+}
