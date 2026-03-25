@@ -231,106 +231,96 @@ Deno.serve(async (req: Request) => {
     // --- Fetch all QuantAQ devices ---
     const devices = await getAllDevices(quantaqApiKey);
 
-    // --- Check each device for issues ---
+    // --- Separate offline vs online devices (offline detection is instant, no API call needed) ---
+    const onlineDevices: QuantAQDevice[] = [];
+    const offlineDevices: { device: QuantAQDevice; detail: string }[] = [];
+
+    for (const device of devices) {
+      const lastSeenStr = device.last_seen;
+      let lastSeenDate: Date | null = null;
+      if (lastSeenStr) {
+        lastSeenDate = new Date(
+          lastSeenStr.endsWith("Z") ? lastSeenStr : lastSeenStr + "Z"
+        );
+      }
+      const msSinceSeen = lastSeenDate ? Date.now() - lastSeenDate.getTime() : Infinity;
+
+      if (msSinceSeen > OFFLINE_THRESHOLD_MS) {
+        offlineDevices.push({
+          device,
+          detail: lastSeenDate ? `Last seen ${timeSinceStr(lastSeenDate.toISOString())}` : "Never seen",
+        });
+      } else {
+        onlineDevices.push(device);
+      }
+    }
+
+    console.log(`[QuantAQ Check] ${offlineDevices.length} offline, ${onlineDevices.length} online — fetching raw data for online sensors only`);
+
     // Track which existing alerts are still active
     const stillActiveIds = new Set<string>();
     const newAlertsToInsert: Partial<QuantAQAlert>[] = [];
     const sensorStatusUpdates: { sn: string; statuses: string[] }[] = [];
 
-    // Process in batches to avoid rate limits
-    const BATCH_SIZE = 10;
-    for (let i = 0; i < devices.length; i += BATCH_SIZE) {
-      const batch = devices.slice(i, i + BATCH_SIZE);
+    // --- Process offline devices (no API calls needed) ---
+    for (const { device, detail } of offlineDevices) {
+      const sn = device.sn;
+      const communityName = sensorCommunityMap[sn] || device.city || "";
+      const existing = (existingAlerts || []).find(
+        (a: QuantAQAlert) => a.sensor_sn === sn && a.issue_type === "Offline" && a.status === "active"
+      );
+
+      if (existing) {
+        stillActiveIds.add(existing.id);
+        await supabase.from("quantaq_alerts").update({ last_checked: now, detail, is_new: false }).eq("id", existing.id);
+      } else {
+        newAlertsToInsert.push({
+          sensor_sn: sn, sensor_model: device.model || null, community_name: communityName,
+          issue_type: "Offline", detail, status: "active", is_new: true, detected_at: now, last_checked: now, notes: [],
+        });
+      }
+    }
+
+    // --- Process online devices in large parallel batches (only these need raw data API calls) ---
+    const BATCH_SIZE = 15;
+    for (let i = 0; i < onlineDevices.length; i += BATCH_SIZE) {
+      const batch = onlineDevices.slice(i, i + BATCH_SIZE);
+      console.log(`[QuantAQ Check] Checking raw data batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(onlineDevices.length / BATCH_SIZE)}`);
 
       await Promise.all(
         batch.map(async (device) => {
           const sn = device.sn;
           const issues: { type: string; detail: string }[] = [];
+          const communityName = sensorCommunityMap[sn] || device.city || "";
 
-          // --- Check if offline ---
-          const lastSeenStr = device.last_seen;
-          let lastSeenDate: Date | null = null;
-          if (lastSeenStr) {
-            // QuantAQ sometimes returns without timezone — assume UTC
-            lastSeenDate = new Date(
-              lastSeenStr.endsWith("Z") ? lastSeenStr : lastSeenStr + "Z"
-            );
-          }
-
-          const msSinceSeen = lastSeenDate
-            ? Date.now() - lastSeenDate.getTime()
-            : Infinity;
-
-          if (msSinceSeen > OFFLINE_THRESHOLD_MS) {
-            issues.push({
-              type: "Offline",
-              detail: lastSeenDate
-                ? `Last seen ${timeSinceStr(lastSeenDate.toISOString())}`
-                : "Never seen",
-            });
-          } else {
-            // --- Online: check flag bitmask from latest raw data ---
-            const raw = await getLatestRawData(sn, quantaqApiKey);
-            if (raw && raw.flag && raw.flag > 0) {
-              // Ignore startup flag (bit 0 = 1)
-              const flagNoStartup = raw.flag & ~1;
-              if (flagNoStartup > 0) {
-                const issueTypes = decodeFlags(flagNoStartup);
-                const flagDesc = describeFlagBits(flagNoStartup);
-                for (const issueType of issueTypes) {
-                  issues.push({
-                    type: issueType,
-                    detail: `Flags: ${flagDesc} (raw: ${raw.flag})`,
-                  });
-                }
+          const raw = await getLatestRawData(sn, quantaqApiKey);
+          if (raw && raw.flag && raw.flag > 0) {
+            const flagNoStartup = raw.flag & ~1;
+            if (flagNoStartup > 0) {
+              const issueTypes = decodeFlags(flagNoStartup);
+              const flagDesc = describeFlagBits(flagNoStartup);
+              for (const issueType of issueTypes) {
+                issues.push({ type: issueType, detail: `Flags: ${flagDesc} (raw: ${raw.flag})` });
               }
             }
           }
 
-          // --- Match issues to existing alerts ---
-          const communityName =
-            sensorCommunityMap[sn] || device.city || "";
-
           for (const issue of issues) {
             const existing = (existingAlerts || []).find(
-              (a: QuantAQAlert) =>
-                a.sensor_sn === sn &&
-                a.issue_type === issue.type &&
-                a.status === "active"
+              (a: QuantAQAlert) => a.sensor_sn === sn && a.issue_type === issue.type && a.status === "active"
             );
-
             if (existing) {
-              // Alert persists — mark as still active and update last_checked + detail
               stillActiveIds.add(existing.id);
-              await supabase
-                .from("quantaq_alerts")
-                .update({
-                  last_checked: now,
-                  detail: issue.detail,
-                  is_new: false,
-                })
-                .eq("id", existing.id);
+              await supabase.from("quantaq_alerts").update({ last_checked: now, detail: issue.detail, is_new: false }).eq("id", existing.id);
             } else {
-              // New alert
               newAlertsToInsert.push({
-                sensor_sn: sn,
-                sensor_model: device.model || null,
-                community_name: communityName,
-                issue_type: issue.type,
-                detail: issue.detail,
-                status: "active",
-                is_new: true,
-                detected_at: now,
-                last_checked: now,
-                notes: [],
+                sensor_sn: sn, sensor_model: device.model || null, community_name: communityName,
+                issue_type: issue.type, detail: issue.detail, status: "active", is_new: true, detected_at: now, last_checked: now, notes: [],
               });
             }
           }
 
-          // --- Build sensor status update ---
-          const issueStatuses = issues
-            .filter((i) => i.type !== "Offline")
-            .map((i) => i.type);
+          const issueStatuses = issues.map((i) => i.type);
           if (issueStatuses.length > 0) {
             sensorStatusUpdates.push({ sn, statuses: issueStatuses });
           }

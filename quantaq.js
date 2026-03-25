@@ -70,7 +70,7 @@ async function initQuantAQ() {
 async function runQuantAQCheck() {
     if (quantaqChecking) return;
     quantaqChecking = true;
-    updateQuantAQStatus('Running QuantAQ check...');
+    updateQuantAQStatus('Running QuantAQ check — this may take 1–2 minutes...');
     renderCheckButtons();
 
     try {
