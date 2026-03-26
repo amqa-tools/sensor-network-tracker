@@ -1,0 +1,5 @@
+[project]
+id = "uejryzioxogquflijgyf"
+
+[functions.quantaq-check]
+verify_jwt = false
