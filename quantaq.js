@@ -352,7 +352,17 @@ function renderQuantAQAlertsView() {
 }
 
 function renderQuantAQAlertList(alerts, isNew) {
-    return alerts.map(a => {
+    // Deduplicate: group by sensor + issue type, keep the most recent
+    const seen = new Map();
+    for (const a of alerts) {
+        const key = a.sensorSn + '|' + a.issueType;
+        if (!seen.has(key) || new Date(a.detectedAt) > new Date(seen.get(key).detectedAt)) {
+            seen.set(key, a);
+        }
+    }
+    const deduped = [...seen.values()];
+
+    return deduped.map(a => {
         const isOffline = a.issueType === 'Lost Connection';
         const isResolved = a.status === 'resolved';
         const badgeClass = isResolved ? 'quantaq-badge-resolved'
@@ -368,14 +378,15 @@ function renderQuantAQAlertList(alerts, isNew) {
             ? a.notes.map(n => `<div class="quantaq-note"><strong>${escapeHtml(n.by)}</strong> <span style="color:var(--slate-400)">${new Date(n.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span><br>${escapeHtml(n.text)}</div>`).join('')
             : '';
 
+        const communityStr = a.communityName ? ` — ${escapeHtml(a.communityName)}` : '';
+
         return `<div class="quantaq-alert-card ${isNew ? 'new' : ''} ${isResolved ? 'resolved' : ''}">
             <div class="quantaq-alert-header">
-                <div>
-                    <span class="quantaq-alert-sn" onclick="showSensorDetail('${a.sensorSn}')">${a.sensorSn}</span>
+                <div class="quantaq-alert-title-row">
+                    <span class="quantaq-alert-sn" onclick="showSensorDetail('${a.sensorSn}')">${a.sensorSn}${communityStr}</span>
                     <span class="quantaq-badge ${badgeClass}">${a.issueType}</span>
                     ${isNew && !isResolved ? '<span class="quantaq-new-tag">NEW</span>' : ''}
                 </div>
-                <span class="quantaq-alert-community">${escapeHtml(a.communityName)}</span>
             </div>
             <div class="quantaq-alert-body">
                 <p class="quantaq-alert-detail">${escapeHtml(a.detail)}</p>

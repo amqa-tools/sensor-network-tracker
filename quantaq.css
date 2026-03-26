@@ -195,25 +195,25 @@
 }
 .quantaq-alert-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     padding: 12px 16px;
     background: var(--slate-50);
     border-bottom: 1px solid var(--slate-100);
 }
+.quantaq-alert-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
 .quantaq-alert-sn {
-    font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--navy-500);
     cursor: pointer;
 }
 .quantaq-alert-sn:hover {
     text-decoration: underline;
-}
-.quantaq-alert-community {
-    font-size: 12px;
-    color: var(--slate-400);
 }
 .quantaq-badge {
     display: inline-block;
