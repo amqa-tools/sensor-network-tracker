@@ -140,17 +140,10 @@ function updateQuantAQStatus(msg) {
 }
 
 function renderCheckButtons() {
-    // Update all "Run Check" buttons across dashboard and alerts view
-    const btns = document.querySelectorAll('[data-quantaq-check-btn]');
-    btns.forEach(btn => {
-        btn.disabled = quantaqChecking;
-        btn.textContent = quantaqChecking ? 'Checking...' : 'Run QuantAQ Check';
-    });
-    // Also the full-view button
-    const fullBtn = document.querySelector('#quantaq-alerts-content .btn-primary[onclick*="runQuantAQCheck"]');
-    if (fullBtn) {
-        fullBtn.disabled = quantaqChecking;
-        fullBtn.textContent = quantaqChecking ? 'Checking...' : 'Run Check Now';
+    const dashBtn = document.getElementById('dashboard-check-btn');
+    if (dashBtn) {
+        dashBtn.disabled = quantaqChecking;
+        dashBtn.textContent = quantaqChecking ? 'Checking...' : 'Run QuantAQ Check';
     }
 }
 
