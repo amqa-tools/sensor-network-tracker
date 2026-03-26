@@ -361,7 +361,25 @@ function renderQuantAQAlertList(alerts, isNew) {
             seen.set(key, a);
         }
     }
-    const deduped = [...seen.values()];
+
+    // Sort by priority: Lost Connection > PM > Gaseous > SD Card
+    // Sensors with multiple issues sort by their highest priority issue
+    const PRIORITY = { 'Lost Connection': 0, 'PM Sensor Issue': 1, 'Gaseous Sensor Issue': 2, 'SD Card Issue': 3 };
+    const sensorHighestPriority = {};
+    for (const a of seen.values()) {
+        const p = PRIORITY[a.issueType] ?? 99;
+        if (sensorHighestPriority[a.sensorSn] === undefined || p < sensorHighestPriority[a.sensorSn]) {
+            sensorHighestPriority[a.sensorSn] = p;
+        }
+    }
+    const deduped = [...seen.values()].sort((a, b) => {
+        const pa = sensorHighestPriority[a.sensorSn] ?? 99;
+        const pb = sensorHighestPriority[b.sensorSn] ?? 99;
+        if (pa !== pb) return pa - pb;
+        const ia = PRIORITY[a.issueType] ?? 99;
+        const ib = PRIORITY[b.issueType] ?? 99;
+        return ia - ib;
+    });
 
     return deduped.map(a => {
         const isOffline = a.issueType === 'Lost Connection';
