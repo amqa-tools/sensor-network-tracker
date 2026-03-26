@@ -200,7 +200,7 @@ function renderDashboardAlerts() {
         lastCheckEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
     }
 
-    const active = quantaqAlerts.filter(a => a.status === 'active');
+    const active = quantaqAlerts.filter(a => a.status === 'active' && !a.acknowledgedBy);
     const newAlerts = active.filter(a => a.isNew);
     const offline = active.filter(a => a.issueType === 'Lost Connection');
     const pmIssues = active.filter(a => a.issueType === 'PM Sensor Issue');
@@ -313,7 +313,7 @@ function renderQuantAQAlertsView() {
     const container = document.getElementById('quantaq-alerts-content');
     if (!container) return;
 
-    const active = quantaqAlerts.filter(a => a.status === 'active');
+    const active = quantaqAlerts.filter(a => a.status === 'active' && !a.acknowledgedBy);
     const newActive = active.filter(a => a.isNew);
     const ongoingActive = active.filter(a => !a.isNew);
     const resolved = quantaqAlerts.filter(a => a.status === 'resolved' && a.isNew);
