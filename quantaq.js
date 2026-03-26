@@ -113,9 +113,10 @@ async function runQuantAQCheck() {
         // Reload alerts from database
         await loadQuantAQAlerts();
         await loadQuantAQLastCheck();
+        console.log('[QuantAQ] After reload:', quantaqAlerts.length, 'alerts, lastCheck:', quantaqLastCheck);
 
-        // Re-render
-        renderDashboard();
+        // Re-render — call renderDashboardAlerts directly to avoid rebuilding entire dashboard
+        renderDashboardAlerts();
         if (document.getElementById('view-quantaq-alerts')?.classList.contains('active')) {
             renderQuantAQAlertsView();
         }
