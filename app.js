@@ -3202,6 +3202,16 @@ function renderTimeline(containerId, items) {
                 ${hasFullBody ? `<div class="timeline-text-full">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
                 ${tags ? `<div class="timeline-tags">${tags}</div>` : ''}
+                ${isNote ? `<div class="timeline-add-note">
+                    <div id="timeline-note-panel-${item.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100)">
+                        <textarea id="timeline-note-input-${item.id}" rows="2" placeholder="Add a follow-up note..." style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
+                        <div style="display:flex;gap:8px;margin-top:6px">
+                            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveTimelineFollowUp('${item.id}')">Save Note</button>
+                            <button class="btn btn-sm" onclick="event.stopPropagation(); document.getElementById('timeline-note-panel-${item.id}').style.display='none'">Cancel</button>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm" onclick="event.stopPropagation(); toggleTimelineNotePanel('${item.id}')" style="margin-top:8px;font-size:11px">Add Note</button>
+                </div>` : ''}
             </div>
         `;
     }).join('');
@@ -3237,6 +3247,40 @@ function renderNoteText(text) {
         return html;
     }
     return highlightMentions(escapeHtml(text));
+}
+
+function toggleTimelineNotePanel(noteId) {
+    const panel = document.getElementById('timeline-note-panel-' + noteId);
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+    if (panel.style.display !== 'none') {
+        const input = document.getElementById('timeline-note-input-' + noteId);
+        if (input) { input.value = ''; input.focus(); }
+    }
+}
+
+async function saveTimelineFollowUp(noteId) {
+    const input = document.getElementById('timeline-note-input-' + noteId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const userName = currentUser || 'Unknown';
+    note.text += `\n— ${userName} (${timestamp}): ${text}`;
+
+    try {
+        await supa.from('notes').update({ text: note.text }).eq('id', noteId);
+    } catch (err) {
+        console.error('Failed to save follow-up note:', err);
+    }
+
+    input.value = '';
+    document.getElementById('timeline-note-panel-' + noteId).style.display = 'none';
+    refreshCurrentView();
 }
 
 function editTimelineItem(id, isNote) {
