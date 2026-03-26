@@ -1505,6 +1505,34 @@ tr:last-child td {
     color: var(--slate-700);
 }
 
+.timeline-followups {
+    margin-top: 10px;
+    border-top: 1px solid var(--slate-100);
+    padding-top: 8px;
+}
+.timeline-followup-entry {
+    padding: 8px 12px;
+    margin-top: 6px;
+    background: var(--slate-50);
+    border-left: 3px solid var(--navy-300);
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.timeline-followup-entry strong {
+    color: var(--navy-500);
+    font-size: 12px;
+}
+.timeline-followup-date {
+    font-size: 11px;
+    color: var(--slate-400);
+    margin-left: 4px;
+}
+.timeline-followup-text {
+    color: var(--slate-600);
+    margin-top: 2px;
+}
+
 .timeline-text-preview {
     cursor: pointer;
 }

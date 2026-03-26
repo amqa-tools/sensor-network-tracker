@@ -3197,7 +3197,7 @@ function renderTimeline(containerId, items) {
                     </div>
                     ${actions}
                 </div>
-                <div class="timeline-text">${highlightMentions(escapeHtml(item.text))}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
+                <div class="timeline-text">${renderNoteText(item.text)}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
                 ${additionalInfoHtml}
                 ${hasFullBody ? `<div class="timeline-text-full">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
@@ -3205,6 +3205,38 @@ function renderTimeline(containerId, items) {
             </div>
         `;
     }).join('');
+}
+
+function renderNoteText(text) {
+    if (!text) return '';
+    // Check if this note has appended follow-up lines (QuantAQ pattern: \n— user (date): text)
+    if (text.includes('\n—')) {
+        const lines = text.split('\n');
+        const mainText = [];
+        const followUps = [];
+        for (const line of lines) {
+            if (line.startsWith('—')) {
+                followUps.push(line.substring(2).trim());
+            } else {
+                mainText.push(line);
+            }
+        }
+        let html = highlightMentions(escapeHtml(mainText.join('\n')));
+        if (followUps.length > 0) {
+            html += '<div class="timeline-followups">';
+            html += followUps.map(f => {
+                // Parse "User (Date): Text" pattern
+                const match = f.match(/^(.+?)\s*\((.+?)\):\s*(.+)$/);
+                if (match) {
+                    return `<div class="timeline-followup-entry"><strong>${escapeHtml(match[1])}</strong> <span class="timeline-followup-date">${escapeHtml(match[2])}</span><div class="timeline-followup-text">${highlightMentions(escapeHtml(match[3]))}</div></div>`;
+                }
+                return `<div class="timeline-followup-entry">${highlightMentions(escapeHtml(f))}</div>`;
+            }).join('');
+            html += '</div>';
+        }
+        return html;
+    }
+    return highlightMentions(escapeHtml(text));
 }
 
 function editTimelineItem(id, isNote) {
