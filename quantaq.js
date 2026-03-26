@@ -70,6 +70,7 @@ async function initQuantAQ() {
 async function runQuantAQCheck() {
     if (quantaqChecking) return;
     quantaqChecking = true;
+    console.log('[QuantAQ] Starting check, SUPABASE_URL:', SUPABASE_URL);
     let dots = 0;
     const progressInterval = setInterval(() => {
         dots = (dots + 1) % 4;

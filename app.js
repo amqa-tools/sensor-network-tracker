@@ -549,8 +549,8 @@ async function enterApp() {
 
     await loadAllData();
 
-    // Load QuantAQ alerts from database (non-blocking — runs in parallel with UI setup)
-    if (typeof initQuantAQ === 'function') initQuantAQ();
+    // Load QuantAQ alerts from database
+    if (typeof initQuantAQ === 'function') await initQuantAQ();
 
     document.getElementById('login-loading').style.display = 'none';
     document.getElementById('loading-overlay').style.display = 'none';
