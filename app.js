@@ -636,6 +636,7 @@ function toggleSetupMode() {
     // Re-render current view to reflect mode change
     const activeView = document.querySelector('.view.active');
     if (activeView) {
+        if (activeView.id === 'view-dashboard' && typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
         if (activeView.id === 'view-all-sensors') renderSensors();
         if (activeView.id === 'view-community' && currentCommunity) showCommunityView(currentCommunity);
         if (activeView.id === 'view-sensor-detail' && currentSensor) showSensorView(currentSensor);
