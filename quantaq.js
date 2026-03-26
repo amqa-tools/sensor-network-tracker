@@ -472,6 +472,7 @@ function renderQuantAQAlertList(alerts, isNew) {
                 <button class="btn btn-sm" onclick="showSensorDetail('${escapeHtml(a.sensorSn)}')">View Sensor</button>
                 ${!isResolved && !a.acknowledgedBy ? `<button class="btn btn-sm" style="color:var(--slate-400);border-color:var(--slate-200)" onclick="dismissQuantAQAlert('${a.id}')">Dismiss</button>` : ''}
                 ${a.acknowledgedBy ? `<span style="font-size:11px;color:var(--slate-400)">Dismissed by ${escapeHtml(a.acknowledgedBy)}</span> <button class="btn btn-sm" style="font-size:10px;color:var(--slate-400);border-color:var(--slate-200)" onclick="undismissQuantAQAlert('${a.id}')">Restore</button>` : ''}
+                ${setupMode && a.acknowledgedBy ? `<button class="btn btn-sm" style="font-size:10px;color:#dc2626;border-color:#fecdd3" onclick="deleteQuantAQAlert('${a.id}')">Delete</button>` : ''}
             </div>
             ${!isResolved && !a.acknowledgedBy ? `<div id="quantaq-dismiss-panel-${a.id}" class="quantaq-action-panel" style="display:none">
                 <p style="font-size:12px;font-weight:600;color:var(--slate-500);margin-bottom:6px">Dismiss Alert</p>
@@ -596,6 +597,18 @@ async function confirmUndismissQuantAQAlert(alertId) {
 
     renderQuantAQAlertsView();
     renderDashboardAlerts();
+}
+
+async function deleteQuantAQAlert(alertId) {
+    const idx = quantaqAlerts.findIndex(a => a.id === alertId);
+    if (idx < 0) return;
+    quantaqAlerts.splice(idx, 1);
+    renderDashboardAlerts();
+    try {
+        await supa.from('quantaq_alerts').delete().eq('id', alertId);
+    } catch (err) {
+        console.error('[QuantAQ] Failed to delete alert:', err);
+    }
 }
 
 function toggleQuantAQNotePanel(alertId) {
