@@ -3,8 +3,6 @@
 // The actual QuantAQ API calls happen in the Edge Function (quantaq-check).
 // This file handles: loading, rendering, filtering, acknowledging, and notes.
 
-const QUANTAQ_OFFLINE_THRESHOLD_MIN = 60;
-
 // In-memory alert state (loaded from DB)
 let quantaqAlerts = [];
 let quantaqLastCheck = null;
@@ -61,10 +59,9 @@ async function initQuantAQ() {
         loadQuantAQAlerts(),
         loadQuantAQLastCheck(),
     ]);
-    renderDashboard();
-    if (document.getElementById('view-quantaq-alerts')?.classList.contains('active')) {
-        renderQuantAQAlertsView();
-    }
+    // Don't call renderDashboard() here — the boot sequence in app.js
+    // will call restoreLastView() which renders the appropriate view.
+    // Calling it here would be premature (sidebar not built yet) and redundant.
 }
 
 // ===== RUN CHECK (calls Edge Function, then reloads from DB) =====
@@ -73,13 +70,13 @@ async function runQuantAQCheck() {
     if (quantaqChecking) return;
     quantaqChecking = true;
     console.log('[QuantAQ] Starting check, SUPABASE_URL:', SUPABASE_URL);
+    const checkStartTime = Date.now();
     let dots = 0;
     const progressInterval = setInterval(() => {
         dots = (dots + 1) % 4;
         const elapsed = Math.floor((Date.now() - checkStartTime) / 1000);
         updateQuantAQStatus(`Checking ~71 sensors with QuantAQ${'.'.repeat(dots)}  (${elapsed}s elapsed)`);
     }, 500);
-    const checkStartTime = Date.now();
     updateQuantAQStatus('Checking ~71 sensors with QuantAQ...');
     renderCheckButtons();
 
@@ -111,11 +108,7 @@ async function runQuantAQCheck() {
             throw new Error(result.error || 'Check returned failure');
         }
 
-        updateQuantAQStatus(
-            result.success
-                ? `Check complete: ${result.devices_checked} devices, ${result.new_alerts} new alerts, ${result.resolved_alerts} resolved`
-                : 'Check failed: ' + (result.error || 'Unknown error')
-        );
+        updateQuantAQStatus(`Check complete: ${result.devices_checked} devices, ${result.new_alerts} new alerts, ${result.resolved_alerts} resolved`);
 
         // Reload alerts from database
         await loadQuantAQAlerts();
@@ -155,6 +148,9 @@ function quantaqTimeSince(dateStr) {
 function updateQuantAQStatus(msg) {
     const el = document.getElementById('quantaq-status');
     if (el) el.textContent = msg;
+    // Also update the alerts view status (separate element to avoid duplicate IDs)
+    const el2 = document.getElementById('quantaq-alerts-view-status');
+    if (el2) el2.textContent = msg;
 }
 
 function renderCheckButtons() {
@@ -330,7 +326,7 @@ function renderQuantAQAlertsView() {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
             <div>
                 <p style="font-size:13px;color:var(--slate-500)">Last check: ${lastCheckStr}</p>
-                <span id="quantaq-status" style="font-size:11px;color:var(--slate-400)"></span>
+                <span id="quantaq-alerts-view-status" style="font-size:11px;color:var(--slate-400)"></span>
             </div>
             <button class="btn btn-primary" onclick="runQuantAQCheck()" ${quantaqChecking ? 'disabled' : ''}>
                 ${quantaqChecking ? 'Checking...' : 'Run Check Now'}
@@ -432,7 +428,7 @@ function renderQuantAQAlertList(alerts, isNew) {
         return `<div class="quantaq-alert-card ${isNew ? 'new' : ''} ${isResolved ? 'resolved' : ''}">
             <div class="quantaq-alert-header">
                 <div class="quantaq-alert-title-row">
-                    <span class="quantaq-alert-sn" onclick="showSensorDetail('${a.sensorSn}')">${a.sensorSn}${communityStr}</span>
+                    <span class="quantaq-alert-sn" onclick="showSensorDetail('${escapeHtml(a.sensorSn)}')">${escapeHtml(a.sensorSn)}${communityStr}</span>
                     <span class="quantaq-badge ${badgeClass}">${a.issueType}</span>
                     ${isNew && !isResolved ? '<span class="quantaq-new-tag">NEW</span>' : ''}
                 </div>
@@ -443,7 +439,7 @@ function renderQuantAQAlertList(alerts, isNew) {
                 ${notesHtml}
             </div>
             <div class="quantaq-alert-actions">
-                <button class="btn btn-sm" onclick="openQuantAQEventNote('${a.sensorSn}', '${escapeHtml(a.issueType)}')">Open Event Note</button>
+                <button class="btn btn-sm" onclick="openQuantAQEventNote('${escapeHtml(a.sensorSn)}', '${escapeHtml(a.issueType)}')">Open Event Note</button>
                 ${!isResolved && !a.acknowledgedBy ? `<button class="btn btn-sm" style="color:var(--slate-400);border-color:var(--slate-200)" onclick="dismissQuantAQAlert('${a.id}')">Dismiss</button>` : ''}
                 ${a.acknowledgedBy ? `<span style="font-size:11px;color:var(--slate-400)">Dismissed by ${escapeHtml(a.acknowledgedBy)}</span>` : ''}
             </div>

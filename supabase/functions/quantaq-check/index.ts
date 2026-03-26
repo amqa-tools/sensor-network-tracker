@@ -463,37 +463,35 @@ Deno.serve(async (req: Request) => {
             console.error(`[QuantAQ Check] Resolve note error for ${alert.sensor_sn}:`, resolveNoteCreateErr);
           }
 
-          if (alert.issue_type !== "Lost Connection") {
-            // Check if this sensor has any OTHER active alerts of the same type
-            const otherActive = (existingAlerts || []).find(
-              (a: QuantAQAlert) =>
-                a.sensor_sn === alert.sensor_sn &&
-                a.issue_type === alert.issue_type &&
-                a.id !== alert.id &&
-                stillActiveIds.has(a.id)
-            );
-            if (!otherActive) {
-              // Remove this status from the sensor
-              const { data: sensorRow } = await supabase
+          // Check if this sensor has any OTHER active alerts of the same type
+          const otherActive = (existingAlerts || []).find(
+            (a: QuantAQAlert) =>
+              a.sensor_sn === alert.sensor_sn &&
+              a.issue_type === alert.issue_type &&
+              a.id !== alert.id &&
+              stillActiveIds.has(a.id)
+          );
+          if (!otherActive) {
+            // Remove this status from the sensor
+            const { data: sensorRow } = await supabase
+              .from("sensors")
+              .select("status")
+              .eq("id", alert.sensor_sn)
+              .single();
+
+            if (sensorRow && Array.isArray(sensorRow.status)) {
+              const updatedStatuses = sensorRow.status.filter(
+                (s: string) => s !== alert.issue_type
+              );
+              // If no statuses left, set to Online
+              const finalStatuses =
+                updatedStatuses.length > 0 ? updatedStatuses : ["Online"];
+              await supabase
                 .from("sensors")
-                .select("status")
-                .eq("id", alert.sensor_sn)
-                .single();
+                .update({ status: finalStatuses, updated_at: now })
+                .eq("id", alert.sensor_sn);
 
-              if (sensorRow && Array.isArray(sensorRow.status)) {
-                const updatedStatuses = sensorRow.status.filter(
-                  (s: string) => s !== alert.issue_type
-                );
-                // If no statuses left, set to Online
-                const finalStatuses =
-                  updatedStatuses.length > 0 ? updatedStatuses : ["Online"];
-                await supabase
-                  .from("sensors")
-                  .update({ status: finalStatuses, updated_at: now })
-                  .eq("id", alert.sensor_sn);
-
-                console.log(`[QuantAQ Check] Resolved ${alert.issue_type} on ${alert.sensor_sn}, status now: ${finalStatuses.join(', ')}`);
-              }
+              console.log(`[QuantAQ Check] Resolved ${alert.issue_type} on ${alert.sensor_sn}, status now: ${finalStatuses.join(', ')}`);
             }
           }
         }
@@ -518,8 +516,8 @@ Deno.serve(async (req: Request) => {
         const finalStatuses = [...merged];
 
         if (
-          finalStatuses.sort().join(",") !==
-          currentStatuses.sort().join(",")
+          [...finalStatuses].sort().join(",") !==
+          [...currentStatuses].sort().join(",")
         ) {
           await supabase
             .from("sensors")

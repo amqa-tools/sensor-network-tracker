@@ -549,8 +549,11 @@ async function enterApp() {
 
     await loadAllData();
 
-    // Load QuantAQ alerts from database
-    if (typeof initQuantAQ === 'function') await initQuantAQ();
+    // Load QuantAQ alerts from database (wrapped in try/catch so a QuantAQ
+    // failure never prevents the main app from loading)
+    if (typeof initQuantAQ === 'function') {
+        try { await initQuantAQ(); } catch (e) { console.error('[QuantAQ] Init failed, continuing without alerts:', e); }
+    }
 
     document.getElementById('login-loading').style.display = 'none';
     document.getElementById('loading-overlay').style.display = 'none';

@@ -74,36 +74,7 @@
 
 /* ===== QUANTAQ INTEGRATION STYLES ===== */
 
-/* Dashboard Card */
-.quantaq-card {
-    background: white;
-    border: 1px solid var(--slate-200);
-    border-radius: 10px;
-    padding: 20px;
-}
-.quantaq-card.has-issues {
-    border-left: 4px solid #dc2626;
-}
-.quantaq-card.all-clear {
-    border-left: 4px solid #16a34a;
-}
-.quantaq-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-}
-.quantaq-card-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--navy-500);
-    margin: 0;
-}
-.quantaq-card-subtitle {
-    font-size: 11px;
-    color: var(--slate-400);
-    margin-top: 2px;
-}
+/* Filter Count Cards */
 .quantaq-counts {
     display: flex;
     gap: 12px;
@@ -153,16 +124,7 @@
     color: #16a34a;
     margin: 4px 0;
 }
-.quantaq-all-clear {
-    text-align: center;
-    padding: 20px;
-    color: #16a34a;
-}
-.quantaq-all-clear p {
-    font-size: 14px;
-    font-weight: 600;
-    margin-top: 6px;
-}
+/* .quantaq-all-clear removed — unused; "All Clear" uses .quantaq-empty with inline styles */
 
 /* Alerts View */
 .quantaq-summary-row {
