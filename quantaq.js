@@ -414,8 +414,7 @@ function renderQuantAQAlertList(alerts, isNew) {
                 ${notesHtml}
             </div>
             <div class="quantaq-alert-actions">
-                ${!isResolved ? `<button class="btn btn-sm" onclick="addQuantAQEventNote('${a.id}')">Add Event Note</button>` : ''}
-                ${a.eventNoteId ? `<button class="btn btn-sm" onclick="showSensorDetail('${a.sensorSn}')">Open Event Note</button>` : ''}
+                <button class="btn btn-sm" onclick="openQuantAQEventNote('${a.sensorSn}', '${escapeHtml(a.issueType)}')">Open Event Note</button>
                 ${!isResolved && !a.acknowledgedBy ? `<button class="btn btn-sm" style="color:var(--slate-400);border-color:var(--slate-200)" onclick="dismissQuantAQAlert('${a.id}')">Dismiss</button>` : ''}
                 ${a.acknowledgedBy ? `<span style="font-size:11px;color:var(--slate-400)">Dismissed by ${escapeHtml(a.acknowledgedBy)}</span>` : ''}
             </div>
@@ -453,54 +452,7 @@ async function dismissQuantAQAlert(alertId) {
     renderDashboardAlerts();
 }
 
-async function addQuantAQEventNote(alertId) {
-    const alert = quantaqAlerts.find(a => a.id === alertId);
-    if (!alert) return;
-
-    const text = prompt('Add an event note for this alert:');
-    if (!text || !text.trim()) return;
-
-    // Find the sensor and its community in the app
-    const sensor = sensors.find(s => s.id === alert.sensorSn);
-    const communityId = sensor?.community || '';
-
-    // Create an event history note tagged to the sensor and community
-    const noteText = `QuantAQ Auto-Flag: ${alert.issueType}. ${text.trim()}`;
-    const note = createNote('Issue', noteText, {
-        sensors: [alert.sensorSn],
-        communities: communityId ? [communityId] : [],
-        contacts: [],
-    });
-
-    // Store the note ID on the alert so we can link to it
-    const noteEntry = {
-        by: currentUser || 'Unknown',
-        at: new Date().toISOString(),
-        text: text.trim(),
-        noteId: note?.id || null,
-    };
-    alert.notes.push(noteEntry);
-    alert.eventNoteId = note?.id || null;
-
-    // Persist to quantaq_alerts
-    try {
-        await supa.from('quantaq_alerts').update({
-            notes: alert.notes,
-        }).eq('id', alertId);
-    } catch (err) {
-        console.error('[QuantAQ] Failed to persist event note:', err);
-    }
-
-    // Auto-update sensor status if not already set
-    if (sensor && alert.issueType !== 'Lost Connection') {
-        const currentStatuses = getStatusArray(sensor);
-        if (!currentStatuses.includes(alert.issueType)) {
-            sensor.status = [...currentStatuses.filter(s => s !== 'Online'), alert.issueType];
-            persistSensor(sensor);
-        }
-    }
-
-    renderQuantAQAlertsView();
-    renderDashboardAlerts();
-    buildSensorSidebar();
+function openQuantAQEventNote(sensorSn, issueType) {
+    // Navigate to the sensor's detail page — the auto-generated note is in the history
+    showSensorDetail(sensorSn);
 }
