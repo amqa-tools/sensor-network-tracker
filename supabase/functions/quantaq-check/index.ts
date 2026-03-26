@@ -312,7 +312,7 @@ Deno.serve(async (req: Request) => {
     console.log(`[QuantAQ Check] Skipped ${skippedExpectedOffline} sensors (expected offline due to status)`);
 
     // --- Process online devices in large parallel batches (only these need raw data API calls) ---
-    const BATCH_SIZE = 15;
+    const BATCH_SIZE = 25;
     for (let i = 0; i < onlineDevices.length; i += BATCH_SIZE) {
       const batch = onlineDevices.slice(i, i + BATCH_SIZE);
       console.log(`[QuantAQ Check] Checking raw data batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(onlineDevices.length / BATCH_SIZE)}`);

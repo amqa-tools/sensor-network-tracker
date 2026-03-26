@@ -81,19 +81,32 @@ async function runQuantAQCheck() {
     renderCheckButtons();
 
     try {
-        // Call the Edge Function via Supabase client (handles auth automatically)
-        const { data: result, error: fnError } = await supa.functions.invoke('quantaq-check', {
-            body: {},
-        });
+        // Call the Edge Function with a long timeout (5 minutes)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000);
 
-        if (fnError) {
-            throw new Error(fnError.message || 'Edge Function call failed');
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/quantaq-check', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+                'Content-Type': 'application/json',
+            },
+            body: '{}',
+            signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (!resp.ok) {
+            const errText = await resp.text().catch(() => '');
+            throw new Error(`Check failed (${resp.status}): ${errText.slice(0, 200)}`);
         }
-        // result might be a string if the function returned an error
-        if (typeof result === 'string') {
-            try { const parsed = JSON.parse(result); if (!parsed.success) throw new Error(parsed.error || result); } catch(e) { if (e.message !== result) throw e; }
-        }
+
+        const result = await resp.json();
         console.log('[QuantAQ] Check result:', result);
+
+        if (result && !result.success) {
+            throw new Error(result.error || 'Check returned failure');
+        }
 
         updateQuantAQStatus(
             result.success
