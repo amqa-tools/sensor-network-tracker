@@ -425,23 +425,21 @@ function renderQuantAQAlertList(alerts, isNew) {
 
         const communityStr = a.communityName ? ` — ${escapeHtml(a.communityName)}` : '';
 
-        // Find the auto-generated event note for this alert
+        // Find the auto-generated event note and show any appended follow-ups
         const eventNote = notes.find(n =>
             n.text && n.text.includes('QuantAQ Auto-Flag') &&
             n.text.includes(a.issueType) &&
             n.taggedSensors && n.taggedSensors.includes(a.sensorSn)
         );
-        const eventNoteId = eventNote?.id || '';
 
-        // Build existing follow-up notes on this event
-        const eventNotes = eventNote ? notes.filter(n =>
-            n.text && n.taggedSensors?.includes(a.sensorSn) &&
-            !n.text.includes('QuantAQ Auto-Flag') && !n.text.includes('QuantAQ Auto-Resolved') &&
-            new Date(n.date || n.createdAt) >= new Date(a.detectedAt)
-        ) : [];
-        const followUpHtml = eventNotes.map(n =>
-            `<div class="quantaq-followup-note"><strong>${escapeHtml(n.createdBy || '')}</strong> <span style="color:var(--slate-400);font-size:11px">${formatDate(n.date || n.createdAt)}</span><br>${escapeHtml(n.text)}</div>`
-        ).join('');
+        // Extract follow-up lines (appended after the original auto-flag text)
+        let followUpHtml = '';
+        if (eventNote && eventNote.text.includes('\n—')) {
+            const lines = eventNote.text.split('\n').filter(l => l.startsWith('—'));
+            followUpHtml = lines.map(l =>
+                `<div class="quantaq-followup-note">${escapeHtml(l.substring(2))}</div>`
+            ).join('');
+        }
 
         return `<div class="quantaq-alert-card ${isNew ? 'new' : ''} ${isResolved ? 'resolved' : ''}">
             <div class="quantaq-alert-header">
@@ -526,19 +524,40 @@ async function saveQuantAQFollowUp(alertId, sensorSn) {
     const text = input.value.trim();
     if (!text) return;
 
-    const sensor = sensors.find(s => s.id === sensorSn);
-    const communityId = sensor?.community || '';
+    const alert = quantaqAlerts.find(a => a.id === alertId);
+    if (!alert) return;
 
-    // Create a follow-up note in event history tagged to the sensor
-    createNote('Issue', text, {
-        sensors: [sensorSn],
-        communities: communityId ? [communityId] : [],
-        contacts: [],
-    });
+    // Find the auto-generated event note for this alert
+    const eventNote = notes.find(n =>
+        n.text && n.text.includes('QuantAQ Auto-Flag') &&
+        n.text.includes(alert.issueType) &&
+        n.taggedSensors && n.taggedSensors.includes(sensorSn)
+    );
+
+    if (eventNote) {
+        // Append the follow-up to the existing note
+        const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        const userName = currentUser || 'Unknown';
+        eventNote.text += `\n— ${userName} (${timestamp}): ${text}`;
+
+        // Persist to database
+        try {
+            await supa.from('notes').update({ text: eventNote.text }).eq('id', eventNote.id);
+        } catch (err) {
+            console.error('[QuantAQ] Failed to update note:', err);
+        }
+    } else {
+        // No auto-generated note found — create a new one
+        const sensor = sensors.find(s => s.id === sensorSn);
+        const communityId = sensor?.community || '';
+        createNote('Issue', `QuantAQ Alert: ${alert.issueType} — ${text}`, {
+            sensors: [sensorSn],
+            communities: communityId ? [communityId] : [],
+            contacts: [],
+        });
+    }
 
     input.value = '';
     document.getElementById('quantaq-note-panel-' + alertId).style.display = 'none';
-
-    // Re-render to show the new note
     renderDashboardAlerts();
 }
