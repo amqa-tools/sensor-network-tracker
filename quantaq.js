@@ -10,6 +10,7 @@ let quantaqAlerts = [];
 let quantaqLastCheck = null;
 let quantaqChecking = false;
 let quantaqFilter = ''; // '' = all, or 'Lost Connection', 'PM Sensor Issue', etc.
+let quantaqTab = 'active'; // 'active' or 'dismissed'
 
 // ===== LOAD ALERTS FROM DATABASE =====
 
@@ -211,7 +212,9 @@ function renderDashboardAlerts() {
     const sdIssues = active.filter(a => a.issueType === 'SD Card Issue');
     const resolved = quantaqAlerts.filter(a => a.status === 'resolved' && a.isNew);
 
-    if (active.length === 0 && resolved.length === 0 && !quantaqLastCheck) {
+    const dismissed = quantaqAlerts.filter(a => a.acknowledgedBy);
+
+    if (active.length === 0 && resolved.length === 0 && dismissed.length === 0 && !quantaqLastCheck) {
         container.innerHTML = `<div class="quantaq-empty" style="padding:24px">
             <p style="font-size:14px;color:var(--slate-400)">Click "Run QuantAQ Check" to scan all sensors for issues.</p>
         </div>`;
@@ -219,6 +222,32 @@ function renderDashboardAlerts() {
     }
 
     let html = '';
+
+    // Tabs
+    html += `<div class="quantaq-tabs">
+        <button class="quantaq-tab ${quantaqTab === 'active' ? 'active' : ''}" onclick="switchQuantAQTab('active')">Active Alerts</button>
+        <button class="quantaq-tab ${quantaqTab === 'dismissed' ? 'active' : ''}" onclick="switchQuantAQTab('dismissed')">Dismissed${dismissed.length > 0 ? ` (${dismissed.length})` : ''}</button>
+    </div>`;
+
+    if (quantaqTab === 'dismissed') {
+        // Sort by most recently dismissed (use the last note timestamp or detected time)
+        const sortedDismissed = [...dismissed].sort((a, b) => {
+            const aTime = a.notes?.length ? a.notes[a.notes.length - 1].at : a.detectedAt;
+            const bTime = b.notes?.length ? b.notes[b.notes.length - 1].at : b.detectedAt;
+            return new Date(bTime || 0) - new Date(aTime || 0);
+        });
+
+        if (sortedDismissed.length > 0) {
+            html += renderQuantAQAlertList(sortedDismissed, false);
+        } else {
+            html += `<div class="quantaq-empty" style="padding:24px">
+                <p style="font-size:13px;color:var(--slate-400)">No dismissed alerts.</p>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+        return;
+    }
 
     // Alert counts row — clickable to filter
     if (active.length > 0) {
@@ -420,6 +449,13 @@ function renderQuantAQAlertList(alerts, isNew) {
             </div>
         </div>`;
     }).join('');
+}
+
+// ===== TABS =====
+
+function switchQuantAQTab(tab) {
+    quantaqTab = tab;
+    renderDashboardAlerts();
 }
 
 // ===== FILTER =====

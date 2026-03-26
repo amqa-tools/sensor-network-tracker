@@ -46,6 +46,32 @@
     .dash-stat-bar-item { min-width: 30%; }
 }
 
+/* ===== QUANTAQ TABS ===== */
+.quantaq-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--slate-200);
+}
+.quantaq-tab {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--slate-400);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: color 0.15s, border-color 0.15s;
+}
+.quantaq-tab:hover { color: var(--navy-500); }
+.quantaq-tab.active {
+    color: var(--navy-500);
+    border-bottom-color: var(--navy-500);
+}
+
 /* ===== QUANTAQ INTEGRATION STYLES ===== */
 
 /* Dashboard Card */
