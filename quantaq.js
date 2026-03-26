@@ -137,10 +137,10 @@ async function runQuantAQCheck() {
 // ===== HELPERS =====
 
 function quantaqTimeSince(dateStr) {
-    if (!dateStr) return 'Unknown';
+    if (!dateStr) return '';
     const d = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
     const diff = Date.now() - new Date(d).getTime();
-    if (isNaN(diff)) return 'Unknown';
+    if (isNaN(diff) || diff < 0) return '';
     const mins = Math.floor(diff / 60000);
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
@@ -390,7 +390,7 @@ function renderQuantAQAlertList(alerts, isNew) {
             </div>
             <div class="quantaq-alert-body">
                 <p class="quantaq-alert-detail">${escapeHtml(a.detail)}</p>
-                <p class="quantaq-alert-meta">Detected: ${detectedStr} (${duration})${isResolved ? ` · Resolved: ${new Date(a.resolvedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</p>
+                <p class="quantaq-alert-meta">Detected: ${detectedStr}${duration ? ` (${duration})` : ''}${isResolved ? ` · Resolved: ${new Date(a.resolvedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</p>
                 ${notesHtml}
             </div>
             ${!isResolved ? `<div class="quantaq-alert-actions">
