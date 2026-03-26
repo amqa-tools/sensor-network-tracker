@@ -254,6 +254,21 @@
     margin-top: 8px;
     line-height: 1.5;
 }
+.quantaq-followup-note {
+    background: var(--slate-50);
+    border-left: 3px solid var(--navy-300);
+    border-radius: 0 6px 6px 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--slate-600);
+    margin-top: 8px;
+    line-height: 1.5;
+}
+.quantaq-note-panel {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--slate-100);
+}
 .quantaq-empty {
     text-align: center;
     padding: 48px 20px;

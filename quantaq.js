@@ -425,6 +425,24 @@ function renderQuantAQAlertList(alerts, isNew) {
 
         const communityStr = a.communityName ? ` — ${escapeHtml(a.communityName)}` : '';
 
+        // Find the auto-generated event note for this alert
+        const eventNote = notes.find(n =>
+            n.text && n.text.includes('QuantAQ Auto-Flag') &&
+            n.text.includes(a.issueType) &&
+            n.taggedSensors && n.taggedSensors.includes(a.sensorSn)
+        );
+        const eventNoteId = eventNote?.id || '';
+
+        // Build existing follow-up notes on this event
+        const eventNotes = eventNote ? notes.filter(n =>
+            n.text && n.taggedSensors?.includes(a.sensorSn) &&
+            !n.text.includes('QuantAQ Auto-Flag') && !n.text.includes('QuantAQ Auto-Resolved') &&
+            new Date(n.date || n.createdAt) >= new Date(a.detectedAt)
+        ) : [];
+        const followUpHtml = eventNotes.map(n =>
+            `<div class="quantaq-followup-note"><strong>${escapeHtml(n.createdBy || '')}</strong> <span style="color:var(--slate-400);font-size:11px">${formatDate(n.date || n.createdAt)}</span><br>${escapeHtml(n.text)}</div>`
+        ).join('');
+
         return `<div class="quantaq-alert-card ${isNew ? 'new' : ''} ${isResolved ? 'resolved' : ''}">
             <div class="quantaq-alert-header">
                 <div class="quantaq-alert-title-row">
@@ -436,10 +454,18 @@ function renderQuantAQAlertList(alerts, isNew) {
             <div class="quantaq-alert-body">
                 <p class="quantaq-alert-detail">${escapeHtml(a.detail)}</p>
                 <p class="quantaq-alert-meta">Detected: ${detectedStr}${duration ? ` (${duration})` : ''}${isResolved ? ` · Resolved: ${new Date(a.resolvedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</p>
-                ${notesHtml}
+                ${followUpHtml}
+                <div id="quantaq-note-panel-${a.id}" class="quantaq-note-panel" style="display:none">
+                    <textarea id="quantaq-note-input-${a.id}" rows="2" placeholder="Add a follow-up note..." style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical;margin-top:8px"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:6px">
+                        <button class="btn btn-sm btn-primary" onclick="saveQuantAQFollowUp('${a.id}', '${escapeHtml(a.sensorSn)}')">Save Note</button>
+                        <button class="btn btn-sm" onclick="document.getElementById('quantaq-note-panel-${a.id}').style.display='none'">Cancel</button>
+                    </div>
+                </div>
             </div>
             <div class="quantaq-alert-actions">
-                <button class="btn btn-sm" onclick="openQuantAQEventNote('${escapeHtml(a.sensorSn)}', '${escapeHtml(a.issueType)}')">Open Event Note</button>
+                <button class="btn btn-sm" onclick="toggleQuantAQNotePanel('${a.id}')">Add Note</button>
+                <button class="btn btn-sm" onclick="showSensorDetail('${escapeHtml(a.sensorSn)}')">View Sensor</button>
                 ${!isResolved && !a.acknowledgedBy ? `<button class="btn btn-sm" style="color:var(--slate-400);border-color:var(--slate-200)" onclick="dismissQuantAQAlert('${a.id}')">Dismiss</button>` : ''}
                 ${a.acknowledgedBy ? `<span style="font-size:11px;color:var(--slate-400)">Dismissed by ${escapeHtml(a.acknowledgedBy)}</span>` : ''}
             </div>
@@ -484,7 +510,35 @@ async function dismissQuantAQAlert(alertId) {
     renderDashboardAlerts();
 }
 
-function openQuantAQEventNote(sensorSn, issueType) {
-    // Navigate to the sensor's detail page — the auto-generated note is in the history
-    showSensorDetail(sensorSn);
+function toggleQuantAQNotePanel(alertId) {
+    const panel = document.getElementById('quantaq-note-panel-' + alertId);
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+    if (panel.style.display !== 'none') {
+        const input = document.getElementById('quantaq-note-input-' + alertId);
+        if (input) { input.value = ''; input.focus(); }
+    }
+}
+
+async function saveQuantAQFollowUp(alertId, sensorSn) {
+    const input = document.getElementById('quantaq-note-input-' + alertId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    const sensor = sensors.find(s => s.id === sensorSn);
+    const communityId = sensor?.community || '';
+
+    // Create a follow-up note in event history tagged to the sensor
+    createNote('Issue', text, {
+        sensors: [sensorSn],
+        communities: communityId ? [communityId] : [],
+        contacts: [],
+    });
+
+    input.value = '';
+    document.getElementById('quantaq-note-panel-' + alertId).style.display = 'none';
+
+    // Re-render to show the new note
+    renderDashboardAlerts();
 }
