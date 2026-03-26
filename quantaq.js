@@ -137,8 +137,10 @@ async function runQuantAQCheck() {
 // ===== HELPERS =====
 
 function quantaqTimeSince(dateStr) {
+    if (!dateStr) return 'Unknown';
     const d = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
     const diff = Date.now() - new Date(d).getTime();
+    if (isNaN(diff)) return 'Unknown';
     const mins = Math.floor(diff / 60000);
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
