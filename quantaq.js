@@ -82,6 +82,10 @@ async function runQuantAQCheck() {
         if (fnError) {
             throw new Error(fnError.message || 'Edge Function call failed');
         }
+        // result might be a string if the function returned an error
+        if (typeof result === 'string') {
+            try { const parsed = JSON.parse(result); if (!parsed.success) throw new Error(parsed.error || result); } catch(e) { if (e.message !== result) throw e; }
+        }
         console.log('[QuantAQ] Check result:', result);
 
         updateQuantAQStatus(
