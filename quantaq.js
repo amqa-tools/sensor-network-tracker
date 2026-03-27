@@ -163,6 +163,7 @@ async function runQuantAQCheck() {
         for (let i = 0; i < onlineDevices.length; i += BATCH) {
             const batch = onlineDevices.slice(i, i + BATCH);
             updateQuantAQStatus(`Checking sensors ${i + 1}–${Math.min(i + BATCH, onlineDevices.length)} of ${onlineDevices.length}...`);
+            await new Promise(r => setTimeout(r, 0)); // yield to let UI repaint
 
             await Promise.allSettled(batch.map(async (d) => {
                 try {
