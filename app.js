@@ -1795,10 +1795,15 @@ function showSensorView(sensorId) {
                 </select>
             </div>
             <div class="info-item"><label>Status</label>
-                <select class="inline-edit-select inline-edit-status" data-sensor="${s.id}" data-field="status" multiple onchange="inlineSaveSensor(this)">
-                    <option value="" ${currentStatuses.length === 0 ? 'selected' : ''}>— No Status —</option>
-                    ${ALL_STATUSES.map(st => `<option value="${st}" ${currentStatuses.includes(st) ? 'selected' : ''}>${st}</option>`).join('')}
-                </select>
+                <div class="status-toggle-list" id="setup-sensor-status-${s.id}">
+                    ${ALL_STATUSES.map(st => {
+                        const isActive = currentStatuses.includes(st);
+                        const badgeClass = getStatusBadgeClass(st);
+                        return `<span class="status-toggle-option ${isActive ? 'active' : ''}" data-status="${st}" onclick="toggleStatusOption(this); saveSetupSensorStatus('${s.id}')">
+                            <span class="badge ${badgeClass}" style="pointer-events:none">${st}</span>
+                        </span>`;
+                    }).join('')}
+                </div>
             </div>
             <div class="info-item"><label>Community</label>
                 <select class="inline-edit-select" data-sensor="${s.id}" data-field="community" onchange="inlineSaveSensor(this); showSensorView('${s.id}')">
@@ -3924,6 +3929,16 @@ function renderStatusToggleList(containerId, selectedStatuses) {
 
 function toggleStatusOption(el) {
     el.classList.toggle('active');
+}
+
+function saveSetupSensorStatus(sensorId) {
+    const s = sensors.find(x => x.id === sensorId);
+    if (!s) return;
+    const container = document.getElementById('setup-sensor-status-' + sensorId);
+    if (!container) return;
+    s.status = Array.from(container.querySelectorAll('.status-toggle-option.active')).map(el => el.dataset.status);
+    persistSensor(s);
+    buildSensorSidebar();
 }
 
 function getSelectedStatuses(containerId) {
