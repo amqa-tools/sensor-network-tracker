@@ -78,11 +78,7 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
     const now = new Date().toISOString();
 
-    // Mode: "quick" = offline detection only (for cron, ~5s)
-    //        "full" = offline + flag checks (for manual runs, ~90s)
-    let mode = "full";
-    try { const body = await req.json(); mode = body?.mode || "full"; } catch(_) {}
-    console.log(`[QAQ] Mode: ${mode}`);
+    console.log(`[QAQ] Starting check...`);
 
     // --- Step 1: Load app data (parallel) ---
     const [
@@ -160,8 +156,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[QAQ] ${devices.length - onlineDevices.length} offline, ${onlineDevices.length} online`);
 
-    // --- Step 4: Check flags for online sensors (full mode only) ---
-    if (mode === "full") {
+    // --- Step 4: Check flags for online sensors ---
     const BATCH = 50;
     for (let i = 0; i < onlineDevices.length; i += BATCH) {
       const batch = onlineDevices.slice(i, i + BATCH);
@@ -196,8 +191,6 @@ Deno.serve(async (req: Request) => {
         })
       );
     }
-    } // end mode === "full"
-
     // --- Step 5: Insert new alerts + create event notes ---
     if (newAlerts.length > 0) {
       await supabase.from("quantaq_alerts").insert(newAlerts);
