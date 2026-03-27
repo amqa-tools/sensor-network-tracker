@@ -96,7 +96,7 @@ function describeQAQFlags(f) {
     return n.join(', ');
 }
 
-const EXPECTED_OFFLINE = ['Lab Storage','In Transit Between Audits','Service at Quant','Ready for Deployment','Shipped to Quant','Shipped from Quant'];
+const EXPECTED_OFFLINE = ['Offline','Lab Storage','In Transit Between Audits','Service at Quant','Ready for Deployment','Shipped to Quant','Shipped from Quant','Needs Repair'];
 const OFFLINE_MS = 60 * 60 * 1000;
 
 async function runQuantAQCheck() {
@@ -141,7 +141,10 @@ async function runQuantAQCheck() {
             const appStatuses = appSensor ? getStatusArray(appSensor) : [];
 
             if (msSince > OFFLINE_MS) {
+                // Skip sensors with manually-set offline/storage statuses
                 if (appStatuses.some(s => EXPECTED_OFFLINE.includes(s))) continue;
+                // Skip sensors not assigned to any community (not deployed)
+                if (!appSensor || !appSensor.community) continue;
                 const detail = lastSeen ? `Last seen ${quantaqTimeSince(lastSeen.toISOString())}` : 'Never seen';
                 const community = appSensor ? getCommunityName(appSensor.community) : (d.city || '');
                 const existing = (existingAlerts || []).find(a => a.sensor_sn === d.sn && a.issue_type === 'Lost Connection');
