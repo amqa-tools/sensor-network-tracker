@@ -7656,11 +7656,16 @@ function renderCommunityOverview(communityId) {
         </div>`).join('')
         : '<p class="ov-empty">No communications yet</p>';
 
-    // Top contacts (2)
-    const commContacts = contacts.filter(c => allCommunityIds.includes(c.community) && c.active !== false).slice(0, 2);
+    // Top contacts (2) — primary contacts first, then alphabetical
+    const commContacts = contacts.filter(c => allCommunityIds.includes(c.community) && c.active !== false)
+        .sort((a, b) => {
+            const aP = a.primaryContact ? 0 : 1, bP = b.primaryContact ? 0 : 1;
+            if (aP !== bP) return aP - bP;
+            return a.name.localeCompare(b.name);
+        }).slice(0, 2);
     const contactsHtml = commContacts.length > 0
         ? commContacts.map(c => `<div class="ov-contact-row" onclick="showContactDetail('${c.id}')">
-            <div><strong>${escapeHtml(c.name)}</strong></div>
+            <div><strong>${escapeHtml(c.name)}</strong>${c.primaryContact ? ' <span class="contact-primary-badge">Primary</span>' : ''}</div>
             <div style="font-size:12px;color:var(--slate-400)">${escapeHtml(c.role || '')}${c.org ? ` \u00B7 ${escapeHtml(c.org)}` : ''}</div>
         </div>`).join('')
         : '<p class="ov-empty">No contacts yet</p>';
