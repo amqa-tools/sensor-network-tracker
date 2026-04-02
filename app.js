@@ -3066,7 +3066,26 @@ function sendEmail() {
         : `mailto:${emails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.location.href = mailtoLink;
 
-    // Log the communication under each involved contact and community
+    closeModal('modal-email');
+
+    // Show log confirmation popup after a brief delay (so mailto opens first)
+    _pendingEmailLog = { subject, body, selectedContactIds, selectedContacts, emails };
+    setTimeout(() => {
+        const recipientNames = selectedContacts.map(c => c.name).join(', ');
+        document.getElementById('email-log-recipients').textContent = recipientNames;
+        document.getElementById('email-log-subject').value = subject;
+        document.getElementById('email-log-notes').value = '';
+        openModal('modal-email-log');
+    }, 500);
+}
+
+let _pendingEmailLog = null;
+
+function confirmLogEmail() {
+    if (!_pendingEmailLog) return;
+    const { selectedContactIds, selectedContacts } = _pendingEmailLog;
+    const logSubject = document.getElementById('email-log-subject').value.trim();
+    const logNotes = document.getElementById('email-log-notes').value.trim();
     const involvedCommunities = [...new Set(selectedContacts.map(c => c.community))];
 
     const comm = {
@@ -3074,9 +3093,9 @@ function sendEmail() {
         date: nowDatetime(),
         type: 'Communication',
         commType: 'Email',
-        subject: subject,
-        fullBody: body,
-        text: `[Email] Subject: ${subject}`,
+        subject: logSubject,
+        fullBody: logNotes || _pendingEmailLog.body,
+        text: `[Email] Subject: ${logSubject}${logNotes ? ' — ' + logNotes : ''}`,
         createdBy: getCurrentUserName(), createdById: currentUserId,
         community: involvedCommunities[0] || '',
         taggedContacts: selectedContactIds,
@@ -3084,7 +3103,14 @@ function sendEmail() {
     };
 
     comms.push(comm); persistComm(comm);
-    closeModal('modal-email');
+    _pendingEmailLog = null;
+    closeModal('modal-email-log');
+    showSuccessToast('Email communication logged');
+}
+
+function discardEmailLog() {
+    _pendingEmailLog = null;
+    closeModal('modal-email-log');
 }
 
 function openQuickEmail(contactId) {
