@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sensor Location &amp; Collocation Importer</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --navy: #1a2332;
+    --navy-light: #243044;
+    --navy-mid: #2d3d56;
+    --gold: #d4a84b;
+    --gold-light: #e8c97a;
+    --white: #ffffff;
+    --off-white: #f0f2f5;
+    --text: #e8ecf1;
+    --text-dim: #8899aa;
+    --green: #4caf50;
+    --red: #e74c3c;
+    --orange: #f39c12;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--navy);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+
+  h1 {
+    color: var(--gold);
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+  }
+
+  /* Login */
+  #login-section {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 32px;
+    width: 100%;
+    max-width: 400px;
+    margin-top: 40px;
+  }
+  #login-section h2 { color: var(--gold); margin-bottom: 16px; font-size: 1.2rem; }
+  #login-section input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+  }
+  #login-section button {
+    width: 100%;
+    padding: 10px;
+    background: var(--gold);
+    color: var(--navy);
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  #login-section button:hover { background: var(--gold-light); }
+  #login-error { color: var(--red); font-size: 0.85rem; margin-top: 8px; }
+
+  /* Upload section */
+  #upload-section {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 32px;
+    width: 100%;
+    max-width: 800px;
+    margin-top: 20px;
+  }
+  #upload-section h2 { color: var(--gold); margin-bottom: 8px; font-size: 1.2rem; }
+  .upload-instructions {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+  .upload-instructions code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--navy);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.82rem;
+  }
+  .paste-area {
+    width: 100%;
+    min-height: 160px;
+    padding: 14px;
+    border-radius: 8px;
+    border: 2px dashed var(--navy-mid);
+    background: var(--navy);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    resize: vertical;
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .paste-area:focus { border-color: var(--gold); outline: none; }
+  .paste-area::placeholder { color: var(--navy-mid); }
+  .upload-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .upload-row .btn { padding: 10px 24px; }
+  .upload-row .or-label { color: var(--text-dim); font-size: 0.85rem; }
+  .file-input-wrapper {
+    position: relative;
+  }
+  .file-input-wrapper input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .file-input-label {
+    display: inline-block;
+    padding: 10px 20px;
+    background: var(--navy-mid);
+    color: var(--text);
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .file-input-label:hover { background: var(--gold); color: var(--navy); }
+  #upload-status { margin-top: 10px; font-size: 0.85rem; }
+
+  /* Progress bar */
+  .progress-bar-container {
+    width: 100%;
+    max-width: 800px;
+    margin-bottom: 16px;
+  }
+  .progress-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .progress-track {
+    height: 8px;
+    background: var(--navy-mid);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  /* Counters */
+  .counter-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .counter {
+    background: var(--navy-light);
+    border-radius: 8px;
+    padding: 8px 16px;
+    text-align: center;
+    min-width: 100px;
+  }
+  .counter .num {
+    font-size: 1.4rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .counter .label { font-size: 0.75rem; color: var(--text-dim); }
+  .counter.updated .num { color: var(--green); }
+  .counter.skipped .num { color: var(--orange); }
+  .counter.no-match .num { color: var(--red); }
+  .counter.remaining .num { color: var(--text-dim); }
+
+  /* Card */
+  .review-card {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 28px;
+    width: 100%;
+    max-width: 800px;
+    border: 1px solid var(--navy-mid);
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-header h2 { font-size: 1.1rem; color: var(--gold); font-family: 'JetBrains Mono', monospace; }
+
+  .sf-data {
+    background: var(--navy);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    border: 1px solid var(--navy-mid);
+  }
+  .sf-data h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+  .sf-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+  }
+  .sf-label {
+    color: var(--text-dim);
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+  .sf-value { color: var(--text); }
+  .sf-value.empty { color: var(--navy-mid); font-style: italic; }
+
+  .match-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .match-badge.matched { background: rgba(76, 175, 80, 0.15); color: var(--green); }
+  .match-badge.no-match { background: rgba(231, 76, 60, 0.15); color: var(--red); }
+  .match-badge.new-data { background: rgba(212, 168, 75, 0.15); color: var(--gold); }
+
+  .current-data {
+    background: var(--navy);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    border: 1px solid var(--navy-mid);
+  }
+  .current-data h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--green);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+
+  .change-preview {
+    background: rgba(212, 168, 75, 0.08);
+    border: 1px solid rgba(212, 168, 75, 0.3);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 20px;
+  }
+  .change-preview h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+  .change-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    align-items: center;
+  }
+  .change-item .field-name { color: var(--text-dim); min-width: 140px; }
+  .change-item .old-val { color: var(--red); text-decoration: line-through; }
+  .change-item .arrow { color: var(--text-dim); }
+  .change-item .new-val { color: var(--green); font-weight: 600; }
+  .change-item .same { color: var(--text-dim); font-style: italic; }
+
+  /* Form fields */
+  .form-section { margin-bottom: 16px; }
+  .form-section h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .form-group label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .form-group input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+  .form-group input:focus { outline: none; border-color: var(--gold); }
+
+  /* Buttons */
+  .button-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-approve {
+    background: var(--green);
+    color: white;
+    flex: 1;
+  }
+  .btn-skip {
+    background: var(--navy-mid);
+    color: var(--text);
+  }
+  .btn-back {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--navy-mid);
+  }
+  .btn-gold {
+    background: var(--gold);
+    color: var(--navy);
+  }
+  .btn-gold:hover { background: var(--gold-light); }
+
+  /* Done */
+  .done-section {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    width: 100%;
+    max-width: 800px;
+  }
+  .done-section h2 { color: var(--green); font-size: 1.4rem; margin-bottom: 12px; }
+  .done-section p { color: var(--text-dim); margin-bottom: 8px; }
+
+  .skipped-list {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 800px;
+    margin-top: 20px;
+  }
+  .skipped-list h3 { color: var(--orange); margin-bottom: 12px; }
+  .skipped-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--navy-mid);
+    font-size: 0.9rem;
+  }
+  .skipped-item:last-child { border: none; }
+  .skipped-item .btn { padding: 6px 14px; font-size: 0.8rem; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.success { background: var(--green); color: white; }
+  .toast.error { background: var(--red); color: white; }
+
+  /* Filter */
+  .filter-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+    max-width: 800px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-bar select, .filter-bar input {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy-light);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .filter-bar label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .no-match-warning {
+    background: rgba(231, 76, 60, 0.12);
+    border: 1px solid rgba(231, 76, 60, 0.4);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    color: var(--red);
+  }
+
+  .already-set {
+    background: rgba(76, 175, 80, 0.12);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    color: var(--green);
+  }
+</style>
+</head>
+<body>
+
+<h1>Sensor Location &amp; Collocation Importer</h1>
+<p class="subtitle">Import sensor locations and collocation dates from Salesforce</p>
+
+<!-- Login -->
+<div id="login-section">
+  <h2>Sign In</h2>
+  <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px;">Log in with your Sensor Tracker account.</p>
+  <input type="email" id="login-email" placeholder="Email">
+  <input type="password" id="login-password" placeholder="Password">
+  <button onclick="doLogin()">Sign In</button>
+  <div id="login-error"></div>
+</div>
+
+<!-- Review area (hidden until login) -->
+<div id="review-area" style="display:none; width:100%; max-width:800px; margin:0 auto;">
+
+  <!-- Filter -->
+  <div class="filter-bar" id="filter-bar">
+    <label>Search:</label>
+    <input type="text" id="search-box" placeholder="Sensor ID..." oninput="searchSensor()">
+    <label style="margin-left:auto;">Show:</label>
+    <select id="show-filter" onchange="applyShowFilter()">
+      <option value="all">All</option>
+      <option value="matched">Matched Only</option>
+      <option value="no-match">No Match Only</option>
+      <option value="has-changes">Has Changes</option>
+    </select>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-bar-container">
+    <div class="progress-stats">
+      <span id="progress-label">Sensor 1 of 71</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Counters -->
+  <div class="counter-row">
+    <div class="counter updated"><div class="num" id="count-updated">0</div><div class="label">Updated</div></div>
+    <div class="counter skipped"><div class="num" id="count-skipped">0</div><div class="label">Skipped</div></div>
+    <div class="counter no-match"><div class="num" id="count-nomatch">0</div><div class="label">No Match</div></div>
+    <div class="counter remaining"><div class="num" id="count-remaining">0</div><div class="label">Remaining</div></div>
+  </div>
+
+  <!-- Review Card -->
+  <div class="review-card" id="review-card"></div>
+
+  <!-- Done -->
+  <div class="done-section" id="done-section" style="display:none;"></div>
+
+  <!-- Skipped list -->
+  <div class="skipped-list" id="skipped-list" style="display:none;"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== SUPABASE SETUP =====
+const SUPABASE_URL = 'https://uejryzioxogquflijgyf.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlanJ5emlveG9ncXVmbGlqZ3lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTkyODMsImV4cCI6MjA4OTI3NTI4M30.YD349-X2PeoeCTVp34FbzdGwachr9YCpzIPSXuSURfM';
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ===== DATA =====
+let importRows = [];       // parsed from paste/file
+let existingSensors = [];  // from Supabase
+let currentIndex = 0;
+let updated = [];
+let skippedItems = [];
+let noMatchItems = [];
+let decisions = {};        // row index -> 'updated' | 'skipped' | 'no-match'
+
+// ===== LOGIN =====
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  document.getElementById('login-error').textContent = '';
+
+  try {
+    const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+    if (error) throw error;
+
+    document.getElementById('login-section').style.display = 'none';
+
+    // Load existing sensors
+    const { data: sensors, error: sErr } = await supa.from('sensors').select('*').order('id');
+    if (sErr) throw sErr;
+    existingSensors = sensors || [];
+
+    // Auto-load embedded SF data
+    importRows = SF_SENSOR_DATA.map((r, i) => ({ ...r, _rowNum: i + 1 }));
+    console.log('Loaded', existingSensors.length, 'sensors from DB,', importRows.length, 'from SF');
+    showToast(`Signed in. ${existingSensors.length} sensors loaded, ${importRows.length} Salesforce records ready.`, 'success');
+    try {
+      startReview();
+    } catch (e) {
+      console.error('startReview error:', e);
+      document.getElementById('login-error').textContent = 'Review error: ' + e.message;
+      document.getElementById('login-section').style.display = '';
+    }
+  } catch (err) {
+    console.error('Login error:', err);
+    document.getElementById('login-error').textContent = err.message;
+  }
+}
+
+document.getElementById('login-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ===== PARSE DATA =====
+function parseTSV(text) {
+  const lines = text.trim().split('\n').map(l => l.split('\t'));
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].map(h => h.trim().toLowerCase());
+
+  // Find column indices by common names
+  const sensorIdCol = headers.findIndex(h =>
+    h.includes('sensor') || h.includes('mod') || h.includes('device') || h === 'id' || h === 'name'
+  );
+  const soaCol = headers.findIndex(h =>
+    h.includes('soa') || h.includes('tag id') || h.includes('asset tag')
+  );
+  const purchaseCol = headers.findIndex(h =>
+    h.includes('purchase') || h.includes('date purchased') || h.includes('acquired') || h.includes('procurement')
+  );
+
+  if (sensorIdCol < 0) {
+    showToast('Could not find a Sensor ID column. Make sure your header row includes "Sensor ID" or "MOD".', 'error');
+    return [];
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i];
+    const sensorId = (cells[sensorIdCol] || '').trim();
+    if (!sensorId) continue;
+
+    rows.push({
+      sensorId,
+      soaTagId: soaCol >= 0 ? (cells[soaCol] || '').trim() : '',
+      datePurchased: purchaseCol >= 0 ? (cells[purchaseCol] || '').trim() : '',
+      _rowNum: i + 1,
+    });
+  }
+  return rows;
+}
+
+function parseCSV(text) {
+  // Handle both comma and tab separated
+  const firstLine = text.split('\n')[0];
+  if (firstLine.includes('\t')) return parseTSV(text);
+
+  const lines = text.trim().split('\n').map(l => {
+    // Simple CSV parse (handles quotes)
+    const cells = [];
+    let current = '';
+    let inQuotes = false;
+    for (let ch of l) {
+      if (ch === '"') { inQuotes = !inQuotes; continue; }
+      if (ch === ',' && !inQuotes) { cells.push(current.trim()); current = ''; continue; }
+      current += ch;
+    }
+    cells.push(current.trim());
+    return cells;
+  });
+
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].map(h => h.toLowerCase());
+  const sensorIdCol = headers.findIndex(h =>
+    h.includes('sensor') || h.includes('mod') || h.includes('device') || h === 'id' || h === 'name'
+  );
+  const soaCol = headers.findIndex(h =>
+    h.includes('soa') || h.includes('tag id') || h.includes('asset tag')
+  );
+  const purchaseCol = headers.findIndex(h =>
+    h.includes('purchase') || h.includes('date purchased') || h.includes('acquired') || h.includes('procurement')
+  );
+
+  if (sensorIdCol < 0) {
+    showToast('Could not find a Sensor ID column.', 'error');
+    return [];
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i];
+    const sensorId = (cells[sensorIdCol] || '').trim();
+    if (!sensorId) continue;
+    rows.push({
+      sensorId,
+      soaTagId: soaCol >= 0 ? (cells[soaCol] || '').trim() : '',
+      datePurchased: purchaseCol >= 0 ? (cells[purchaseCol] || '').trim() : '',
+      _rowNum: i + 1,
+    });
+  }
+  return rows;
+}
+
+function parsePastedData() {
+  const text = document.getElementById('paste-area').value;
+  if (!text.trim()) { showToast('Paste your data first', 'error'); return; }
+
+  importRows = parseCSV(text);
+  if (importRows.length === 0) return;
+
+  startReview();
+}
+
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    importRows = parseCSV(text);
+    if (importRows.length > 0) startReview();
+  };
+  reader.readAsText(file);
+}
+
+function matchSensor(sensorId) {
+  // Try exact match first
+  let match = existingSensors.find(s => s.id === sensorId);
+  if (match) return match;
+
+  // Try case-insensitive
+  const lower = sensorId.toLowerCase();
+  match = existingSensors.find(s => s.id.toLowerCase() === lower);
+  if (match) return match;
+
+  // Try partial match (e.g. "456" matches "MOD-00456")
+  if (sensorId.match(/^\d+$/)) {
+    match = existingSensors.find(s => s.id.includes(sensorId));
+    if (match) return match;
+  }
+
+  return null;
+}
+
+function normalizeDate(dateStr) {
+  if (!dateStr) return '';
+  // Try various formats
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0]; // YYYY-MM-DD
+  }
+  // Try MM/DD/YYYY
+  const parts = dateStr.split('/');
+  if (parts.length === 3) {
+    const [m, d2, y] = parts;
+    const date = new Date(y, m - 1, d2);
+    if (!isNaN(date.getTime())) return date.toISOString().split('T')[0];
+  }
+  return dateStr; // return as-is if we can't parse
+}
+
+function startReview() {
+  document.getElementById('review-area').style.display = 'block';
+  showSensor(0);
+}
+
+// ===== RENDER =====
+function showSensor(index) {
+  // Skip already-decided
+  while (index < importRows.length && decisions[index] !== undefined) {
+    index++;
+  }
+  if (index >= importRows.length) {
+    showDone();
+    return;
+  }
+  currentIndex = index;
+  const row = importRows[index];
+  const match = matchSensor(row.sensorId);
+
+  const totalDecided = updated.length + skippedItems.length + noMatchItems.length;
+  const remaining = importRows.length - totalDecided;
+  const pct = Math.round((totalDecided / importRows.length) * 100);
+
+  document.getElementById('progress-label').textContent = `Sensor ${totalDecided + 1} of ${importRows.length}`;
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('count-updated').textContent = updated.length;
+  document.getElementById('count-skipped').textContent = skippedItems.length;
+  document.getElementById('count-nomatch').textContent = noMatchItems.length;
+  document.getElementById('count-remaining').textContent = remaining;
+
+  const card = document.getElementById('review-card');
+  card.style.display = '';
+
+  // No date normalization needed — collocation dates are free text
+
+  if (!match) {
+    // No match found
+    card.innerHTML = `
+      <div class="no-match-warning">
+        No matching sensor found for <strong>${escHtml(row.sensorId)}</strong> in the tracker.
+      </div>
+      <div class="sf-data">
+        <h3>Salesforce Data (${row.sfName || 'Row ' + row._rowNum})</h3>
+        <div class="sf-row"><span class="sf-label">SF Name:</span> <span class="sf-value">${escHtml(row.sfName || row.sensorId)}</span></div>
+        <div class="sf-row"><span class="sf-label">Mapped Sensor ID:</span> <span class="sf-value" style="font-family:'JetBrains Mono',monospace">${escHtml(row.sensorId)}</span></div>
+        <div class="sf-row"><span class="sf-label">Location:</span> <span class="sf-value">${row.location || '<em class="empty">empty</em>'}</span></div>
+        <div class="sf-row"><span class="sf-label">Most Recent Collocation:</span> <span class="sf-value">${row.collocationDates || '<em class="empty">empty</em>'}</span></div>
+      </div>
+      <div class="button-row">
+        ${totalDecided > 0 ? '<button class="btn btn-back" onclick="goBack()">Back</button>' : ''}
+        <button class="btn btn-skip" onclick="markNoMatch()">No Match — Skip</button>
+      </div>
+    `;
+    return;
+  }
+
+  // Matched sensor — show comparison
+  const currentLoc = match.location || '';
+  const currentColloc = match.collocation_dates || '';
+  const newLoc = row.location;
+  const newColloc = row.collocationDates;
+
+  const soaChanged = newLoc && newLoc !== currentLoc;
+  const dateChanged = newColloc && newColloc !== currentColloc;
+  const hasChanges = soaChanged || dateChanged;
+
+  let changeHtml = '';
+  if (hasChanges) {
+    changeHtml = `<div class="change-preview"><h3>Changes to Apply</h3>`;
+    if (soaChanged) {
+      changeHtml += `<div class="change-item">
+        <span class="field-name">Location:</span>
+        ${currentLoc ? `<span class="old-val">${escHtml(currentLoc)}</span> <span class="arrow">&rarr;</span>` : ''}
+        <span class="new-val">${escHtml(newLoc)}</span>
+      </div>`;
+    } else if (newLoc && newLoc === currentLoc) {
+      changeHtml += `<div class="change-item"><span class="field-name">Location:</span> <span class="same">Already set to ${escHtml(currentLoc)}</span></div>`;
+    }
+    if (dateChanged) {
+      changeHtml += `<div class="change-item">
+        <span class="field-name">Most Recent Collocation:</span>
+        ${currentColloc ? `<span class="old-val">${escHtml(currentColloc)}</span> <span class="arrow">&rarr;</span>` : ''}
+        <span class="new-val">${escHtml(newColloc)}</span>
+      </div>`;
+    } else if (newColloc && newColloc === currentColloc) {
+      changeHtml += `<div class="change-item"><span class="field-name">Most Recent Collocation:</span> <span class="same">Already set to ${escHtml(currentColloc)}</span></div>`;
+    }
+    changeHtml += '</div>';
+  }
+
+  const alreadySetHtml = !hasChanges ? `<div class="already-set">
+    This sensor already has the same data. Nothing to update.
+  </div>` : '';
+
+  card.innerHTML = `
+    <div class="card-header">
+      <h2>${escHtml(match.id)}</h2>
+      <span class="match-badge matched">Matched</span>
+    </div>
+
+    <div class="sf-data">
+      <h3>Salesforce Data (${row.sfName || 'Row ' + row._rowNum})</h3>
+      <div class="sf-row"><span class="sf-label">SF Name:</span> <span class="sf-value">${escHtml(row.sfName || row.sensorId)}</span></div>
+      <div class="sf-row"><span class="sf-label">Mapped Sensor ID:</span> <span class="sf-value" style="font-family:'JetBrains Mono',monospace">${escHtml(row.sensorId)}</span></div>
+      <div class="sf-row"><span class="sf-label">Location:</span> <span class="sf-value">${row.location || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Most Recent Collocation:</span> <span class="sf-value">${row.collocationDates || '<em class="empty">empty</em>'}</span></div>
+    </div>
+
+    <div class="current-data">
+      <h3>Current Sensor Data in Tracker</h3>
+      <div class="sf-row"><span class="sf-label">Sensor ID:</span> <span class="sf-value">${escHtml(match.id)}</span></div>
+      <div class="sf-row"><span class="sf-label">Type:</span> <span class="sf-value">${escHtml(Array.isArray(match.type) ? match.type.join(', ') : (match.type || '—'))}</span></div>
+      <div class="sf-row"><span class="sf-label">Community:</span> <span class="sf-value">${escHtml(match.community_id || '—')}</span></div>
+      <div class="sf-row"><span class="sf-label">Location:</span> <span class="sf-value">${currentLoc || '<em class="empty">not set</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Most Recent Collocation:</span> <span class="sf-value">${currentColloc || '<em class="empty">not set</em>'}</span></div>
+    </div>
+
+    ${alreadySetHtml}
+    ${changeHtml}
+
+    <div class="form-section">
+      <h3>Edit Before Saving (optional)</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Location</label>
+          <input type="text" id="inp-location" value="${escHtml(newLoc || currentLoc)}">
+        </div>
+        <div class="form-group">
+          <label>Most Recent Collocation</label>
+          <input type="text" id="inp-collocation" value="${escHtml(newColloc || currentColloc)}">
+        </div>
+      </div>
+    </div>
+
+    <div class="button-row">
+      ${totalDecided > 0 ? '<button class="btn btn-back" onclick="goBack()">Back</button>' : ''}
+      <button class="btn btn-skip" onclick="skipSensor()">Skip</button>
+      <button class="btn btn-approve" onclick="updateSensor('${escHtml(match.id)}')">${hasChanges ? 'Approve & Update' : 'Confirm (No Changes)'}</button>
+    </div>
+  `;
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ===== ACTIONS =====
+async function updateSensor(sensorId) {
+  const location = document.getElementById('inp-location').value.trim();
+  const collocationDates = document.getElementById('inp-collocation').value.trim();
+
+  const updateData = {};
+  if (location) updateData.location = location;
+  if (collocationDates) updateData.collocation_dates = collocationDates;
+  updateData.updated_at = new Date().toISOString();
+
+  const btn = document.querySelector('.btn-approve');
+  btn.textContent = 'Updating...';
+  btn.disabled = true;
+
+  try {
+    if (Object.keys(updateData).length > 1) { // more than just updated_at
+      const { error } = await supa.from('sensors').update(updateData).eq('id', sensorId);
+      if (error) throw error;
+
+      // Update local data
+      const sensor = existingSensors.find(s => s.id === sensorId);
+      if (sensor) {
+        if (location) sensor.location = location;
+        if (collocationDates) sensor.collocation_dates = collocationDates;
+      }
+    }
+
+    updated.push({ ...importRows[currentIndex], sensorId });
+    decisions[currentIndex] = 'updated';
+    showToast(`${sensorId} updated`, 'success');
+    showSensor(currentIndex + 1);
+  } catch (err) {
+    showToast('Update failed: ' + err.message, 'error');
+    btn.textContent = 'Approve & Update';
+    btn.disabled = false;
+  }
+}
+
+function skipSensor() {
+  skippedItems.push(importRows[currentIndex]);
+  decisions[currentIndex] = 'skipped';
+  showSensor(currentIndex + 1);
+}
+
+function markNoMatch() {
+  noMatchItems.push(importRows[currentIndex]);
+  decisions[currentIndex] = 'no-match';
+  showSensor(currentIndex + 1);
+}
+
+function goBack() {
+  let prevIndex = currentIndex - 1;
+  while (prevIndex >= 0) {
+    if (decisions[prevIndex] !== undefined) {
+      const decision = decisions[prevIndex];
+      if (decision === 'updated') updated = updated.filter(u => u._rowNum !== importRows[prevIndex]._rowNum);
+      else if (decision === 'skipped') skippedItems = skippedItems.filter(s => s._rowNum !== importRows[prevIndex]._rowNum);
+      else if (decision === 'no-match') noMatchItems = noMatchItems.filter(n => n._rowNum !== importRows[prevIndex]._rowNum);
+      delete decisions[prevIndex];
+      currentIndex = prevIndex;
+      showSensor(prevIndex);
+      return;
+    }
+    prevIndex--;
+  }
+}
+
+function searchSensor() {
+  const q = document.getElementById('search-box').value.toLowerCase().trim();
+  if (!q) return;
+  const idx = importRows.findIndex((r, i) =>
+    decisions[i] === undefined && r.sensorId.toLowerCase().includes(q)
+  );
+  if (idx >= 0) showSensor(idx);
+}
+
+function applyShowFilter() {
+  const filter = document.getElementById('show-filter').value;
+  const idx = importRows.findIndex((r, i) => {
+    if (decisions[i] !== undefined) return false;
+    if (filter === 'all') return true;
+    const match = matchSensor(r.sensorId);
+    if (filter === 'matched') return !!match;
+    if (filter === 'no-match') return !match;
+    if (filter === 'has-changes') {
+      if (!match) return false;
+      const newLoc = r.location;
+      const newColloc = r.collocationDates;
+      return (newLoc && newLoc !== (match.location || '')) ||
+             (newColloc && newColloc !== (match.collocation_dates || ''));
+    }
+    return true;
+  });
+  if (idx >= 0) showSensor(idx);
+  else showToast('No matching undecided sensors for that filter', 'error');
+}
+
+// ===== DONE =====
+function showDone() {
+  document.getElementById('review-card').style.display = 'none';
+  document.getElementById('filter-bar').style.display = 'none';
+
+  document.getElementById('progress-label').textContent = 'All sensors reviewed';
+  document.getElementById('progress-pct').textContent = '100%';
+  document.getElementById('progress-fill').style.width = '100%';
+  document.getElementById('count-updated').textContent = updated.length;
+  document.getElementById('count-skipped').textContent = skippedItems.length;
+  document.getElementById('count-nomatch').textContent = noMatchItems.length;
+  document.getElementById('count-remaining').textContent = '0';
+
+  const done = document.getElementById('done-section');
+  done.style.display = '';
+  done.innerHTML = `
+    <h2>Import Complete</h2>
+    <p>${updated.length} sensor${updated.length !== 1 ? 's' : ''} updated</p>
+    <p>${skippedItems.length} skipped</p>
+    <p>${noMatchItems.length} had no match</p>
+    <p style="margin-top: 16px; color: var(--text);">You can now open the Sensor Tracker app to verify the imported data.</p>
+  `;
+
+  const list = document.getElementById('skipped-list');
+  if (skippedItems.length > 0 || noMatchItems.length > 0) {
+    list.style.display = '';
+    let html = '';
+
+    if (skippedItems.length > 0) {
+      html += `
+        <h3>Skipped Sensors (${skippedItems.length})</h3>
+        <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 12px;">You can review these again if needed.</p>
+        ${skippedItems.map((s, i) => `
+          <div class="skipped-item">
+            <div>
+              <strong style="font-family:'JetBrains Mono',monospace">${escHtml(s.sensorId)}</strong>
+              <span style="color: var(--text-dim); margin-left: 8px;">Loc: ${escHtml(s.location || '—')}</span>
+              <span style="color: var(--text-dim); margin-left: 8px;">Colloc: ${escHtml(s.collocationDates || '—')}</span>
+            </div>
+            <button class="btn btn-approve" style="padding:6px 14px;font-size:0.8rem;" onclick="reviewSkipped(${i})">Review</button>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    if (noMatchItems.length > 0) {
+      html += `
+        <h3 style="color: var(--red); ${skippedItems.length > 0 ? 'margin-top: 24px;' : ''}">No Match (${noMatchItems.length})</h3>
+        <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 12px;">These sensor IDs didn't match any sensor in the tracker. Review to try again or skip.</p>
+        ${noMatchItems.map((s, i) => `
+          <div class="skipped-item">
+            <div>
+              <strong style="font-family:'JetBrains Mono',monospace">${escHtml(s.sensorId)}</strong>
+              <span style="color: var(--text-dim); margin-left: 8px;">SF: ${escHtml(s.sfName || '')}</span>
+              <span style="color: var(--text-dim); margin-left: 8px;">Loc: ${escHtml(s.location || '—')}</span>
+            </div>
+            <button class="btn btn-approve" style="padding:6px 14px;font-size:0.8rem;" onclick="reviewNoMatch(${i})">Review</button>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    list.innerHTML = html;
+  }
+}
+
+function reviewSkipped(skipIdx) {
+  const s = skippedItems[skipIdx];
+  skippedItems.splice(skipIdx, 1);
+
+  const idx = importRows.findIndex(r => r._rowNum === s._rowNum);
+  delete decisions[idx];
+
+  document.getElementById('review-card').style.display = '';
+  document.getElementById('filter-bar').style.display = '';
+  document.getElementById('done-section').style.display = 'none';
+  document.getElementById('skipped-list').style.display = 'none';
+
+  showSensor(idx);
+}
+
+function reviewNoMatch(nmIdx) {
+  const s = noMatchItems[nmIdx];
+  noMatchItems.splice(nmIdx, 1);
+
+  const idx = importRows.findIndex(r => r._rowNum === s._rowNum);
+  delete decisions[idx];
+
+  document.getElementById('review-card').style.display = '';
+  document.getElementById('filter-bar').style.display = '';
+  document.getElementById('done-section').style.display = 'none';
+  document.getElementById('skipped-list').style.display = 'none';
+
+  showSensor(idx);
+}
+
+// ===== TOAST =====
+function showToast(msg, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = `toast ${type} show`;
+  setTimeout(() => { toast.className = 'toast'; }, 3000);
+}
+
+// ===== EMBEDDED SALESFORCE DATA =====
+const SF_SENSOR_DATA = [
+  {"sensorId":"MOD-00442","sfName":"QuantAQ_00442","location":"Napaskiak, AK","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00443","sfName":"QuantAQ_00443","location":"","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00444","sfName":"QuantAQ_00444","location":"124 2nd Street, Wrangell, AK, 99929","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00445","sfName":"QuantAQ_00445","location":"","collocationDates":"12/4/23-12/18/23 @ NCore"},
+  {"sensorId":"MOD-00446","sfName":"QuantAQ_00446","location":"64.7443° N, 156.8764° W","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00447","sfName":"QuantAQ_00447","location":"","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00448","sfName":"QuantAQ_00448","location":"","collocationDates":"12/4/23-12/18/23 @ NCore"},
+  {"sensorId":"MOD-00449","sfName":"QuantAQ_00449","location":"2940 Baranof Avenue, Ketchikan, AK, 99901","collocationDates":"12/4/23-12/18/23 @ NCore"},
+  {"sensorId":"MOD-00450","sfName":"QuantAQ_00450","location":"124 3rd Avenue, Haines, AK, 99827","collocationDates":"12/4/23-12/18/23 @ NCore"},
+  {"sensorId":"MOD-00451","sfName":"QuantAQ_00451","location":"","collocationDates":"12/4/23-12/18/23 @ NCore"},
+  {"sensorId":"MOD-00452","sfName":"QuantAQ_00452","location":"310 Hill Street, Hoonah, AK, 99829","collocationDates":"12/4/23-12/18/23 @ NCore"},
+  {"sensorId":"MOD-00453","sfName":"QuantAQ_00453","location":"253 11th Avenue, Skagway, AK, 99840","collocationDates":"12/4/23-12/18/23 @ NCore"},
+  {"sensorId":"MOD-00454","sfName":"QuantAQ_00454","location":"","collocationDates":"12/4/23-12/18/23 @ NCore"},
+  {"sensorId":"MOD-00455","sfName":"QuantAQ_00455","location":"416 5th Street, Juneau, AK, 99801","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00456","sfName":"QuantAQ_00456","location":"395 Whittier Street, Juneau, AK, 99801","collocationDates":"12/22/23-1/5/24 @ NCore"},
+  {"sensorId":"MOD-00457","sfName":"QuantAQ_00457","location":"Denali National Park and Preserve, AK, 99755","collocationDates":"12/22/23-1/5/24 @ NCore"},
+  {"sensorId":"MOD-00458","sfName":"QuantAQ_00458","location":"414 Hanagita Street, Valdez, Alaska, 99686","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00459","sfName":"QuantAQ_00459","location":"197 W Park Ave, Soldotna, AK, 99669","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage, 6/26/25-7/16/25 at Garden"},
+  {"sensorId":"MOD-00460","sfName":"QuantAQ_00460","location":"AK","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00461","sfName":"QuantAQ_00461","location":"15850 Sterling Highway, Ninilchik, AK, 99639","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00462","sfName":"QuantAQ_00462","location":"5600 Science Center Drive, Anchorage, AK, 99507","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00463","sfName":"QuantAQ_00463","location":"3000 East 16th, Anchorage, AK, 99508","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00464","sfName":"QuantAQ_00464","location":"533 E Pioneer Ave., Homer, AK, 99603","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00465","sfName":"QuantAQ_00465","location":"221 3rd Avenue, Seward, AK, 99664","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00466","sfName":"QuantAQ_00466","location":"62.110553, -145.544290, Glennallen, AK, 99588","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00467","sfName":"QuantAQ_00467","location":"22241 B Street, Talkeetna, AK, 99676","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00468","sfName":"QuantAQ_00468","location":"3140 Big Lake Road, Big Lake, AK, 99652","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00469","sfName":"QuantAQ_00469","location":"100 A Street, Tyonek, AK, 99682","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00470","sfName":"QuantAQ_00470","location":"24091 Long Lake Road, Willow, AK, 99688","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00471","sfName":"QuantAQ_00471","location":"3000 East 16th, Anchorage, AK, 99508","collocationDates":"8/1/23-8/14/23 at SPAR Bldg Anchorage"},
+  {"sensorId":"MOD-00649","sfName":"QuantAQ_00649","location":"9255 Glenn Highway, Chickaloon, AK, 99674","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00650","sfName":"QuantAQ_00650","location":"508 Upland Drive, Kenai, AK, 99611","collocationDates":"6/16/24-7/3/24 @ NCore"},
+  {"sensorId":"MOD-00651","sfName":"QuantAQ_00651","location":"","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00652","sfName":"QuantAQ_00652","location":"","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00653","sfName":"QuantAQ_00653","location":"1314 Alaska Highway, Tok, AK, 99780","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00654","sfName":"QuantAQ_00654","location":"107 West 3rd Avenue, Nome, AK, 99762","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00655","sfName":"QuantAQ_00655","location":"402 3rd Street, Nenana, AK, 99760","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00656","sfName":"QuantAQ_00656","location":"","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00657","sfName":"QuantAQ_00657","location":"134 E Arctic Ave, Palmer, AK, 99645","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00658","sfName":"QuantAQ_00658","location":"609 Forest Highway No 10, Yakutat, AK, 99689","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00659","sfName":"QuantAQ_00659","location":"1004 Ron Edwards Memorial Drive, Bethel, AK, 99559","collocationDates":"3/8/24-3/21/24 @ NCore; 2/18/24-"},
+  {"sensorId":"MOD-00660","sfName":"QuantAQ_00660","location":"710 Mill Bay Road, Kodiak, AK, 99615","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00662","sfName":"QuantAQ_00662","location":"66.898642, -162.587518, Kotzebue, AK, 99752","collocationDates":"3/8/24-3/21/24 @ NCore"},
+  {"sensorId":"MOD-00663","sfName":"QuantAQ_00663","location":"1744 Prospect Drive, Palmer, AK, 99645","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00664","sfName":"QuantAQ_00664","location":"","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00665","sfName":"QuantAQ_00665","location":"","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00666","sfName":"QuantAQ_00666","location":"AK","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00667","sfName":"QuantAQ_00667","location":"200 Lake Avenue, Cordova, AK, 99574","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00668","sfName":"QuantAQ_00668","location":"","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00669","sfName":"QuantAQ_00669","location":"","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00670","sfName":"QuantAQ_00670","location":"","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00671","sfName":"QuantAQ_00671","location":"","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00672","sfName":"QuantAQ_00672","location":"8530 Richardson Highway, Salcha, AK, 99714","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00673","sfName":"QuantAQ_00673","location":"Tower Road, Delta Junction, AK, 99737","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-00674","sfName":"QuantAQ_00674","location":"AK","collocationDates":"3/21/24-4/3/24 @ NCore"},
+  {"sensorId":"MOD-X-PM-01656","sfName":"QuantAQ_X_PM_01656","location":"","collocationDates":"Garden 6/30/25-9/26/25"},
+  {"sensorId":"MOD-X-PM-01657","sfName":"QuantAQ_X_PM_01657","location":"","collocationDates":"Garden 6/30/25-9/26/25"},
+  {"sensorId":"MOD-X-PM-01658","sfName":"QuantAQ_X_PM_01658","location":"","collocationDates":"Garden 6/30/25-9/26/25"},
+  {"sensorId":"MOD-X-PM-01754","sfName":"QuantAQ_X_PM_01754","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01755","sfName":"QuantAQ_X_PM_01755","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01756","sfName":"QuantAQ_X_PM_01756","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01757","sfName":"QuantAQ_X_PM_01757","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01758","sfName":"QuantAQ_X_PM_01758","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01759","sfName":"QuantAQ_X_PM_01759","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01760","sfName":"QuantAQ_X_PM_01760","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01761","sfName":"QuantAQ_X_PM_01761","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01762","sfName":"QuantAQ_X_PM_01762","location":"AK","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01763","sfName":"QuantAQ_X_PM_01763","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01764","sfName":"QuantAQ_X_PM_01764","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01765","sfName":"QuantAQ_X_PM_01765","location":"AK","collocationDates":"12/4/2025-1/16/2026 @ NCore"},
+  {"sensorId":"MOD-X-PM-01766","sfName":"QuantAQ_X_PM_01766","location":"610 University Avenue, Fairbanks, AK, 99709","collocationDates":"12/4/2025-1/16/2026 @ NCore"}
+];
+</script>
+</body>
+</html>
