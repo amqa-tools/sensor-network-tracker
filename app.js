@@ -1409,7 +1409,18 @@ function inlineSaveSensor(el) {
     const s = sensors.find(x => x.id === sensorId);
     if (!s) return;
 
-    if (field === 'status') {
+    if (field === 'soaTagId') {
+        const newVal = el.value.trim();
+        if (newVal) {
+            const dup = sensors.find(x => x.soaTagId === newVal && x.id !== sensorId);
+            if (dup) {
+                showAlert('Duplicate SOA Tag ID', `SOA Tag ID "${newVal}" is already assigned to ${dup.id}. Each sensor must have a unique SOA Tag ID.`);
+                el.value = s.soaTagId || '';
+                return;
+            }
+        }
+        s.soaTagId = newVal;
+    } else if (field === 'status') {
         s.status = Array.from(el.selectedOptions).map(o => o.value).filter(v => v !== '');
         buildSensorSidebar();
     } else {
@@ -1432,6 +1443,14 @@ function inlineSaveContact(el) {
         return;
     }
     el.style.borderColor = '';
+
+    // Warn on duplicate contact name
+    if (field === 'name' && newVal) {
+        const nameDup = contacts.find(x => x.name.toLowerCase() === newVal.toLowerCase() && x.id !== contactId);
+        if (nameDup) {
+            showAlert('Duplicate Contact', `A contact named "${nameDup.name}" already exists (${getCommunityName(nameDup.community) || nameDup.org || 'no community'}). Are you sure this isn't the same person?`);
+        }
+    }
 
     // Track old value for phone/email logging
     const oldVal = c[field] || '';
@@ -1525,6 +1544,15 @@ function saveSensor(e) {
         datePurchased: document.getElementById('sensor-purchased-input').value,
         collocationDates: document.getElementById('sensor-collocation-input').value.trim(),
     };
+
+    // Validate SOA Tag ID uniqueness
+    if (data.soaTagId) {
+        const soaDup = sensors.find(s => s.soaTagId === data.soaTagId && s.id !== data.id);
+        if (soaDup) {
+            showAlert('Duplicate SOA Tag ID', `SOA Tag ID "${data.soaTagId}" is already assigned to ${soaDup.id}. Each sensor must have a unique SOA Tag ID.`);
+            return;
+        }
+    }
 
     if (editId) {
         const oldSensor = sensors.find(s => s.id === editId);
@@ -1731,6 +1759,31 @@ function saveStatusChange(e) {
 }
 
 // ===== MOVE SENSOR =====
+function confirmDeleteSensor(sensorId) {
+    const s = sensors.find(x => x.id === sensorId);
+    if (!s) return;
+
+    const sensorNotes = notes.filter(n => n.taggedSensors && n.taggedSensors.includes(sensorId));
+    let warning = `Are you sure you want to permanently delete sensor ${s.id}?`;
+    if (sensorNotes.length > 0) warning += `\n\n${sensorNotes.length} note${sensorNotes.length > 1 ? 's' : ''} are tagged to this sensor.`;
+    warning += '\n\nThis cannot be undone.';
+
+    showConfirm('Delete Sensor', warning, async () => {
+        try {
+            const idx = sensors.findIndex(x => x.id === sensorId);
+            if (idx >= 0) sensors.splice(idx, 1);
+            await db.deleteSensor(sensorId);
+            openTabs = openTabs.filter(t => t.id !== getTabId('sensor', sensorId));
+            renderOpenTabs();
+            showSuccessToast(`Sensor ${s.id} deleted`);
+            showView('sensors');
+        } catch (err) {
+            console.error('Delete sensor error:', err);
+            showAlert('Error', 'Failed to delete sensor: ' + err.message);
+        }
+    }, { danger: true });
+}
+
 function openMoveSensorModal(sensorId) {
     const s = sensors.find(x => x.id === sensorId);
     if (!s) return;
@@ -1852,6 +1905,9 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Purchase Date</label>
                 <input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="datePurchased" value="${s.datePurchased || ''}" onblur="inlineSaveSensor(this)">
             </div>
+            <div class="info-item" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--slate-200)">
+                <button class="btn btn-danger btn-sm" onclick="confirmDeleteSensor('${s.id}')">Delete Sensor</button>
+            </div>
         `;
     } else {
         document.getElementById('sensor-info-card').innerHTML = `
@@ -1896,6 +1952,15 @@ function inlineEditSensor(sensorId, field) {
     const promptMsg = field === 'location' ? `Edit ${label} (enter an address or GPS coordinates):` : `Edit ${label}:`;
     const newVal = prompt(promptMsg, oldVal);
     if (newVal === null || newVal.trim() === oldVal) return;
+
+    // Validate SOA Tag ID uniqueness
+    if (field === 'soaTagId' && newVal.trim()) {
+        const soaDup = sensors.find(x => x.soaTagId === newVal.trim() && x.id !== sensorId);
+        if (soaDup) {
+            showAlert('Duplicate SOA Tag ID', `SOA Tag ID "${newVal.trim()}" is already assigned to ${soaDup.id}. Each sensor must have a unique SOA Tag ID.`);
+            return;
+        }
+    }
 
     s[field] = newVal.trim();
     persistSensor(s);
@@ -2485,6 +2550,12 @@ async function saveContact(e) {
         emailList: document.getElementById('contact-email-list').checked,
         primaryContact: document.getElementById('contact-primary-contact').checked,
     };
+
+    // Check for duplicate contact name
+    const nameDup = contacts.find(c => c.name.toLowerCase() === data.name.toLowerCase() && c.id !== data.id);
+    if (nameDup) {
+        showAlert('Duplicate Contact', `A contact named "${nameDup.name}" already exists (${getCommunityName(nameDup.community) || nameDup.org || 'no community'}). Are you sure this isn't the same person?`);
+    }
 
     let statusChanged = null;
     let emailChanged = false;
@@ -4014,9 +4085,11 @@ function saveCommunity(e) {
 
     const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-    // Check for duplicates
-    if (COMMUNITIES.find(c => c.id === id)) {
-        showAlert('Duplicate Community', 'A community with that name already exists.');
+    // Check for duplicates (by ID or exact name)
+    const dupById = COMMUNITIES.find(c => c.id === id);
+    const dupByName = COMMUNITIES.find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (dupById || dupByName) {
+        showAlert('Duplicate Community', `A community named "${(dupByName || dupById).name}" already exists.`);
         return;
     }
 
@@ -5535,8 +5608,15 @@ function editCommunityName() {
     const newName = prompt('Edit community name:', c.name);
     if (!newName || newName.trim() === c.name) return;
 
+    const trimmedName = newName.trim();
+    const nameDup = COMMUNITIES.find(x => x.name.toLowerCase() === trimmedName.toLowerCase() && x.id !== currentCommunity);
+    if (nameDup) {
+        showAlert('Duplicate Community', `A community named "${nameDup.name}" already exists.`);
+        return;
+    }
+
     const oldName = c.name;
-    c.name = newName.trim();
+    c.name = trimmedName;
     db.updateCommunity(currentCommunity, { name: c.name }).catch(err => console.error(err));
 
     if (!setupMode) {
@@ -8374,12 +8454,21 @@ async function importSensors(event) {
                 sensor.status = String(statusStr).split(';').map(s => s.trim()).filter(Boolean);
             }
 
+            // Check SOA Tag ID uniqueness
+            if (sensor.soaTagId) {
+                const soaDup = sensors.find(s => s.soaTagId === sensor.soaTagId);
+                if (soaDup) {
+                    skipped++;
+                    continue;
+                }
+            }
+
             sensors.push(sensor);
             persistSensor(sensor);
             imported++;
         }
 
-        showAlert('Import Complete', `${imported} sensors added, ${skipped} skipped (duplicate or missing ID).`);
+        showAlert('Import Complete', `${imported} sensors added, ${skipped} skipped (duplicate ID, duplicate SOA Tag, or missing ID).`);
         event.target.value = '';
         renderSensors();
         buildSensorSidebar();
