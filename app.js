@@ -2399,9 +2399,11 @@ function renderContacts() {
         noncomm: 'No non-community contacts yet.',
     };
 
+    const isNonCommTab = contactsListTab === 'noncomm' && !isSearching;
+
     container.innerHTML = tabDesc + (sortedCommunities.map(commName => `
         <div class="contacts-group">
-            <div class="contacts-group-header">${commName}</div>
+            <div class="contacts-group-header">${isNonCommTab && setupMode ? `<span class="editable-group-name" onclick="renameContactGroup('${escapeHtml(commName)}')" title="Click to rename">${commName} <span class="group-edit-icon">&#9998;</span></span>` : commName}</div>
             <div class="table-container">
                 <table class="contacts-table"><thead><tr>
                     <th class="col-name">Name</th><th class="col-role">Role</th><th class="col-org">Organization</th><th class="col-email">Email</th><th class="col-phone">Phone</th><th class="col-status">Status</th><th class="col-actions"></th>
@@ -2411,6 +2413,21 @@ function renderContacts() {
             </div>
         </div>
     `).join('') || `<div class="empty-state">${isSearching ? 'No contacts found.' : (emptyMessages[contactsListTab] || 'No contacts found.')}</div>`);
+}
+
+function renameContactGroup(oldName) {
+    const newName = prompt('Rename group:', oldName);
+    if (!newName || newName.trim() === oldName) return;
+    const trimmed = newName.trim();
+    // Update org field for all contacts in this group
+    contacts.forEach(c => {
+        if (isNonCommunityContact(c) && (c.org || 'Unassigned') === oldName) {
+            c.org = trimmed === 'Unassigned' ? '' : trimmed;
+            persistContact(c);
+        }
+    });
+    renderContacts();
+    showSuccessToast(`Group renamed to "${trimmed}"`);
 }
 
 function openAddContactModal() {

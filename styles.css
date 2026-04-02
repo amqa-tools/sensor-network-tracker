@@ -1722,6 +1722,28 @@ tr:hover .contact-delete-btn {
     background: rgba(244, 63, 94, 0.08);
 }
 
+.editable-group-name {
+    cursor: pointer;
+    border-bottom: 1px dashed var(--gold-400);
+    padding-bottom: 1px;
+    transition: color 0.15s;
+}
+
+.editable-group-name:hover {
+    color: var(--gold-600);
+}
+
+.group-edit-icon {
+    font-size: 11px;
+    opacity: 0.4;
+    margin-left: 4px;
+    transition: opacity 0.15s;
+}
+
+.editable-group-name:hover .group-edit-icon {
+    opacity: 1;
+}
+
 .contacts-tab-description {
     font-size: 13px;
     color: var(--slate-500);
