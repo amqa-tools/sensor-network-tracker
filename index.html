@@ -244,6 +244,10 @@
                     <h1>All Communities</h1>
                     <button class="btn btn-primary" onclick="openAddCommunityModal()">+ Add Community</button>
                 </div>
+                <div class="community-list-tabs">
+                    <button class="community-list-tab active" id="community-tab-active" onclick="switchCommunityTab('active')">Active <span class="community-tab-count" id="community-active-count"></span></button>
+                    <button class="community-list-tab" id="community-tab-inactive" onclick="switchCommunityTab('inactive')">Inactive <span class="community-tab-count" id="community-inactive-count"></span></button>
+                </div>
                 <div id="community-tag-filters" class="community-tag-filters"></div>
                 <div class="filter-bar">
                     <input type="text" id="community-search" placeholder="Search communities..." oninput="renderCommunitiesList()" aria-label="Search communities">
@@ -633,6 +637,12 @@
                         </label>
                     </div>
                 </div>
+                <div class="form-group">
+                    <label class="contact-email-list-label">
+                        <input type="checkbox" id="contact-email-list">
+                        Include on email list
+                    </label>
+                </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-danger" id="delete-contact-btn" onclick="deleteCurrentContact()" style="margin-right:auto;display:none">Delete Contact</button>
                     <button type="button" class="btn" onclick="closeModal('modal-add-contact')">Cancel</button>
@@ -762,14 +772,18 @@
             </div>
             <div class="email-composer">
                 <div class="email-toolbar">
-                    <button type="button" class="btn btn-sm" onclick="emailSelectAll()">Select All</button>
-                    <button type="button" class="btn btn-sm" onclick="emailDeselectAll()">Deselect All</button>
-                    <button type="button" class="btn btn-sm" onclick="emailShowAll()">Show All</button>
-                    <span class="email-toolbar-divider">|</span>
-                    <label class="email-toolbar-label">Filter by Community:</label>
-                    <select id="email-community-filter" onchange="emailFilterByCommunity()" aria-label="Filter by community">
-                        <option value="">All Communities</option>
-                    </select>
+                    <div class="email-toolbar-left">
+                        <button type="button" class="btn btn-sm btn-email-list" id="btn-network-email-list" onclick="emailSelectNetworkList()">Network-Wide Email List</button>
+                        <span class="email-toolbar-divider">|</span>
+                        <button type="button" class="btn btn-sm" onclick="emailSelectAll()">Select All</button>
+                        <button type="button" class="btn btn-sm" onclick="emailDeselectAll()">Deselect All</button>
+                    </div>
+                    <div class="email-toolbar-right">
+                        <label class="email-toolbar-label">Filter by Community:</label>
+                        <select id="email-community-filter" onchange="emailFilterByCommunity()" aria-label="Filter by community">
+                            <option value="">All Communities</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="email-recipients-list" class="email-recipients-list"></div>
                 <div class="form-group">

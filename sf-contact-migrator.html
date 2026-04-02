@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salesforce Contact Migration Tool</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --navy: #1a2332;
+    --navy-light: #243044;
+    --navy-mid: #2d3d56;
+    --gold: #d4a84b;
+    --gold-light: #e8c97a;
+    --white: #ffffff;
+    --off-white: #f0f2f5;
+    --text: #e8ecf1;
+    --text-dim: #8899aa;
+    --green: #4caf50;
+    --red: #e74c3c;
+    --orange: #f39c12;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--navy);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+
+  h1 {
+    color: var(--gold);
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+  }
+
+  /* Login */
+  #login-section {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 32px;
+    width: 100%;
+    max-width: 400px;
+    margin-top: 40px;
+  }
+  #login-section h2 { color: var(--gold); margin-bottom: 16px; font-size: 1.2rem; }
+  #login-section input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+  }
+  #login-section button {
+    width: 100%;
+    padding: 10px;
+    background: var(--gold);
+    color: var(--navy);
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  #login-section button:hover { background: var(--gold-light); }
+  #login-error { color: var(--red); font-size: 0.85rem; margin-top: 8px; }
+
+  /* Progress bar */
+  .progress-bar-container {
+    width: 100%;
+    max-width: 800px;
+    margin-bottom: 16px;
+  }
+  .progress-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .progress-track {
+    height: 8px;
+    background: var(--navy-mid);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  /* Counters */
+  .counter-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .counter {
+    background: var(--navy-light);
+    border-radius: 8px;
+    padding: 8px 16px;
+    text-align: center;
+    min-width: 100px;
+  }
+  .counter .num {
+    font-size: 1.4rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .counter .label { font-size: 0.75rem; color: var(--text-dim); }
+  .counter.approved .num { color: var(--green); }
+  .counter.skipped .num { color: var(--orange); }
+  .counter.remaining .num { color: var(--text-dim); }
+
+  /* Card */
+  .review-card {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 28px;
+    width: 100%;
+    max-width: 800px;
+    border: 1px solid var(--navy-mid);
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-header h2 { font-size: 1.1rem; color: var(--gold); }
+  .sf-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    background: var(--navy);
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  .sf-data {
+    background: var(--navy);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    border: 1px solid var(--navy-mid);
+  }
+  .sf-data h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+  .sf-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+  }
+  .sf-label {
+    color: var(--text-dim);
+    min-width: 120px;
+    flex-shrink: 0;
+  }
+  .sf-value { color: var(--text); }
+  .sf-value.empty { color: var(--navy-mid); font-style: italic; }
+
+  /* Form fields */
+  .form-section {
+    margin-bottom: 16px;
+  }
+  .form-section h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .form-row.full { grid-template-columns: 1fr; }
+  .form-group label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .form-group input, .form-group select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--gold);
+  }
+  .form-group select { cursor: pointer; }
+  .form-group .hint {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+  .mapping-info {
+    font-size: 0.8rem;
+    color: var(--gold);
+    margin-top: 3px;
+    font-style: italic;
+  }
+
+  /* Buttons */
+  .button-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-approve {
+    background: var(--green);
+    color: white;
+    flex: 1;
+  }
+  .btn-skip {
+    background: var(--navy-mid);
+    color: var(--text);
+  }
+  .btn-back {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--navy-mid);
+  }
+
+  /* Done */
+  .done-section {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    width: 100%;
+    max-width: 800px;
+  }
+  .done-section h2 { color: var(--green); font-size: 1.4rem; margin-bottom: 12px; }
+  .done-section p { color: var(--text-dim); margin-bottom: 8px; }
+
+  .skipped-list {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 800px;
+    margin-top: 20px;
+  }
+  .skipped-list h3 { color: var(--orange); margin-bottom: 12px; }
+  .skipped-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--navy-mid);
+    font-size: 0.9rem;
+  }
+  .skipped-item:last-child { border: none; }
+  .skipped-item .btn { padding: 6px 14px; font-size: 0.8rem; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.success { background: var(--green); color: white; }
+  .toast.error { background: var(--red); color: white; }
+
+  /* Active toggle */
+  .active-toggle {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .active-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .active-toggle input[type="radio"] { accent-color: var(--gold); }
+
+  .email-list-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    margin-top: 6px;
+  }
+  .email-list-check input[type="checkbox"] {
+    accent-color: var(--gold);
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+    max-width: 800px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-bar select, .filter-bar input {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy-light);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .filter-bar label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  /* Add Community button */
+  .btn-add-community {
+    padding: 8px 12px;
+    background: var(--navy-mid);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .btn-add-community:hover {
+    background: var(--gold);
+    color: var(--navy);
+  }
+
+  /* Modal overlay */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal-box {
+    background: var(--navy-light);
+    border: 1px solid var(--navy-mid);
+    border-radius: 12px;
+    padding: 28px;
+    width: 90%;
+    max-width: 440px;
+  }
+  .modal-box h2 {
+    color: var(--gold);
+    font-size: 1.1rem;
+    margin-bottom: 16px;
+  }
+  .modal-box .form-group { margin-bottom: 14px; }
+  .modal-box .form-group label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .modal-box input, .modal-box select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+  .modal-box input:focus, .modal-box select:focus {
+    outline: none;
+    border-color: var(--gold);
+  }
+  .modal-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: flex-end;
+  }
+  .modal-buttons .btn { padding: 8px 20px; font-size: 0.9rem; }
+  .modal-id-preview {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .dup-warning {
+    background: rgba(243, 156, 18, 0.15);
+    border: 1px solid var(--orange);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: var(--orange);
+  }
+</style>
+</head>
+<body>
+
+<h1>Salesforce Contact Migration</h1>
+<p class="subtitle">Review and import contacts into AMQA Sensor Network Tracker</p>
+
+<!-- Login -->
+<div id="login-section">
+  <h2>Sign In</h2>
+  <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px;">Log in with your Sensor Tracker account to upload contacts.</p>
+  <input type="email" id="login-email" placeholder="Email">
+  <input type="password" id="login-password" placeholder="Password">
+  <button onclick="doLogin()">Sign In</button>
+  <div id="login-error"></div>
+</div>
+
+<!-- Main review area (hidden until login) -->
+<div id="main-area" style="display:none; width:100%; max-width:800px; display:flex; flex-direction:column; align-items:center;">
+  <div id="main-area-inner" style="display:none; width:100%;">
+
+    <!-- Filter -->
+    <div class="filter-bar" id="filter-bar">
+      <label>Jump to account:</label>
+      <select id="account-filter" onchange="jumpToAccount()">
+        <option value="">-- All (sequential) --</option>
+      </select>
+      <label style="margin-left:auto;">Search:</label>
+      <input type="text" id="search-box" placeholder="Name or email..." oninput="searchContact()">
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-bar-container">
+      <div class="progress-stats">
+        <span id="progress-label">Contact 1 of 201</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Counters -->
+    <div class="counter-row">
+      <div class="counter approved"><div class="num" id="count-approved">0</div><div class="label">Approved</div></div>
+      <div class="counter skipped"><div class="num" id="count-skipped">0</div><div class="label">Skipped</div></div>
+      <div class="counter remaining"><div class="num" id="count-remaining">201</div><div class="label">Remaining</div></div>
+    </div>
+
+    <!-- Review Card -->
+    <div class="review-card" id="review-card"></div>
+
+    <!-- Done -->
+    <div class="done-section" id="done-section" style="display:none;"></div>
+
+    <!-- Skipped list -->
+    <div class="skipped-list" id="skipped-list" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- New Community Modal -->
+<div class="modal-overlay hidden" id="new-community-modal">
+  <div class="modal-box">
+    <h2>Add New Community</h2>
+    <div class="form-group">
+      <label>Community Name</label>
+      <input type="text" id="new-comm-name" placeholder="e.g. Unalaska" oninput="previewCommunityId()">
+      <div class="modal-id-preview" id="new-comm-id-preview"></div>
+    </div>
+    <div class="form-group">
+      <label>Parent Community (optional)</label>
+      <select id="new-comm-parent">
+        <option value="">-- None (top-level) --</option>
+      </select>
+    </div>
+    <div id="new-comm-error" style="color:var(--red);font-size:0.85rem;margin-top:8px;"></div>
+    <div class="modal-buttons">
+      <button class="btn btn-skip" onclick="closeNewCommunityModal()">Cancel</button>
+      <button class="btn btn-approve" onclick="saveNewCommunity()">Add Community</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== SUPABASE SETUP =====
+const SUPABASE_URL = 'https://uejryzioxogquflijgyf.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlanJ5emlveG9ncXVmbGlqZ3lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTkyODMsImV4cCI6MjA4OTI3NTI4M30.YD349-X2PeoeCTVp34FbzdGwachr9YCpzIPSXuSURfM';
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ===== DATA =====
+let sfContacts = [];
+let communities = [];
+let existingContacts = [];
+let currentIndex = 0;
+let approved = [];
+let skipped = [];
+let decisions = {}; // sf_id -> 'approved' | 'skipped'
+
+// ===== COMMUNITY MAPPING =====
+// Maps SF account names to app community IDs
+const ACCOUNT_TO_COMMUNITY = {
+  // Direct community matches
+  'Anchorage': 'anchorage',
+  'Anchorage Lab': 'anc-lab',
+  'Badger': 'badger',
+  'Bethel': 'bethel',
+  'Big Lake Public Library': 'big-lake',
+  'Campbell Creek Science Center - BLM': 'campbell-creek-science-center',
+  'Chickaloon Village Traditional Council': 'chickaloon',
+  'Cordova': 'cordova',
+  'Delta Community Library': 'delta-junction',
+  'Fairbanks': 'fairbanks',
+  'Galena': 'galena',
+  'Gerstle River': 'gerstle-river',
+  'Gerstle River School': 'gerstle-river',
+  'Glennallen - BLM': 'glennallen',
+  'Goldstream (FBX)': 'goldstream',
+  'Homer': 'homer',
+  'Hoonah': 'hoonah',
+  'Juneau': 'juneau',
+  'Alaska State Museum Juneau': 'jnu-alaska-state-museum',
+  'Kenai': 'kenai',
+  'Ketchikan': 'ketchikan',
+  'Kodiak': 'kodiak',
+  'Kotzebue': 'kotzebue',
+  'Napaskiak': 'napaskiak',
+  'Nenana': 'nenana',
+  'Ninilchik Community Library': 'ninilchik',
+  'Ninilchik Native Association': 'ninilchik',
+  'Palmer Public Library': 'palmer',
+  'Salcha': 'salcha',
+  'Salcha Elementary School': 'salcha',
+  'Salcha Senior Center': 'salcha',
+  'Seward': 'seward',
+  'Sitka': 'sitka',
+  'Skagway': 'skagway',
+  'Skagway Traditional Council': 'skagway',
+  'Soldotna': 'soldotna',
+  'Soldotna Senior Center': 'soldotna',
+  'Talkeetna': 'talkeetna',
+  'Tok Community Library': 'tok',
+  'Tyonek': 'tyonek',
+  'Native Village of Tyonek': 'tyonek',
+  'Valdez': 'valdez',
+  'Valdez City Library': 'valdez',
+  'Wasilla Public Library': 'wasilla',
+  'Willow': 'willow',
+  'Willow Public Library': 'willow',
+  'Sunshine Community Health Center (Willow)': 'willow',
+  'Wrangell': 'wrangell',
+  'Wrangell Public Library': 'wrangell',
+  'Yakutat': 'yakutat',
+  'City & Borough of Yakutat': 'yakutat',
+
+  // Tribe/org to community mappings
+  'Chilkoot Indian Association': 'haines',
+  'Eyak Tribe': 'cordova',
+  'Kenaitze Tribe': 'kenai',
+  'Kenai Peninsula College': 'kenai',
+  'Ketchikan Indian Community': 'ketchikan',
+  'Kodiak Island Borough': 'kodiak',
+  'Sitka Tribe of Alaska': 'sitka',
+  'Louden Tribe - Galena': 'galena',
+  'Native Village of Kluti-Kaah': 'glennallen',
+  'Native Village of Eklutna': 'anchorage',
+  'Knik Tribe': 'wasilla',
+  'Anne Wien Elementary School': 'anne-wien-elementary',
+  'FNSBSD': 'fairbanks',
+  'Native Village of Nanwalek': 'kenai',
+  'Qutekcak Native Tribe': 'seward',
+  'Denali Park': 'nenana',
+  'Nenana Native Village Council': 'nenana',
+  'Silver Fox Roadhouse': 'salcha',
+  'Orutsararmiut Native Council': 'bethel',
+  'Native Village of Napaskiak': 'napaskiak',
+
+  // Orgs that might map to specific communities
+  'Maniilaq Association': 'kotzebue',
+  'Norton Sound Health Corporation': 'nome',
+  'KNOM Radio': 'nome',
+  'Yukon-Kuskokwim Health Corporation': 'bethel',
+  'Lower Kuskokwim School District': 'bethel',
+  'Kuskokwim Consortium Library': 'bethel',
+  'UAF Kuskokwim Campus': 'bethel',
+  'Yupiit Piciryarait Cultural Center': 'bethel',
+  'Aleut Community of St. Paul Island': '', // no community yet
+  'Aleutian Pribilof Islands Association': '', // no community yet
+  'Unalaska': '', // no community yet
+};
+
+function guessOrg(c) {
+  // Try to figure out the org from SF data
+  if (c.account_type === 'Tribe') return c.account_name;
+  if (c.account_type === 'Sensor Manufacturer') return c.account_name;
+  if (c.account_type === 'Other') return c.account_name;
+  if (c.department) return c.department;
+  // For community-type accounts, the org might be in title
+  if (c.title && c.title.includes(' - ')) {
+    const parts = c.title.split(' - ');
+    if (parts.length > 1) return parts[0].trim();
+  }
+  return c.account_name || '';
+}
+
+function guessRole(c) {
+  if (c.title) {
+    // Clean up title - remove org prefix if present
+    let role = c.title;
+    if (role.includes(' - ') && c.account_name) {
+      // If title is "Org - Role", extract role
+      const parts = role.split(' - ');
+      if (parts[0].trim() === c.account_name || parts.length > 1) {
+        role = parts[parts.length - 1].trim();
+      }
+    }
+    return role;
+  }
+  return '';
+}
+
+function guessPhone(c) {
+  return c.phone || c.mobile || '';
+}
+
+function guessCommunity(c) {
+  // Direct mapping
+  if (ACCOUNT_TO_COMMUNITY[c.account_name] !== undefined) {
+    return ACCOUNT_TO_COMMUNITY[c.account_name];
+  }
+  // Parent account mapping
+  if (c.parent_account && ACCOUNT_TO_COMMUNITY[c.parent_account] !== undefined) {
+    return ACCOUNT_TO_COMMUNITY[c.parent_account];
+  }
+  return '';
+}
+
+function getCommunityName(id) {
+  const c = communities.find(x => x.id === id);
+  return c ? c.name : id;
+}
+
+function checkDuplicate(contact) {
+  const name = contact.name.toLowerCase().trim();
+  const email = (contact.email || '').toLowerCase().trim();
+  return existingContacts.filter(ec => {
+    const eName = (ec.name || '').toLowerCase().trim();
+    const eEmail = (ec.email || '').toLowerCase().trim();
+    if (email && eEmail && email === eEmail) return true;
+    if (name && eName && name === eName) return true;
+    return false;
+  });
+}
+
+// ===== LOGIN =====
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  document.getElementById('login-error').textContent = '';
+
+  try {
+    const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+    if (error) throw error;
+    document.getElementById('login-section').style.display = 'none';
+    document.getElementById('main-area').style.display = 'flex';
+    document.getElementById('main-area-inner').style.display = '';
+    await loadData();
+  } catch (err) {
+    document.getElementById('login-error').textContent = err.message;
+  }
+}
+
+// Allow Enter key on password field
+document.getElementById('login-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ===== LOAD DATA =====
+async function loadData() {
+  // Load communities
+  const { data: comms, error: commErr } = await supa.from('communities').select('*').order('name');
+  if (commErr) { showToast('Failed to load communities: ' + commErr.message, 'error'); return; }
+  communities = comms || [];
+
+  // Load existing contacts (for duplicate detection)
+  const { data: contacts, error: contErr } = await supa.from('contacts').select('*');
+  if (contErr) { showToast('Failed to load contacts: ' + contErr.message, 'error'); return; }
+  existingContacts = contacts || [];
+
+  // Populate account filter dropdown
+  const accountFilter = document.getElementById('account-filter');
+  const accountNames = [...new Set(sfContacts.map(c => c.account_name).filter(Boolean))].sort();
+  accountNames.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = `${name} (${sfContacts.filter(c => c.account_name === name).length})`;
+    accountFilter.appendChild(opt);
+  });
+
+  showContact(0);
+}
+
+// ===== RENDER =====
+function showContact(index) {
+  // Skip already-decided contacts when navigating
+  while (index < sfContacts.length && decisions[sfContacts[index].sf_id]) {
+    index++;
+  }
+  if (index >= sfContacts.length) {
+    showDone();
+    return;
+  }
+  currentIndex = index;
+  const c = sfContacts[index];
+  const communityId = guessCommunity(c);
+  const org = guessOrg(c);
+  const role = guessRole(c);
+  const phone = guessPhone(c);
+  const dups = checkDuplicate(c);
+
+  const totalDecided = approved.length + skipped.length;
+  const remaining = sfContacts.length - totalDecided;
+  const pct = Math.round((totalDecided / sfContacts.length) * 100);
+
+  document.getElementById('progress-label').textContent = `Contact ${totalDecided + 1} of ${sfContacts.length}`;
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('count-approved').textContent = approved.length;
+  document.getElementById('count-skipped').textContent = skipped.length;
+  document.getElementById('count-remaining').textContent = remaining;
+
+  let dupHtml = '';
+  if (dups.length > 0) {
+    dupHtml = `<div class="dup-warning">
+      Possible duplicate${dups.length > 1 ? 's' : ''} already in app:
+      ${dups.map(d => `<strong>${d.name}</strong> (${d.email || 'no email'}, ${getCommunityName(d.community_id)})`).join(', ')}
+    </div>`;
+  }
+
+  const card = document.getElementById('review-card');
+  card.innerHTML = `
+    ${dupHtml}
+    <div class="card-header">
+      <h2>${c.name || '(No Name)'}</h2>
+      <span class="sf-badge">SF: ${c.account_name || 'No Account'} (${c.account_type || 'N/A'})</span>
+    </div>
+
+    <div class="sf-data">
+      <h3>Salesforce Data (read-only reference)</h3>
+      <div class="sf-row"><span class="sf-label">Name:</span> <span class="sf-value">${c.name || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Email:</span> <span class="sf-value">${c.email || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Phone:</span> <span class="sf-value">${c.phone || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Mobile:</span> <span class="sf-value">${c.mobile || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Title:</span> <span class="sf-value">${c.title || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Department:</span> <span class="sf-value">${c.department || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Account:</span> <span class="sf-value">${c.account_name || '<em class="empty">empty</em>'} ${c.account_type ? '(' + c.account_type + ')' : ''}</span></div>
+      <div class="sf-row"><span class="sf-label">Parent Account:</span> <span class="sf-value">${c.parent_account || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Mailing City:</span> <span class="sf-value">${c.mailing_city || '<em class="empty">empty</em>'}</span></div>
+      <div class="sf-row"><span class="sf-label">Email List:</span> <span class="sf-value">${c.include_email === '1' ? '<strong style="color:var(--green)">Yes</strong>' : c.include_email === '0' ? 'No' : '<em class="empty">not set</em>'}</span></div>
+    </div>
+
+    <div class="form-section">
+      <h3>Data to Upload (edit as needed)</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="inp-name" value="${escHtml(c.name)}">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="inp-email" value="${escHtml(c.email)}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="text" id="inp-phone" value="${escHtml(phone)}">
+        </div>
+        <div class="form-group">
+          <label>Organization</label>
+          <input type="text" id="inp-org" value="${escHtml(org)}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Role / Title</label>
+          <input type="text" id="inp-role" value="${escHtml(role)}">
+        </div>
+        <div class="form-group">
+          <label>Community</label>
+          <div style="display:flex;gap:8px;align-items:start;">
+            <select id="inp-community" style="flex:1;">
+              <option value="">-- No Community --</option>
+              ${communities.map(cm => `<option value="${cm.id}" ${cm.id === communityId ? 'selected' : ''}>${cm.name}</option>`).join('')}
+            </select>
+            <button type="button" class="btn-add-community" onclick="openNewCommunityModal()" title="Add new community">+ New</button>
+          </div>
+          ${communityId ? `<div class="mapping-info">Auto-mapped from "${c.account_name}"</div>` : c.account_name ? `<div class="hint" style="color:var(--orange)">No auto-mapping for "${c.account_name}" - please select manually</div>` : ''}
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Active?</label>
+          <div class="active-toggle">
+            <label><input type="radio" name="active" value="true" checked> Active</label>
+            <label><input type="radio" name="active" value="false"> Inactive</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="email-list-check">
+            <input type="checkbox" id="inp-email-list" ${c.include_email === '1' ? 'checked' : ''}>
+            Include on email list
+          </label>
+          ${c.include_email === '1' ? '<div class="mapping-info">Pre-checked from Salesforce data</div>' : c.include_email === '0' ? '<div class="hint">Marked "No" in Salesforce</div>' : '<div class="hint">Not set in Salesforce</div>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="button-row">
+      ${totalDecided > 0 ? '<button class="btn btn-back" onclick="goBack()">Back</button>' : ''}
+      <button class="btn btn-skip" onclick="skipContact()">Skip</button>
+      <button class="btn btn-approve" onclick="approveContact()">Approve & Upload</button>
+    </div>
+  `;
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ===== ACTIONS =====
+async function approveContact() {
+  const c = sfContacts[currentIndex];
+  const name = document.getElementById('inp-name').value.trim();
+  const email = document.getElementById('inp-email').value.trim();
+  const phone = document.getElementById('inp-phone').value.trim();
+  const org = document.getElementById('inp-org').value.trim();
+  const role = document.getElementById('inp-role').value.trim();
+  const communityId = document.getElementById('inp-community').value;
+  const active = document.querySelector('input[name="active"]:checked').value === 'true';
+  const emailList = document.getElementById('inp-email-list').checked;
+
+  if (!name) { showToast('Name is required', 'error'); return; }
+
+  // Validate email format if provided
+  if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+    showToast('Invalid email format', 'error');
+    return;
+  }
+
+  const row = {
+    name,
+    role: role || '',
+    community_id: communityId || null,
+    email: email || '',
+    phone: phone || '',
+    org: org || '',
+    active,
+    email_list: emailList,
+  };
+
+  // Disable button while uploading
+  const btn = document.querySelector('.btn-approve');
+  btn.textContent = 'Uploading...';
+  btn.disabled = true;
+
+  try {
+    let { data, error } = await supa.from('contacts').insert(row).select();
+    // If email_list column doesn't exist yet, retry without it
+    if (error && error.message && error.message.includes('email_list')) {
+      const { email_list, ...rowWithout } = row;
+      ({ data, error } = await supa.from('contacts').insert(rowWithout).select());
+    }
+    if (error) throw error;
+
+    approved.push({ ...c, uploaded: data[0] });
+    decisions[c.sf_id] = 'approved';
+    existingContacts.push(data[0]); // Add to existing for dup detection
+    showToast(`${name} uploaded successfully`, 'success');
+    showContact(currentIndex + 1);
+  } catch (err) {
+    showToast('Upload failed: ' + err.message, 'error');
+    btn.textContent = 'Approve & Upload';
+    btn.disabled = false;
+  }
+}
+
+function skipContact() {
+  const c = sfContacts[currentIndex];
+  skipped.push(c);
+  decisions[c.sf_id] = 'skipped';
+  showContact(currentIndex + 1);
+}
+
+function goBack() {
+  // Find the previous decided contact
+  let prevIndex = currentIndex - 1;
+  while (prevIndex >= 0) {
+    const c = sfContacts[prevIndex];
+    if (decisions[c.sf_id]) {
+      // Undo the decision
+      if (decisions[c.sf_id] === 'approved') {
+        approved = approved.filter(a => a.sf_id !== c.sf_id);
+        // Note: we don't delete from Supabase on back - user can skip if they want
+      } else {
+        skipped = skipped.filter(s => s.sf_id !== c.sf_id);
+      }
+      delete decisions[c.sf_id];
+      currentIndex = prevIndex;
+      showContact(prevIndex);
+      return;
+    }
+    prevIndex--;
+  }
+}
+
+function jumpToAccount() {
+  const account = document.getElementById('account-filter').value;
+  if (!account) { showContact(currentIndex); return; }
+  const idx = sfContacts.findIndex(c => c.account_name === account && !decisions[c.sf_id]);
+  if (idx >= 0) showContact(idx);
+  else showToast('All contacts from that account have been reviewed', 'error');
+}
+
+function searchContact() {
+  const q = document.getElementById('search-box').value.toLowerCase().trim();
+  if (!q) return;
+  const idx = sfContacts.findIndex(c =>
+    !decisions[c.sf_id] &&
+    ((c.name || '').toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q))
+  );
+  if (idx >= 0) showContact(idx);
+}
+
+// ===== DONE =====
+function showDone() {
+  document.getElementById('review-card').style.display = 'none';
+  document.getElementById('filter-bar').style.display = 'none';
+
+  const pct = 100;
+  document.getElementById('progress-label').textContent = 'All contacts reviewed';
+  document.getElementById('progress-pct').textContent = '100%';
+  document.getElementById('progress-fill').style.width = '100%';
+  document.getElementById('count-approved').textContent = approved.length;
+  document.getElementById('count-skipped').textContent = skipped.length;
+  document.getElementById('count-remaining').textContent = '0';
+
+  const done = document.getElementById('done-section');
+  done.style.display = '';
+  done.innerHTML = `
+    <h2>Migration Complete</h2>
+    <p>${approved.length} contacts uploaded to the Sensor Network Tracker</p>
+    <p>${skipped.length} contacts skipped</p>
+    <p style="margin-top: 16px; color: var(--text);">You can now open the Sensor Tracker app to verify the imported contacts.</p>
+  `;
+
+  if (skipped.length > 0) {
+    const list = document.getElementById('skipped-list');
+    list.style.display = '';
+    list.innerHTML = `
+      <h3>Skipped Contacts (${skipped.length})</h3>
+      <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 12px;">You can review these again if needed.</p>
+      ${skipped.map((c, i) => `
+        <div class="skipped-item">
+          <div>
+            <strong>${c.name}</strong>
+            <span style="color: var(--text-dim); margin-left: 8px;">${c.account_name || ''}</span>
+            <span style="color: var(--text-dim); margin-left: 8px;">${c.email || ''}</span>
+          </div>
+          <button class="btn btn-approve" style="padding:6px 14px;font-size:0.8rem;" onclick="reviewSkipped(${i})">Review</button>
+        </div>
+      `).join('')}
+    `;
+  }
+}
+
+function reviewSkipped(skipIdx) {
+  const c = skipped[skipIdx];
+  // Remove from skipped, reset decision
+  skipped.splice(skipIdx, 1);
+  delete decisions[c.sf_id];
+
+  // Find the index in sfContacts
+  const idx = sfContacts.findIndex(x => x.sf_id === c.sf_id);
+
+  document.getElementById('review-card').style.display = '';
+  document.getElementById('filter-bar').style.display = '';
+  document.getElementById('done-section').style.display = 'none';
+  document.getElementById('skipped-list').style.display = 'none';
+
+  showContact(idx);
+}
+
+// ===== TOAST =====
+function showToast(msg, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = `toast ${type} show`;
+  setTimeout(() => { toast.className = 'toast'; }, 3000);
+}
+
+// ===== NEW COMMUNITY =====
+function openNewCommunityModal() {
+  const modal = document.getElementById('new-community-modal');
+  modal.classList.remove('hidden');
+  document.getElementById('new-comm-name').value = '';
+  document.getElementById('new-comm-error').textContent = '';
+  document.getElementById('new-comm-id-preview').textContent = '';
+
+  // Populate parent dropdown
+  const parentSelect = document.getElementById('new-comm-parent');
+  parentSelect.innerHTML = '<option value="">-- None (top-level) --</option>' +
+    communities.map(cm => `<option value="${cm.id}">${cm.name}</option>`).join('');
+
+  document.getElementById('new-comm-name').focus();
+}
+
+function closeNewCommunityModal() {
+  document.getElementById('new-community-modal').classList.add('hidden');
+}
+
+function previewCommunityId() {
+  const name = document.getElementById('new-comm-name').value.trim();
+  const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  document.getElementById('new-comm-id-preview').textContent = id ? `ID: ${id}` : '';
+}
+
+async function saveNewCommunity() {
+  const name = document.getElementById('new-comm-name').value.trim();
+  const parentId = document.getElementById('new-comm-parent').value;
+  const errorEl = document.getElementById('new-comm-error');
+  errorEl.textContent = '';
+
+  if (!name) { errorEl.textContent = 'Name is required'; return; }
+
+  const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  if (!id) { errorEl.textContent = 'Name must contain at least one letter or number'; return; }
+
+  // Check for duplicates
+  if (communities.find(c => c.id === id)) {
+    errorEl.textContent = 'A community with that ID already exists';
+    return;
+  }
+
+  // Save to Supabase
+  const btn = document.querySelector('#new-community-modal .btn-approve');
+  btn.textContent = 'Adding...';
+  btn.disabled = true;
+
+  try {
+    const row = { id, name, parent_id: parentId || null };
+    const { error } = await supa.from('communities').insert(row);
+    if (error) throw error;
+
+    // Add to local list and sort
+    communities.push({ id, name, parent_id: parentId || null });
+    communities.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Update the community dropdown on the current card
+    const select = document.getElementById('inp-community');
+    if (select) {
+      // Rebuild options
+      select.innerHTML = '<option value="">-- No Community --</option>' +
+        communities.map(cm => `<option value="${cm.id}" ${cm.id === id ? 'selected' : ''}>${cm.name}</option>`).join('');
+    }
+
+    closeNewCommunityModal();
+    showToast(`Community "${name}" added and selected`, 'success');
+  } catch (err) {
+    errorEl.textContent = 'Failed: ' + err.message;
+  } finally {
+    btn.textContent = 'Add Community';
+    btn.disabled = false;
+  }
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !document.getElementById('new-community-modal').classList.contains('hidden')) {
+    closeNewCommunityModal();
+  }
+});
+
+// ===== LOAD SF DATA =====
+// Data is embedded below in SF_CONTACTS_JSON
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    sfContacts = JSON.parse(SF_CONTACTS_JSON);
+    console.log(`Loaded ${sfContacts.length} Salesforce contacts`);
+  } catch (e) {
+    console.error('Failed to parse SF data:', e);
+  }
+});
+
+</script>
+
+<!-- Salesforce contact data (generated from export) -->
+<script>
+const SF_CONTACTS_JSON = `[{"sf_id": "003Hu00003SnFbVIAV", "name": "Larry Carmichael", "email": "igap@ugashikvillage.com", "phone": "907-338-7684", "mobile": "", "title": "", "department": "Ugashik Traditional Village", "account_name": "", "account_type": "", "parent_account": "", "mailing_city": "", "include_email": ""}, {"sf_id": "003Hu00003WCtunIAD", "name": "Jason Hirst", "email": "jhirst@ambilabs.com", "phone": "1 (877) 247-0403 x120", "mobile": "+1 (401) 895-1464", "title": "National Account Manager - Ambient Monitoring", "department": "", "account_name": "AQMesh Manufacturer/Factory", "account_type": "Sensor Manufacturer", "parent_account": "", "mailing_city": "", "include_email": ""}, {"sf_id": "003Hu00003WCs6RIAT", "name": "Tele Furlani", "email": "tfurlani@ambilabs.com", "phone": "401-247-0100", "mobile": "", "title": "Scientific Advisor", "department": "", "account_name": "AQMesh Manufacturer/Factory", "account_type": "Sensor Manufacturer", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WCtumIAD", "name": "Tom Randolph", "email": "trandolph@ambilabs.com", "phone": "+1 (401) 247-0100", "mobile": "+1 (401) 243-7482", "title": "Technical Specialist", "department": "", "account_name": "AQMesh Manufacturer/Factory", "account_type": "Sensor Manufacturer", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000RoYwfIAF", "name": "Cara Lehman", "email": "cl361f@att.com", "phone": "425-898-3396", "mobile": "", "title": "", "department": "", "account_name": "AT&T", "account_type": "Other", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000UrilBIAR", "name": "Josiah Kober", "email": "jk9987@att.com", "phone": "907 715 6271", "mobile": "907 715 6271", "title": "Maintenance Tech", "department": "", "account_name": "AT&T", "account_type": "Other", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnG0UIAV", "name": "John Nick", "email": "anc_igap@yahoo.com", "phone": "(907) 825-4626", "mobile": "", "title": "", "department": "IGAP Coordinator", "account_name": "Akiachak", "account_type": "Community", "parent_account": "", "mailing_city": "Akiachak Native Community", "include_email": "0"}, {"sf_id": "003Hu00003SnG0VIAV", "name": "Roland Nose", "email": "anc_igapassistant@yahoo.com", "phone": "(907) 825-4626", "mobile": "", "title": "", "department": "Assistant IGAP Coordinator/Land Fill Operator", "account_name": "Akiachak", "account_type": "Community", "parent_account": "", "mailing_city": "Akiachak Native Community", "include_email": "0"}, {"sf_id": "003V500000PKGThIAP", "name": "Jana Lee", "email": "jl4132@att.com", "phone": "907-264-7666", "mobile": "907-229-4262", "title": "", "department": "", "account_name": "Alascom", "account_type": "Other", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SqaiRIAR", "name": "Andrew Willman", "email": "awillman@anthc.org", "phone": "907-729-3596", "mobile": "", "title": "NO LONGER A CONTACT", "department": "CEH", "account_name": "Alaska Native Tribal Health Consortium", "account_type": "Native Corporation", "parent_account": "Anchorage", "mailing_city": "Anchorage", "include_email": "0"}, {"sf_id": "003Hu00003WCsubIAD", "name": "Ida Clark", "email": "ipclark@anthc.org", "phone": "907-729-4043", "mobile": "907-717-0181", "title": "NO LONGER A CONTACT", "department": "", "account_name": "Alaska Native Tribal Health Consortium", "account_type": "Native Corporation", "parent_account": "Anchorage", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnG0cIAF", "name": "Jennifer Dobson", "email": "jdobson@anthc.org", "phone": "", "mobile": "", "title": "", "department": "Senior Epidemiologist", "account_name": "Alaska Native Tribal Health Consortium", "account_type": "Native Corporation", "parent_account": "Anchorage", "mailing_city": "Alaska Native Tribal Health Consortium", "include_email": "0"}, {"sf_id": "003V5000008dDLrIAM", "name": "Melissa Castaneda", "email": "mjcastaneda@anthc.org", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Alaska Native Tribal Health Consortium", "account_type": "Native Corporation", "parent_account": "Anchorage", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WBzh3IAD", "name": "Clint Farr", "email": "clint.farr@alaska.gov", "phone": "907 465 2912", "mobile": "", "title": "Operations Manager, DEED Division of Libraries, Archives, and Museums", "department": "", "account_name": "Alaska State Museum Juneau", "account_type": "Museum", "parent_account": "Juneau", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnG0RIAV", "name": "Hanna Hellen", "email": "hhellen@aleut.com", "phone": "", "mobile": "", "title": "Environmental Program Manager - might not work there anymore", "department": "", "account_name": "Aleut Community of St. Paul Island", "account_type": "Tribe", "parent_account": "Saint Paul Island", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003Son2KIAR", "name": "Karen Pletnikoff", "email": "karenp@apiai.org", "phone": "9072224286", "mobile": "", "title": "", "department": "APIA", "account_name": "Aleutian Pribilof Islands Association", "account_type": "Native Corporation", "parent_account": "Saint Paul Island", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SomvMIAR", "name": "Rochelle Greenley", "email": "rochelleg@apiai.org", "phone": "(907) 222-4215", "mobile": "", "title": "Environmental Health Services Coordinator", "department": "APIA", "account_name": "Aleutian Pribilof Islands Association", "account_type": "Native Corporation", "parent_account": "Saint Paul Island", "mailing_city": "Anchorage", "include_email": "0"}, {"sf_id": "003Hu00003SnG0dIAF", "name": "Ida Norton", "email": "ipnorton@anthc.org", "phone": "(907) 729-4043", "mobile": "", "title": "", "department": "Program Coordinator for Air Quality & Healthy Homes", "account_name": "Anchorage", "account_type": "Community", "parent_account": "", "mailing_city": "Alaska Native Tribal Health Consortium", "include_email": "0"}, {"sf_id": "003V500000ERp82IAD", "name": "Ayla Crosby", "email": "ayla.crosby@alaska.gov", "phone": "9072697550", "mobile": "", "title": "Environmental Program Specialist III", "department": "DEC", "account_name": "Anchorage Lab", "account_type": "DEC Office/Lab", "parent_account": "", "mailing_city": "Anchorage", "include_email": "0"}, {"sf_id": "003V500000UpMzhIAF", "name": "Petra Timmons", "email": "petra.timmons@k12northstar.org", "phone": "(907) 451-7500", "mobile": "", "title": "Principal", "department": "", "account_name": "Anne Wien Elementary School", "account_type": "School", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000YYEraIAH", "name": "Tracy Brand", "email": "tracy.brand@fnsb.gov", "phone": "907 459 1396", "mobile": "", "title": "Risk Management Director", "department": "Risk Management", "account_name": "Anne Wien Elementary School", "account_type": "School", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003aas3JIAQ", "name": "Daniel Schacher", "email": "daniel.schacher@alaska.gov", "phone": "907-451-5276", "mobile": "907-978-0236", "title": "DOT Northern Regions Maintenance & Operations Manager", "department": "Department of Transportation", "account_name": "Badger", "account_type": "Community", "parent_account": "North Pole", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003aabxbIAA", "name": "Steven Hoke", "email": "steven.hoke@fnsb.gov", "phone": "(907) 459-1001", "mobile": "", "title": "FNSB Air Quality Manger - do not include in email list", "department": "", "account_name": "Badger", "account_type": "Community", "parent_account": "North Pole", "mailing_city": "Fairbanks", "include_email": "0"}, {"sf_id": "003Hu00003SnG0aIAF", "name": "Leif Albertson", "email": "leifalbertson@gmail.com", "phone": "(907) 543-4553", "mobile": "", "title": "", "department": "Health, Home and Family Development Faculty", "account_name": "Bethel", "account_type": "Community", "parent_account": "", "mailing_city": "University of Alaska - Fairbanks", "include_email": "1"}, {"sf_id": "003Hu00003aseuiIAA", "name": "Cassidy Drake", "email": "cassidy.drake@matsugov.us", "phone": "19078617635", "mobile": "", "title": "Big Lake Head Librarian", "department": "Big Lake Public Library", "account_name": "Big Lake Public Library", "account_type": "Library", "parent_account": "Big Lake", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000bZ9F5IAK", "name": "Cynthia Silvis", "email": "sciencecenter@blm.gov", "phone": "(907) 621-4602", "mobile": "", "title": "Campbell Creek Science Center Manager", "department": "", "account_name": "Campbell Creek Science Center - BLM", "account_type": "Other", "parent_account": "Anchorage", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003WCtd0IAD", "name": "Deborah Coble (No Longer a Contact)", "email": "dcoble@blm.gov", "phone": "907-271-4405", "mobile": "907-202-0704", "title": "No longer a contact", "department": "", "account_name": "Campbell Creek Science Center - BLM", "account_type": "Other", "parent_account": "Anchorage", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WCs6QIAT", "name": "John Coleman", "email": "jcoleman@blm.gov", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Campbell Creek Science Center - BLM", "account_type": "Other", "parent_account": "Anchorage", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000766l4IAA", "name": "Jessica Winnestaffer", "email": "jewinnestaffer@chickaloon-nsn.gov", "phone": "", "mobile": "(907) 354-7404", "title": "Environmental Stewardship Director", "department": "", "account_name": "Chickaloon Village Traditional Council", "account_type": "Community", "parent_account": "", "mailing_city": "Chickaloon", "include_email": "1"}, {"sf_id": "003V50000076ABxIAM", "name": "Stephanie Houser (previously Freeman)", "email": "smhouser@chickaloon-nsn.gov", "phone": "", "mobile": "9076717240", "title": "Admin Assistant for Environmental Stewardship Director", "department": "", "account_name": "Chickaloon Village Traditional Council", "account_type": "Community", "parent_account": "", "mailing_city": "Chickaloon", "include_email": "1"}, {"sf_id": "003Hu00003Sn8o6IAB", "name": "Jacob Bell", "email": "jbell@chilkoot-nsn.gov", "phone": "907 766 2323 ext 1027", "mobile": "", "title": "Chilkoot Indian Association - Environmental Assistant", "department": "", "account_name": "Chilkoot Indian Association", "account_type": "Tribe", "parent_account": "Haines", "mailing_city": "Haines", "include_email": "1"}, {"sf_id": "003Hu00003ZdXtZIAV", "name": "Liam Wirak Cassidy", "email": "lcassidy@chilkoot-nsn.gov", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Chilkoot Indian Association", "account_type": "Tribe", "parent_account": "Haines", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003WB4drIAD", "name": "Luke Williams", "email": "lwilliams@chilkoot-nsn.gov", "phone": "907- 766- 2323", "mobile": "", "title": "NO LONGER A CONTACT", "department": "", "account_name": "Chilkoot Indian Association", "account_type": "Tribe", "parent_account": "Haines", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000FPQxxIAH", "name": "Luke Williams", "email": "lwilliams@chilkoot-nsn.gov", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Chilkoot Indian Association", "account_type": "Tribe", "parent_account": "Haines", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnG0TIAV", "name": "Anna Michael", "email": "ctc.envasst@gmail.com", "phone": "(907) 467-4313", "mobile": "", "title": "", "department": "IGAP Assistant", "account_name": "Chuathbaluk", "account_type": "Community", "parent_account": "", "mailing_city": "Native Village of Chuathbaluk", "include_email": "0"}, {"sf_id": "003Hu00003cWG0XIAW", "name": "Jon Erickson", "email": "", "phone": "", "mobile": "", "title": "Borough Manager", "department": "City & Borough of Yakutat", "account_name": "City & Borough of Yakutat", "account_type": "Local govt", "parent_account": "Yakutat", "mailing_city": "Yakutat", "include_email": "0"}, {"sf_id": "003Hu00003cWG0cIAG", "name": "Martha Indreland", "email": "", "phone": "", "mobile": "", "title": "Borough Planner", "department": "City & Borough of Yakutat", "account_name": "City & Borough of Yakutat", "account_type": "Local govt", "parent_account": "Yakutat", "mailing_city": "Yakutat", "include_email": "0"}, {"sf_id": "003V5000007WhCJIA0", "name": "Michael Jensen", "email": "supervisor@yakutatak.us", "phone": "907 784 3329", "mobile": "907 410 7177", "title": "Public Works Supervisor", "department": "", "account_name": "City & Borough of Yakutat", "account_type": "Local govt", "parent_account": "Yakutat", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003cWG0SIAW", "name": "Tina Ryman", "email": "clerk@yakutatak.us", "phone": "907-784-3323 ext. 104", "mobile": "", "title": "Borough Clerk", "department": "City & Borough of Yakutat", "account_name": "City & Borough of Yakutat", "account_type": "Local govt", "parent_account": "Yakutat", "mailing_city": "Yakutat", "include_email": "1"}, {"sf_id": "003Hu00003cWLNFIA4", "name": "Chris Marino", "email": "", "phone": "907-424-3265", "mobile": "", "title": "Cordova School District Maintenance Director", "department": "Maintenance", "account_name": "Cordova", "account_type": "Community", "parent_account": "", "mailing_city": "Cordova", "include_email": "0"}, {"sf_id": "003V500000GbCYzIAN", "name": "James (Jimmy) Paley", "email": "james.paley@eyak-nsn.gov", "phone": "", "mobile": "", "title": "Engineer- Eyak Tribe", "department": "", "account_name": "Cordova", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003asTOwIAM", "name": "Josh Goldstien", "email": "", "phone": "207-803-6631", "mobile": "", "title": "Environmental Person-Eyak Tribe NOT A CONTACT", "department": "", "account_name": "Cordova", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003cWLNAIA4", "name": "Kim Wilson", "email": "", "phone": "907-424-8000", "mobile": "", "title": "Cordova Community Medical Center Human Resources", "department": "Human Resources", "account_name": "Cordova", "account_type": "Community", "parent_account": "", "mailing_city": "Cordova", "include_email": "0"}, {"sf_id": "003Hu00003cUNs3IAG", "name": "Matt Piche", "email": "matt.piche@eyak-nsn.gov", "phone": "", "mobile": "", "title": "Natural Resources Coordinator - Eyak Tribe", "department": "Department of Environment and Natural Resources (DENR)", "account_name": "Cordova", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003cWOTkIAO", "name": "Samantha Greenwood", "email": "citymanager@cityofcordova.net", "phone": "", "mobile": "", "title": "City Manager City of Cordova", "department": "City of Cordova City Manager", "account_name": "Cordova", "account_type": "Community", "parent_account": "", "mailing_city": "Cordova", "include_email": "0"}, {"sf_id": "003Hu00003aarhpIAA", "name": "Isaac Van Flein", "email": "isaac.vanflein@alaska.gov", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "DEC", "account_type": "DEC Office/Lab", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnpVOIAZ", "name": "Lydia Johnson", "email": "lydia.johnson@alaska.gov", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "DEC", "account_type": "DEC Office/Lab", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnudVIAR", "name": "Taylor Borgfeldt", "email": "taylor.borgfeldt@alaska.gov", "phone": "9072697573", "mobile": "", "title": "", "department": "", "account_name": "DEC", "account_type": "DEC Office/Lab", "parent_account": "", "mailing_city": "Anchorage", "include_email": ""}, {"sf_id": "003Hu00003SpTCLIA3", "name": "Tiki Levinson", "email": "deltalibrary@wildak.net", "phone": "9078954102", "mobile": "", "title": "Library Personnel", "department": "Delta Community Library", "account_name": "Delta Community Library", "account_type": "Library", "parent_account": "Delta Junction", "mailing_city": "Delta Junction", "include_email": "1"}, {"sf_id": "003Hu00003eutpoIAA", "name": "Andrea Blakesley", "email": "andrea_blakesley@nps.gov", "phone": "907 683 9545", "mobile": "", "title": "Environmental Specialist", "department": "", "account_name": "Denali Park", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003Sp8vdIAB", "name": "Desi Bond", "email": "environmental@curyung.com", "phone": "907 842 1751", "mobile": "", "title": "Tribal Environmental Coordinator", "department": "", "account_name": "Dillingham", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnuJHIAZ", "name": "Doyon Corporation", "email": "", "phone": "907 459 2000", "mobile": "", "title": "Main Dispatch", "department": "", "account_name": "Doyon Ltd", "account_type": "Native Corporation", "parent_account": "", "mailing_city": "", "include_email": ""}, {"sf_id": "003Hu00003YjYotIAF", "name": "India Young", "email": "young.india@epa.gov", "phone": "", "mobile": "", "title": "EPA Grant Advisor", "department": "", "account_name": "EPA", "account_type": "Other", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003cWOT6IAO", "name": "Caitlin McKinstry NO LONGER A CONTACT", "email": "caitlin.mckinstry@eyak-nsn.gov", "phone": "907-424-8260", "mobile": "907-424-7738", "title": "NO LONGER A CONTACT", "department": "DENR Biologist - Eyak Tribe", "account_name": "Eyak Tribe", "account_type": "Tribe", "parent_account": "Cordova", "mailing_city": "Cordova", "include_email": "0"}, {"sf_id": "003V500000BwUPHIA3", "name": "Erik Long", "email": "erik.long@eyak-nsn.gov", "phone": "585 645 5877", "mobile": "", "title": "Environmental Scientist", "department": "Eyak Dept of the Environment and Natural Resources", "account_name": "Eyak Tribe", "account_type": "Tribe", "parent_account": "Cordova", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V5000006sMJaIAM", "name": "Erin Shew", "email": "erin.shew@eyak-nsn.gov", "phone": "907 385 7670", "mobile": "", "title": "Environmental Coordinator", "department": "DENR", "account_name": "Eyak Tribe", "account_type": "Tribe", "parent_account": "Cordova", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003cU4FMIA0", "name": "John Whissel", "email": "john.whissel@eyak-nsn.gov", "phone": "907 202 6943", "mobile": "", "title": "DENR Director - Eyak Tribe", "department": "Department of Environment and Natural Resources (DENR)", "account_name": "Eyak Tribe", "account_type": "Tribe", "parent_account": "Cordova", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000ZrVHgIAN", "name": "Dennis Ferraro", "email": "dennis.ferraro@k12horthstar.org", "phone": "907 452 4461 ext 15237", "mobile": "907 978 0362", "title": "Maintenance Foreman", "department": "", "account_name": "FNSBSD", "account_type": "", "parent_account": "", "mailing_city": "Fairbanks", "include_email": "0"}, {"sf_id": "003V500000X2xCHIAZ", "name": "Jahanara Carreon", "email": "jahanara.carreon@k12northstar.org", "phone": "(907) 452-4461 x 15227", "mobile": "", "title": "Executive Director of Facilities Management", "department": "", "account_name": "FNSBSD", "account_type": "", "parent_account": "", "mailing_city": "Fairbanks", "include_email": "0"}, {"sf_id": "003Hu00003SnG0bIAF", "name": "Billy Conner", "email": "bgconnor@alaska.edu", "phone": "(907) 474-5552", "mobile": "", "title": "UAF - AIDC Director", "department": "Engineer", "account_name": "Fairbanks", "account_type": "Community", "parent_account": "", "mailing_city": "University of Alaska - Fairbanks", "include_email": ""}, {"sf_id": "003V500000dsyySIAQ", "name": "Dorothea Adams", "email": "dorothea.adamas@catg.org", "phone": "907 662 7511", "mobile": "", "title": "Executive Director", "department": "", "account_name": "Fort Yukon", "account_type": "", "parent_account": "", "mailing_city": "Fort Yukon", "include_email": "0"}, {"sf_id": "003V500000NNinwIAD", "name": "Jeff Lansing", "email": "jlansing@dgsd.us", "phone": "907 895-5165", "mobile": "", "title": "Principal", "department": "", "account_name": "Gerstle River", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000MQHVCIA5", "name": "Paul Alsted", "email": "palsted@dgsd.us", "phone": "(515) 443-0359", "mobile": "", "title": "Teacher", "department": "", "account_name": "Gerstle River School", "account_type": "School", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000fkvbwIAA", "name": "Rory Marenco", "email": "info@girdwoodbrewing.com", "phone": "(907) 783-2739", "mobile": "", "title": "GBC Cofounder", "department": "", "account_name": "Girdwood", "account_type": "Community", "parent_account": "", "mailing_city": "Anchorage", "include_email": "1"}, {"sf_id": "003V50000076jRSIAY", "name": "Mike Sondergaard", "email": "msonderg@blm.gov", "phone": "907 535 1714", "mobile": "", "title": "", "department": "", "account_name": "Glennallen - BLM", "account_type": "Other", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbYIAV", "name": "Joel Buth", "email": "joel@goldstreamsports.com", "phone": "907-455-6520 (store number)", "mobile": "", "title": "Owner", "department": "Owner of Goldstream Sports", "account_name": "Goldstream (FBX)", "account_type": "Community", "parent_account": "Fairbanks", "mailing_city": "Fairbanks", "include_email": "1"}, {"sf_id": "003Hu00003SnG0WIAV", "name": "Carol Oliver", "email": "oxiedec49@yahoo.com", "phone": "(907) 779-2005", "mobile": "", "title": "", "department": "IGAP Assistant, Council Member", "account_name": "Golovin", "account_type": "Community", "parent_account": "", "mailing_city": "Chinik Eskimo Community", "include_email": "0"}, {"sf_id": "003Hu00003SoeglIAB", "name": "Patrisha Macdonald", "email": "patrisha.macdonald@healylake.org", "phone": "9078310844", "mobile": "", "title": "", "department": "", "account_name": "Healy Lake", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbQIAV", "name": "James (Jim) Schloemer", "email": "jwschloemer@alaska.edu", "phone": "", "mobile": "", "title": "", "department": "KBNERR", "account_name": "Homer", "account_type": "Community", "parent_account": "", "mailing_city": "Homer", "include_email": "1"}, {"sf_id": "003Hu00003cUcrvIAC", "name": "Jen Depesa", "email": "", "phone": "(907) 235-1652", "mobile": "", "title": "Assistant to the Acting Director", "department": "Kenai Peninsula College in Homer", "account_name": "Homer", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003cUcs5IAC", "name": "Jill Burnham", "email": "", "phone": "(907) 235-1674", "mobile": "", "title": "Room Use Coordinator", "department": "Kenai Peninsula College in Homer", "account_name": "Homer", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003athysIAA", "name": "Kenai Peninsula College in Homer", "email": "", "phone": "9072357743", "mobile": "", "title": "", "department": "", "account_name": "Homer", "account_type": "Community", "parent_account": "", "mailing_city": "Homer", "include_email": "0"}, {"sf_id": "003Hu00003atlLNIAY", "name": "Paula Martin", "email": "pjmartin2@alaska.edu", "phone": "(907) 235-1656", "mobile": "", "title": "Acting Director", "department": "Kenai Peninsula College in Homer", "account_name": "Homer", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003atlNIIAY", "name": "Rusty King", "email": "eiking@alaska.edu", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Homer", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WDv7SIAT", "name": "Jeromy Grant", "email": "jeromy.grant@hiatribe.org", "phone": "907 419 0895", "mobile": "", "title": "IGAP Environmental Coordinator", "department": "Environmental", "account_name": "Hoonah", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000eucI9IAI", "name": "Madison Attla", "email": "madison.attla@tananachiefs.org", "phone": "", "mobile": "", "title": "Tribal Admin Assistant", "department": "Tanana Chiefs Conference", "account_name": "Huslia", "account_type": "", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WC0MVIA1", "name": "Friar Casey", "email": "pbswestsid@aol.com", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Juneau", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003WC0MTIA1", "name": "Jared Lee", "email": "drlee@jaredleedds.com", "phone": "9075861188", "mobile": "", "title": "", "department": "", "account_name": "Juneau", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003cW8X0IAK", "name": "Ethan Ahvaluk", "email": "", "phone": "", "mobile": "", "title": "Front Desk Assistant", "department": "", "account_name": "KNOM Radio", "account_type": "Other", "parent_account": "Nome", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003cU3AxIAK", "name": "Miranda Musich", "email": "generalmanager@knom.org", "phone": "", "mobile": "", "title": "General Manager", "department": "", "account_name": "KNOM Radio", "account_type": "Other", "parent_account": "Nome", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnG0ZIAV", "name": "Billy Jean Stewart", "email": "kalskagenvironmental@yahoo.com", "phone": "(907) 471-2207", "mobile": "", "title": "", "department": "IGAP/ EPA Coordinator", "account_name": "Kalskag", "account_type": "Community", "parent_account": "", "mailing_city": "Village of Kalskag", "include_email": "0"}, {"sf_id": "003Hu00003SnG0SIAV", "name": "Sonja Levi", "email": "klgigap@yahoo.com", "phone": "(907) 471-2207", "mobile": "", "title": "", "department": "IGAP Assistant", "account_name": "Kalskag", "account_type": "Community", "parent_account": "", "mailing_city": "Village of Kalskag", "include_email": "0"}, {"sf_id": "003Hu00003cUcsAIAS", "name": "Brian Partridge", "email": "bcpartridge@alaska.edu", "phone": "(907) 235-1604", "mobile": "", "title": "", "department": "Kenai Peninsula College in Homer", "account_name": "Kenai Peninsula College", "account_type": "School", "parent_account": "Homer", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000HjW0hIAF", "name": "Elisha King", "email": "eiking@alaska.edu", "phone": "", "mobile": "", "title": "", "department": "Facilities Services", "account_name": "Kenai Peninsula College", "account_type": "School", "parent_account": "Homer", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000J7QMDIA3", "name": "Greg Simpson", "email": "gssimpson@alaska.edu", "phone": "(907) 399-4740", "mobile": "", "title": "Crafts & Trades 3", "department": "UAA - Kenai Peninsula Campus", "account_name": "Kenai Peninsula College", "account_type": "School", "parent_account": "Homer", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbPIAV", "name": "Reid Brewer", "email": "rsbrewer@alaska.edu", "phone": "", "mobile": "", "title": "", "department": "Kenai Peninsula College", "account_name": "Kenai Peninsula College", "account_type": "School", "parent_account": "Homer", "mailing_city": "Homer", "include_email": "0"}, {"sf_id": "003V500000CJCYGIA5", "name": "Alana Shaw", "email": "alana.shaw@kenaitze.org", "phone": "(907) 335-7249", "mobile": "", "title": "Environmental Program Manager", "department": "", "account_name": "Kenaitze Tribe", "account_type": "Tribe", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V5000009Ii0mIAC", "name": "M. Scott Moon", "email": "smoon@kenaitze.org", "phone": "9073357237", "mobile": "9075986666", "title": "Communications Manager", "department": "", "account_name": "Kenaitze Tribe", "account_type": "Tribe", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000Bbug5IAB", "name": "No Longer a Contact Chelsea Hendricks", "email": "", "phone": "907-335-7281", "mobile": "", "title": "Tribal Programs Director", "department": "", "account_name": "Kenaitze Tribe", "account_type": "Tribe", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000e4IfQIAU", "name": "Al Jacobson", "email": "al.jacobson@k21schools.org", "phone": "907-225-2416", "mobile": "", "title": "Ketchikan School District Maintenance Director", "department": "Ketchikan Gateway Borough School District", "account_name": "Ketchikan", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000d2LoHIAU", "name": "Irene Dundas", "email": "irened@kictribe.org", "phone": "907-228-9399", "mobile": "", "title": "KIC Cultural Resources Manager", "department": "", "account_name": "Ketchikan", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000Y1LdHIAV", "name": "Susan Pickrell", "email": "slpickrell@kictribe.org", "phone": "907-228-9283", "mobile": "", "title": "Deputy Tribal Administrator", "department": "", "account_name": "Ketchikan", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003WCth8IAD", "name": "Iphigenia \\"Jen\\" Arvanitis", "email": "iarvanitis@kictribe.org", "phone": "(907) 228-9381", "mobile": "4848867913", "title": "Environmental Specialist", "department": "", "account_name": "Ketchikan Indian Community", "account_type": "Tribe", "parent_account": "Ketchikan", "mailing_city": "Ketchikan", "include_email": "1"}, {"sf_id": "003Hu00003WCxnjIAD", "name": "Keenan Sanderson", "email": "ksanderson@kictribe.org", "phone": "", "mobile": "", "title": "Supervisor", "department": "", "account_name": "Ketchikan Indian Community", "account_type": "Tribe", "parent_account": "Ketchikan", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbJIAV", "name": "Tony NO LONGER A CONTACT Gallegos", "email": "gallegost@kictribe.org", "phone": "907-228-9445", "mobile": "", "title": "", "department": "Ketchikan Tribe", "account_name": "Ketchikan Indian Community", "account_type": "Tribe", "parent_account": "Ketchikan", "mailing_city": "Ketchikan", "include_email": "0"}, {"sf_id": "003V5000007s2toIAA", "name": "Bob Charles", "email": "bcharles@kniktribe.org", "phone": "9073062503", "mobile": "", "title": "Tribal Transportation Program Manager", "department": "", "account_name": "Knik Tribe", "account_type": "Tribe", "parent_account": "Wasilla", "mailing_city": "Wasilla", "include_email": "0"}, {"sf_id": "003V500000Y2BgXIAV", "name": "Aimee Williams", "email": "awilliams@kodiakak.us", "phone": "", "mobile": "", "title": "KIB Interim Engineering and Facilities Director", "department": "", "account_name": "Kodiak", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000Q2w13IAB", "name": "Codi Allen", "email": "callen@kodiakak.us", "phone": "", "mobile": "", "title": "Interim Director of Engineering & Facilities", "department": "", "account_name": "Kodiak", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000Y2CPiIAN", "name": "Include in all comms 1", "email": "efprojects@kodiakak.us", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Kodiak", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000Y2E05IAF", "name": "Include in all comms 2", "email": "efsecretary@kodiakak.us", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Kodiak", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000Q2zN0IAJ", "name": "Patricia Valerio", "email": "pvalerio@kodiakak.us", "phone": "", "mobile": "", "title": "Interim Project Manager", "department": "", "account_name": "Kodiak", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000Q2vHmIAJ", "name": "Shane Trout", "email": "strout@kodiakak.us", "phone": "", "mobile": "", "title": "Maintenance Mechanic", "department": "", "account_name": "Kodiak", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnG0QIAV", "name": "Taletha Gertz", "email": "taletha@afognak.org", "phone": "(907) 486-6357", "mobile": "", "title": "", "department": "IGAP Coordinator-", "account_name": "Kodiak", "account_type": "Community", "parent_account": "", "mailing_city": "Native Village of Afgonak", "include_email": "1"}, {"sf_id": "003Hu00003WAnByIAL", "name": "*No longer a contact* Jena Hassinger", "email": "jhassinger@kodiakak.us", "phone": "(907) 486-9348", "mobile": "570-898-4359", "title": "Environmental Specilaist", "department": "", "account_name": "Kodiak Island Borough", "account_type": "Local govt", "parent_account": "Kodiak", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbFIAV", "name": "Joanna Barton", "email": "", "phone": "907-442-3321 (general office)", "mobile": "", "title": "", "department": "Maniilaq Association", "account_name": "Kotzebue", "account_type": "Community", "parent_account": "", "mailing_city": "Kotzebue", "include_email": ""}, {"sf_id": "003Hu00003SnFbdIAF", "name": "Theresa Quiner", "email": "tquiner@alaska.edu", "phone": "907-543-4517", "mobile": "", "title": "Library Director", "department": "Kuskokwim Consortium Library", "account_name": "Kuskokwim Consortium Library", "account_type": "Library", "parent_account": "Bethel", "mailing_city": "Bethel", "include_email": "1"}, {"sf_id": "003Hu00003WCtYeIAL", "name": "Brooke Sanderson", "email": "brooke.sanderson@loudentribe.com", "phone": "907-656-1711", "mobile": "", "title": "Tribal Administrator", "department": "", "account_name": "Louden Tribe - Galena", "account_type": "Tribe", "parent_account": "Galena", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003UdRq9IAF", "name": "Tirzah Bryant", "email": "tirzah.bryant@loudentribe.com", "phone": "(907) 656 7212", "mobile": "", "title": "Environmental and Education Coordinator", "department": "Louden Tribe", "account_name": "Louden Tribe - Galena", "account_type": "Tribe", "parent_account": "Galena", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000IlJo2IAF", "name": "Greg Sweet", "email": "", "phone": "907 543 4876", "mobile": "", "title": "Director of IT", "department": "", "account_name": "Lower Kuskokwim School District", "account_type": "School", "parent_account": "Bethel", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnVmhIAF", "name": "Kim Sweet", "email": "kim_sweet@lksd.org", "phone": "907 543 4971", "mobile": "", "title": "LKSD Director of Operations", "department": "", "account_name": "Lower Kuskokwim School District", "account_type": "School", "parent_account": "Bethel", "mailing_city": "Bethe", "include_email": "1"}, {"sf_id": "003Hu00003SnFbEIAV", "name": "Chris Dankmeyer", "email": "chris.dankmeyer@maniilaq.org", "phone": "907-442-3321 (general office)", "mobile": "", "title": "Community Health Director", "department": "Maniilaq Association", "account_name": "Maniilaq Association", "account_type": "Tribe", "parent_account": "Kotzebue", "mailing_city": "Kotzebue", "include_email": "0"}, {"sf_id": "003V500000I9BQCIA3", "name": "David Kelsey", "email": "david.kelsey@maniilaq.org", "phone": "907-442-7964", "mobile": "", "title": "Facilities Manager- has helped with past troubleshooting", "department": "", "account_name": "Maniilaq Association", "account_type": "Tribe", "parent_account": "Kotzebue", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbHIAV", "name": "Livia Bracker", "email": "livia.bracker@manillaq.org", "phone": "907-442-7783", "mobile": "", "title": "", "department": "Maniilaq Association", "account_name": "Maniilaq Association", "account_type": "Tribe", "parent_account": "Kotzebue", "mailing_city": "Kotzebue", "include_email": "1"}, {"sf_id": "003Hu00003SnFbGIAV", "name": "Noah Root", "email": "noah.root@maniilaq.org", "phone": "907-442-7172", "mobile": "", "title": "NO LONGER A CONTACT", "department": "Maniilaq Association", "account_name": "Maniilaq Association", "account_type": "Tribe", "parent_account": "Kotzebue", "mailing_city": "Kotzebue", "include_email": "0"}, {"sf_id": "003V500000CwmgWIAR", "name": "Russell \\"Russ\\" Cameron", "email": "russell.cameron@maniilaq.org", "phone": "9074427970", "mobile": "9074121349", "title": "Environmental Health Manager", "department": "", "account_name": "Maniilaq Association", "account_type": "Tribe", "parent_account": "Kotzebue", "mailing_city": "Kotzebue", "include_email": "1"}, {"sf_id": "003V500000crtRtIAI", "name": "Cherilyn Unknown", "email": "ntcigap@gmail.com", "phone": "907-737-7364 ext. 5", "mobile": "", "title": "IGAP Coordinator", "department": "", "account_name": "Napaskiak", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SqNJnIAN", "name": "Jonilyn Bavilla", "email": "ntcigap@gmail.com", "phone": "907-737-7364/7643", "mobile": "", "title": "NOT A CONTACT", "department": "", "account_name": "Napaskiak", "account_type": "Community", "parent_account": "", "mailing_city": "Napaskiak", "include_email": "0"}, {"sf_id": "003V500000f2lUfIAI", "name": "Taylor Kurtz", "email": "tkurtz@eaglevillageak.com", "phone": "907-547-2271", "mobile": "", "title": "Environmental Coordinator", "department": "", "account_name": "Native Village of Eagle", "account_type": "", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000dSfOQIA0", "name": "Kiana Donat", "email": "kdonat@eklutna.org", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "Native Village of Eklutna", "account_type": "Tribe", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000672CvIAI", "name": "Sarah Devins", "email": "", "phone": "907.822.5541", "mobile": "", "title": "Environmental Coordinator for Native Village of Kluti-Kaah", "department": "", "account_name": "Native Village of Kluti-Kaah", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V50000066gFfIAI", "name": "Sarah Sherwood", "email": "", "phone": "", "mobile": "", "title": "Environmental Coordinator for Copper River Native Association", "department": "", "account_name": "Native Village of Kluti-Kaah", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003Sn908IAB", "name": "Cybill Berestoff", "email": "cberestoff515@gmail.com", "phone": "907 360 7856", "mobile": "907 360 7856", "title": "IGAP Coordinator", "department": "", "account_name": "Native Village of Nanwalek", "account_type": "Tribe", "parent_account": "Nanwalek", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003aarghIAA", "name": "Carmen Williams", "email": "", "phone": "907 737 7643", "mobile": "", "title": "Environmental Assistant NOT A CONTACT(?)", "department": "", "account_name": "Native Village of Napaskiak", "account_type": "Tribe", "parent_account": "Napaskiak", "mailing_city": "Napaskiak", "include_email": "0"}, {"sf_id": "003V500000Nff1xIAB", "name": "Brian Peter", "email": "nvt_environmentaltech@outlook.com", "phone": "", "mobile": "", "title": "EPA Technician", "department": "", "account_name": "Native Village of Tyonek", "account_type": "Community", "parent_account": "Tyonek", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000Bbq2vIAB", "name": "Crystal Standifer", "email": "crystals.nvtyonek@gmail.com", "phone": "(907) 583-2111", "mobile": "", "title": "Tribal Administrator", "department": "", "account_name": "Native Village of Tyonek", "account_type": "Community", "parent_account": "Tyonek", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000eRSpEIAW", "name": "Leo Silva", "email": "", "phone": "(907) 583-2111", "mobile": "", "title": "EPA Director at Native Village of Tyonek", "department": "", "account_name": "Native Village of Tyonek", "account_type": "Community", "parent_account": "Tyonek", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V50000063o88IAA", "name": "Romy Cadiente NO LONGER A CONTACT", "email": "rcadiente99760@gmail.com", "phone": "907-832-5461", "mobile": "", "title": "Tribal Administrator", "department": "", "account_name": "Nenana", "account_type": "", "parent_account": "", "mailing_city": "Nenana", "include_email": "1"}, {"sf_id": "003V500000AMqrwIAD", "name": "Jeremiah Baker", "email": "jtbakernna@gmail.com", "phone": "907-832-5461", "mobile": "", "title": "Interim Tribal Administrator", "department": "", "account_name": "Nenana Native Village Council", "account_type": "Tribe", "parent_account": "Nenana", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SqKdWIAV", "name": "Sonny Lamont", "email": "jameslamontjr@newhalentribal.com", "phone": "9075711410", "mobile": "", "title": "Mayor of Newhalen Tribal Council", "department": "", "account_name": "Newhalen Village", "account_type": "Community", "parent_account": "", "mailing_city": "Newhalen", "include_email": "0"}, {"sf_id": "003Hu00003atlNHIAY", "name": "Heather Smith", "email": "nincomlib@alaska.net", "phone": "19075673333", "mobile": "", "title": "Librarian", "department": "", "account_name": "Ninilchik Community Library", "account_type": "Library", "parent_account": "Ninilchik", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000O2BPlIAN", "name": "Mary ?", "email": "", "phone": "19075673333", "mobile": "", "title": "Library Front Desk", "department": "", "account_name": "Ninilchik Community Library", "account_type": "Library", "parent_account": "Ninilchik", "mailing_city": "Ninilchik", "include_email": "0"}, {"sf_id": "003Hu00003atPkAIAU", "name": "Amber Self", "email": "ntc@ninilchiktribe-nsn.gov", "phone": "19075673313", "mobile": "", "title": "", "department": "", "account_name": "Ninilchik Native Association", "account_type": "Tribe", "parent_account": "Ninilchik", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbXIAV", "name": "Jayke Cooper", "email": "jcooper@ninilchiktribe-nsn.gov", "phone": "907-567-3815", "mobile": "", "title": "", "department": "Ninilchik Village", "account_name": "Ninilchik Native Association", "account_type": "Tribe", "parent_account": "Ninilchik", "mailing_city": "Ninilchik", "include_email": "1"}, {"sf_id": "003Hu00003SnG0YIAV", "name": "Robert Self", "email": "rself@ninilchiktribe-nsn.gov", "phone": "(907) 567-3815", "mobile": "", "title": "", "department": "Resource Technician", "account_name": "Ninilchik Native Association", "account_type": "Tribe", "parent_account": "Ninilchik", "mailing_city": "Ninilchik Village", "include_email": "1"}, {"sf_id": "003V500000Bf8PtIAJ", "name": "Chandra Clark", "email": "cclack@northpolealaska.org", "phone": "", "mobile": "", "title": "NOT A CONTACT", "department": "", "account_name": "North Pole", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnYTTIA3", "name": "Ellen Glab", "email": "eglab@northpolealaska.org", "phone": "907 483 3042", "mobile": "", "title": "Human Resource Specialist", "department": "", "account_name": "North Pole", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnYTEIA3", "name": "Mayor Welch", "email": "mwelch@northpolealaska.org", "phone": "907 488 8584", "mobile": "", "title": "NO LONGER A CONTACT", "department": "", "account_name": "North Pole", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SoIRFIA3", "name": "Robert (Danny) Wallace", "email": "rwallace@northpolealaska.org", "phone": "907-488-8593", "mobile": "", "title": "NO LONGER A CONTACT", "department": "", "account_name": "North Pole", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000fayhDIAQ", "name": "Austin Ahmasuk", "email": "agahmasuk@nshcorp.org", "phone": "907-443-3294", "mobile": "907-443-3294", "title": "Director of Office of Environmental Health", "department": "", "account_name": "Norton Sound Health Corporation", "account_type": "", "parent_account": "Nome", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WCDDuIAP", "name": "NO LONGER A CONTACT - RETIRED Racheal Lee", "email": "rlee@nshcorp.org", "phone": "907-443-3294", "mobile": "907-434-0543", "title": "NO LONGER A CONTACT", "department": "Office of Environmental Health- Norton Sound Health Corporation", "account_name": "Norton Sound Health Corporation", "account_type": "", "parent_account": "Nome", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbRIAV", "name": "NO LONGER A CONTACT Alicia Reitz NO LONGER A CONTACT", "email": "", "phone": "907-434-1659", "mobile": "", "title": "NO LONGER A CONTACT", "department": "Norton Sound Health Corporation", "account_name": "Norton Sound Health Corporation", "account_type": "", "parent_account": "Nome", "mailing_city": "Nome", "include_email": "1"}, {"sf_id": "003V500000MTQ5kIAH", "name": "Office of Environmental Health (OEH) Group Email", "email": "oeh-all@nshcorp.org", "phone": "907-443-3311", "mobile": "", "title": "", "department": "", "account_name": "Norton Sound Health Corporation", "account_type": "", "parent_account": "Nome", "mailing_city": "Nome", "include_email": "0"}, {"sf_id": "003Hu00003WCsPZIA1", "name": "Alice Demoski", "email": "igapntc@outlook.com", "phone": "907-898-2339", "mobile": "", "title": "Environmental Coordinator", "department": "", "account_name": "Nulato Tribal Council", "account_type": "Tribe", "parent_account": "Nulato", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WD2A2IAL", "name": "Mary Matthias", "email": "mmatthias@nativecouncil.org", "phone": "(907)543-2608", "mobile": "", "title": "Environmental Program Director", "department": "", "account_name": "Orutsararmiut Native Council", "account_type": "Native Corporation", "parent_account": "Bethel", "mailing_city": "Bethel", "include_email": "0"}, {"sf_id": "003V5000007DbieIAC", "name": "Beth Skow", "email": "bskow@palmerak.org", "phone": "9077611371", "mobile": "", "title": "Library Director", "department": "", "account_name": "Palmer Public Library", "account_type": "Library", "parent_account": "Palmer", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003aaZGAIA2", "name": "Abby Fry", "email": "", "phone": "", "mobile": "", "title": "IOT Hardware Engineer", "department": "", "account_name": "QuantAQ", "account_type": "Sensor Manufacturer", "parent_account": "", "mailing_city": "Somerville", "include_email": "0"}, {"sf_id": "003V500000cjGE1IAM", "name": "Abhay Vidwans", "email": "", "phone": "", "mobile": "", "title": "", "department": "", "account_name": "QuantAQ", "account_type": "Sensor Manufacturer", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000TZqpRIAT", "name": "David Hagan", "email": "", "phone": "", "mobile": "", "title": "CEO & Co-Founder", "department": "", "account_name": "QuantAQ", "account_type": "Sensor Manufacturer", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbSIAV", "name": "Dolly Wiles", "email": "tribaladmin@qntak.org", "phone": "907-224-3118 ext 3", "mobile": "907-301-2147", "title": "Tribal Administrator", "department": "Qutekcak Tribal Administrator", "account_name": "Qutekcak Native Tribe", "account_type": "Tribe", "parent_account": "Seward", "mailing_city": "Seward", "include_email": "1"}, {"sf_id": "003Hu00003SnG0XIAV", "name": "Dallas Roberts", "email": "dallasmelovidov17@gmail.com", "phone": "", "mobile": "", "title": "", "department": "Island Sentinel 1", "account_name": "Saint Paul Island", "account_type": "Community", "parent_account": "", "mailing_city": "St. Paul Island Aleut Community", "include_email": "0"}, {"sf_id": "003V500000OCAq1IAH", "name": "Mindy Marple", "email": "mindy.marple@k12northstar.org", "phone": "907-488-3267 ext. x10115", "mobile": "", "title": "Elementary School Administrative Secretary", "department": "", "account_name": "Salcha", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000NtKddIAF", "name": "Nicholas Hoy", "email": "nicholas.hoy@k12northstar.org", "phone": "", "mobile": "", "title": "Principal", "department": "", "account_name": "Salcha Elementary School", "account_type": "School", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000NNSbAIAX", "name": "Betty Cramer", "email": "arcticpony@hotmail.com", "phone": "", "mobile": "", "title": "Vice President of the Board of Directors", "department": "", "account_name": "Salcha Senior Center", "account_type": "Other", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000MutZsIAJ", "name": "Debra Berns", "email": "debra.berns.ak@gmail.com", "phone": "907-322-1777", "mobile": "", "title": "", "department": "", "account_name": "Salcha Senior Center", "account_type": "Other", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbTIAV", "name": "Anastasia Unknown", "email": "tribalclerk@qntak.org", "phone": "", "mobile": "", "title": "", "department": "Tribal Clerk", "account_name": "Seward", "account_type": "Community", "parent_account": "", "mailing_city": "Seward", "include_email": "1"}, {"sf_id": "003Hu00003atlO0IAI", "name": "Jamie Fenn", "email": "finmgr@qntak.org", "phone": "9075990129", "mobile": "", "title": "", "department": "", "account_name": "Seward", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbMIAV", "name": "MIS Department", "email": "mis@cityofseward.net", "phone": "", "mobile": "", "title": "", "department": "City of Seward", "account_name": "Seward", "account_type": "Community", "parent_account": "", "mailing_city": "Seward", "include_email": "0"}, {"sf_id": "003V500000PSVnSIAX", "name": "Brandon Elkins", "email": "brandon.elkins907@gmail.com", "phone": "", "mobile": "", "title": "Owner / Manager", "department": "", "account_name": "Silver Fox Roadhouse", "account_type": "", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000AjqRJIAZ", "name": "Arleigh Reynolds", "email": "areynolds@sitkascience.org", "phone": "", "mobile": "", "title": "Executive Director of Sitka Sound Science Center", "department": "", "account_name": "Sitka", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003WDT70IAH", "name": "Lisa Busch", "email": "lbusch@sitkascience.org", "phone": "907 747 8878 ext 5", "mobile": "", "title": "ED of Sitka Sound Science Center", "department": "", "account_name": "Sitka", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000KeWU6IAN", "name": "Matteo Masotti", "email": "matteo.masotti@sitkatribe-nsn.gov", "phone": "", "mobile": "", "title": "Environmental Lab Specialist", "department": "", "account_name": "Sitka", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbDIAV", "name": "Michelle Davis", "email": "davis.michellev@epa.gov", "phone": "907-271-3434", "mobile": "", "title": "IGAP", "department": "IGAP", "account_name": "Sitka", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000KepzbIAB", "name": "PRIMARY EMAIL CONTACT", "email": "airquality@sitkatribe-nsn.gov", "phone": "", "mobile": "", "title": "Use this email for all things sensor, managed by Matteo and Callie", "department": "", "account_name": "Sitka", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000JH89iIAD", "name": "Callie Simmons", "email": "callie.simmons@sitkatribe-nsn.gov", "phone": "", "mobile": "", "title": "Natural Resource Specialist", "department": "", "account_name": "Sitka Tribe of Alaska", "account_type": "Tribe", "parent_account": "Sitka", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbNIAV", "name": "Jeff Feldspausch", "email": "jeff.feldpausch@sitkatribe-nsn.gov", "phone": "(907) 747-7469", "mobile": "", "title": "Resource Protection Director", "department": "Sitka Tribe of Alaska", "account_name": "Sitka Tribe of Alaska", "account_type": "Tribe", "parent_account": "Sitka", "mailing_city": "Sitka", "include_email": "1"}, {"sf_id": "003V500000JHAbEIAX", "name": "Matteo Masotti", "email": "matteo.masotti@sitkatribe-nsn.gov", "phone": "", "mobile": "", "title": "Environmental Lab Specialist", "department": "", "account_name": "Sitka Tribe of Alaska", "account_type": "Tribe", "parent_account": "Sitka", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbOIAV", "name": "Brad A. Ryan", "email": "manager@skagway.org", "phone": "907-612-1788", "mobile": "", "title": "", "department": "Municipality of Skagway", "account_name": "Skagway", "account_type": "Community", "parent_account": "", "mailing_city": "Skagway", "include_email": "0"}, {"sf_id": "003Hu00003WC9joIAD", "name": "Reuben Cash", "email": "reuben@skagwaytraditional.org", "phone": "907-983-4068 x4", "mobile": "360-296-9538", "title": "Environmental Coordinator", "department": "Skagway Traditional Council", "account_name": "Skagway Traditional Council", "account_type": "Tribe", "parent_account": "Skagway", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbLIAV", "name": "Julie Denison", "email": "jdenison@kpb.us", "phone": "", "mobile": "", "title": "", "department": "Kenai Peninsula Borough (KPB)", "account_name": "Soldotna", "account_type": "Community", "parent_account": "", "mailing_city": "Soldotna", "include_email": "0"}, {"sf_id": "003Hu00003SnFbKIAV", "name": "Marcus Mueller", "email": "mmueller@kpb.us", "phone": "", "mobile": "", "title": "", "department": "Kenai Peninsula Borough (KPB)", "account_name": "Soldotna", "account_type": "Community", "parent_account": "", "mailing_city": "Soldotna", "include_email": "0"}, {"sf_id": "003Hu00003SnFbbIAF", "name": "Rachel Nash", "email": "library@soldotna.org", "phone": "907-262-4227", "mobile": "", "title": "", "department": "City of Soldotna, Library", "account_name": "Soldotna", "account_type": "Community", "parent_account": "", "mailing_city": "Soldotna", "include_email": "0"}, {"sf_id": "003Hu00003SnFbaIAF", "name": "Sara Hondel", "email": "sara@soldotnachamber.com", "phone": "907-262-1337, ext 15", "mobile": "", "title": "", "department": "Soldotna Chamber of Commerce, Tourism and Education Manager", "account_name": "Soldotna", "account_type": "Community", "parent_account": "", "mailing_city": "Soldotna", "include_email": "0"}, {"sf_id": "003V500000O246hIAB", "name": "Karen ?", "email": "", "phone": "19075673333", "mobile": "", "title": "Library Front Desk", "department": "", "account_name": "Soldotna Senior Center", "account_type": "Other", "parent_account": "Soldotna", "mailing_city": "Ninilchik", "include_email": "0"}, {"sf_id": "003Hu00003SnFbcIAF", "name": "Lisa Riley", "email": "lriley@soldotnaseniors.com", "phone": "907-262-2322 907-398-8636", "mobile": "", "title": "", "department": "Soldotna Area Senior Citizens Inc", "account_name": "Soldotna Senior Center", "account_type": "Other", "parent_account": "Soldotna", "mailing_city": "Soldotna", "include_email": "1"}, {"sf_id": "003V5000007WuzHIAS", "name": "Jack Smothers", "email": "jsmothers@sunshineclinic.org", "phone": "907-495-4100", "mobile": "", "title": "Facilities Director", "department": "", "account_name": "Sunshine Community Health Center (Willow)", "account_type": "Other", "parent_account": "Willow", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000QSlgDIAT", "name": "Mary Vukson", "email": "mary_vukson@nps.gov", "phone": "907-733-9107", "mobile": "", "title": "Supervisory Rec Fee Tech", "department": "", "account_name": "Talkeetna", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000SLCEFIA5", "name": "Ada Wilmer", "email": "ada.wilmer@tananachiefs.org", "phone": "907 452 8251", "mobile": "", "title": "REHS", "department": "", "account_name": "Tanana Chiefs Conference", "account_type": "Native Corporation", "parent_account": "", "mailing_city": "Fairbanks", "include_email": "1"}, {"sf_id": "003Hu00003Zda5zIAB", "name": "Kathy Morgan", "email": "library@tokak.us", "phone": "(907) 883-5623", "mobile": "", "title": "", "department": "", "account_name": "Tok Community Library", "account_type": "Library", "parent_account": "Tok", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbfIAF", "name": "Daylon Rogers", "email": "drogers15@alaska.edu", "phone": "907 543 4534", "mobile": "", "title": "IT Lead", "department": "UAF Kuskokwim Campus", "account_name": "UAF Kuskokwim Campus", "account_type": "School", "parent_account": "Bethel", "mailing_city": "Bethel", "include_email": "1"}, {"sf_id": "003Hu00003SnFbWIAV", "name": "Dolli Enright", "email": "igapasst@ugashikvillage.com", "phone": "907-338-7684", "mobile": "", "title": "", "department": "Ugashik Traditional Village", "account_name": "Ugashik", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbUIAV", "name": "Jon Gustafson", "email": "jon@qawalangin.com", "phone": "", "mobile": "", "title": "", "department": "Qawalangin Tribe", "account_name": "Unalaska", "account_type": "Community", "parent_account": "", "mailing_city": "Unalaska", "include_email": "0"}, {"sf_id": "003Hu00003WCRCOIA5", "name": "Rachel Lekanoff", "email": "rachel@qawalangin.com", "phone": "(907) 581-2920", "mobile": "(907) 891-3573", "title": "", "department": "", "account_name": "Unalaska", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WCRHsIAP", "name": "Shayla Shaishnikoff", "email": "shayla@qawalangin.com", "phone": "907.581.2920", "mobile": "", "title": "Resilience Coordinator", "department": "", "account_name": "Unalaska", "account_type": "Community", "parent_account": "", "mailing_city": "Unalaska", "include_email": "0"}, {"sf_id": "003V500000P4zjLIAR", "name": "Dian Siegfried", "email": "desiegfried@alaska.edu", "phone": "907-450-8133", "mobile": "", "title": "Permits & Property Manager", "department": "", "account_name": "University of Alaska", "account_type": "School", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000QaLjjIAF", "name": "Thaddeus Williamson", "email": "tlwilliamson@alaska.edu", "phone": "907-474-5949", "mobile": "", "title": "Environmental / Safety Officer NO LONGER A CONTACT", "department": "", "account_name": "University of Alaska", "account_type": "School", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V500000EwMa2IAF", "name": "Jodi Fowler", "email": "jfowler@valdezak.gov", "phone": "907 835-5411", "mobile": "", "title": "Administrative Assistant/Contract Specialist", "department": "Building Maintenance", "account_name": "Valdez", "account_type": "Community", "parent_account": "", "mailing_city": "Valdez", "include_email": "1"}, {"sf_id": "003V500000GJ0nvIAD", "name": "Stan Porritt", "email": "sporritt@valdezak.gov", "phone": "9078355412", "mobile": "9072020682", "title": "Facilities Maintenance Manager", "department": "", "account_name": "Valdez", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V5000006XKEEIA4", "name": "D. (Dee) L. Womble", "email": "dwomble@valdezak.gov", "phone": "19078354632", "mobile": "", "title": "Head Librarian", "department": "", "account_name": "Valdez City Library", "account_type": "Library", "parent_account": "Valdez", "mailing_city": "Valdez", "include_email": "1"}, {"sf_id": "003V5000006XSDNIA4", "name": "Not A Contact Zane Treesh", "email": "ztreesh@cityofwasilla.gov", "phone": "19073765913, ext. 3", "mobile": "", "title": "Library Director", "department": "", "account_name": "Wasilla Public Library", "account_type": "Library", "parent_account": "Wasilla", "mailing_city": "Wasilla", "include_email": "1"}, {"sf_id": "003V5000007HopFIAS", "name": "Jillian Morrissey", "email": "jillian.morrissey@matsugov.us", "phone": "9078618634", "mobile": "", "title": "Community Development Director", "department": "", "account_name": "Willow", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V5000007Htx2IAC", "name": "Joe Metzger", "email": "joseph.metzger@matsugov.us", "phone": "907-861-7864", "mobile": "", "title": "Land Management Division Manager", "department": "Matanuska-Susitna Borough", "account_name": "Willow", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003V50000079TzrIAE", "name": "Julie Mitchell", "email": "julie.mitchell@matsugov.us", "phone": "(907) 861-7655", "mobile": "", "title": "Library Director", "department": "", "account_name": "Willow Public Library", "account_type": "Library", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003WDXT0IAP", "name": "Alexandra Angerman", "email": "igapcoord.wca@gmail.com", "phone": "907 874 4304 ext 103", "mobile": "", "title": "IGAP Coordinator", "department": "Environmental", "account_name": "Wrangell", "account_type": "Community", "parent_account": "", "mailing_city": "Wrangell", "include_email": "1"}, {"sf_id": "003Hu00003XsRYFIA3", "name": "Sarah Scambler", "email": "sscambler@wrangell.com", "phone": "9078743535", "mobile": "", "title": "Librarian", "department": "Wrangell Public Library", "account_name": "Wrangell Public Library", "account_type": "Library", "parent_account": "Wrangell", "mailing_city": "", "include_email": "1"}, {"sf_id": "003V500000W57w9IAB", "name": "Theodore Capes", "email": "tcapes@yakutatak.us", "phone": "", "mobile": "", "title": "Police Chief", "department": "", "account_name": "Yakutat", "account_type": "Community", "parent_account": "", "mailing_city": "", "include_email": "0"}, {"sf_id": "003Hu00003SnFbZIAV", "name": "Alyssa Leary", "email": "alyssa_leary@ykhc.org", "phone": "907-543-6421", "mobile": "907-545-0150", "title": "Yukon-Kuskokwim Health Corporation - Environmental Health Services Manager", "department": "Yukon-Kuskokwim Health Corporation, Office of Environmental Health", "account_name": "Yukon-Kuskokwim Health Corporation", "account_type": "Native Corporation", "parent_account": "Bethel", "mailing_city": "Bethel", "include_email": "1"}, {"sf_id": "003Hu00003WCu4QIAT", "name": "Brian Lefferts", "email": "brian_lefferts@ykhc.org", "phone": "907-543-6423", "mobile": "907-545-1279", "title": "Director, Public Health", "department": "Public Health", "account_name": "Yukon-Kuskokwim Health Corporation", "account_type": "Native Corporation", "parent_account": "Bethel", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003SnFbeIAF", "name": "Bethy Whalen", "email": "mrwhalen@alaska.edu", "phone": "", "mobile": "", "title": "", "department": "Bethel Community Center", "account_name": "Yupiit Piciryarait Cultural Center", "account_type": "Museum", "parent_account": "Bethel", "mailing_city": "Bethel", "include_email": "1"}, {"sf_id": "003Hu00003WCsHIIA1", "name": "Joe Bavilla", "email": "joe_bavilla@lksd.org", "phone": "", "mobile": "", "title": "Secretary NOT A CONTACT", "department": "", "account_name": "Zacharias John Williams Memorial School", "account_type": "School", "parent_account": "Napaskiak", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003WCu4TIAT", "name": "Stacie Trepagnier", "email": "stacie_trepagnier@lksd.org", "phone": "", "mobile": "", "title": "Principal, Site Admin NOT A CONTACT", "department": "", "account_name": "Zacharias John Williams Memorial School", "account_type": "School", "parent_account": "Napaskiak", "mailing_city": "", "include_email": "1"}, {"sf_id": "003Hu00003WCs8aIAD", "name": "Stephen Bavilla", "email": "", "phone": "", "mobile": "907-737-2091", "title": "NOT A CONTACT", "department": "", "account_name": "Zacharias John Williams Memorial School", "account_type": "School", "parent_account": "Napaskiak", "mailing_city": "", "include_email": "0"}]`;
+</script>
+
+</body>
+</html>

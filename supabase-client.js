@@ -153,13 +153,19 @@ const db = {
             phone: contact.phone || '',
             org: contact.org || '',
             active: contact.active !== false,
+            email_list: contact.emailList === true,
         };
         // Only include id if it's a valid UUID (existing record)
         const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (contact.id && uuidPattern.test(contact.id)) {
             row.id = contact.id;
         }
-        const { data, error } = await supa.from('contacts').upsert(row).select();
+        let { data, error } = await supa.from('contacts').upsert(row).select();
+        // If email_list column doesn't exist yet, retry without it
+        if (error && error.message && error.message.includes('email_list')) {
+            const { email_list, ...rowWithout } = row;
+            ({ data, error } = await supa.from('contacts').upsert(rowWithout).select());
+        }
         if (error) throw error;
         return data?.[0];
     },

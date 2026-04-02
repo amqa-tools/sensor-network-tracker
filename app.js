@@ -115,6 +115,10 @@ async function loadAllData() {
         if (c.parent_id) communityParents[c.id] = c.parent_id;
     });
 
+    // Sync deactivated communities from DB active column
+    deactivatedCommunities = communitiesData.filter(c => c.active === false).map(c => c.id);
+    saveData('deactivatedCommunities', deactivatedCommunities);
+
     // Tags
     communityTags = {};
     tagsData.forEach(t => {
@@ -154,6 +158,7 @@ async function loadAllData() {
         phone: c.phone || '',
         org: c.org || '',
         active: c.active !== false,
+        emailList: c.email_list === true,
     }));
 
     // Notes — already mapped by db.getNotes()
@@ -1041,9 +1046,26 @@ function toggleChildList(parentId) {
     if (arrow) arrow.classList.toggle('open');
 }
 
+let communityListTab = 'active';
+
+function switchCommunityTab(tab) {
+    communityListTab = tab;
+    document.getElementById('community-tab-active').classList.toggle('active', tab === 'active');
+    document.getElementById('community-tab-inactive').classList.toggle('active', tab === 'inactive');
+    renderCommunitiesList();
+}
+
 function renderCommunitiesList() {
     const search = (document.getElementById('community-search')?.value || '').toLowerCase();
     const isSearching = search.length > 0;
+
+    // Update tab counts
+    const allActive = COMMUNITIES.filter(c => !isCommunityDeactivated(c.id));
+    const allInactive = COMMUNITIES.filter(c => isCommunityDeactivated(c.id));
+    const activeCountEl = document.getElementById('community-active-count');
+    const inactiveCountEl = document.getElementById('community-inactive-count');
+    if (activeCountEl) activeCountEl.textContent = `(${allActive.length})`;
+    if (inactiveCountEl) inactiveCountEl.textContent = `(${allInactive.length})`;
 
     let filtered = COMMUNITIES.filter(c => {
         if (search && !c.name.toLowerCase().includes(search)) return false;
@@ -1056,35 +1078,37 @@ function renderCommunitiesList() {
     const container = document.getElementById('communities-list-container');
 
     if (isSearching) {
-        container.innerHTML = filtered.map(c => renderCommunityCard(c)).join('')
+        // When searching, show results across both tabs
+        container.innerHTML = filtered.map(c => {
+            const card = renderCommunityCard(c);
+            return isCommunityDeactivated(c.id) ? card.replace('class="community-row', 'class="community-row community-row-deactivated') : card;
+        }).join('')
             || '<div class="empty-state">No communities found.</div>';
     } else {
-        // Only render top-level communities (parents + standalone); children rendered inside parents
-        const topLevel = filtered.filter(c => !isChildCommunity(c.id));
-        const activeTL = topLevel.filter(c => !isCommunityDeactivated(c.id));
-        const deactivatedTL = topLevel.filter(c => isCommunityDeactivated(c.id));
+        // Filter by active tab
+        const showInactive = communityListTab === 'inactive';
+        const tabFiltered = filtered.filter(c => showInactive ? isCommunityDeactivated(c.id) : !isCommunityDeactivated(c.id));
 
-        let html = activeTL.map(c => renderCommunityCard(c)).join('');
+        // Only render top-level communities (parents + standalone); children rendered inside parents
+        const topLevel = tabFiltered.filter(c => !isChildCommunity(c.id));
+
+        let html = topLevel.map(c => {
+            const card = renderCommunityCard(c);
+            return showInactive ? card.replace('class="community-row', 'class="community-row community-row-deactivated') : card;
+        }).join('');
 
         // Orphaned children whose parent didn't pass filter
-        const childrenInFilter = filtered.filter(c => isChildCommunity(c.id));
+        const childrenInFilter = tabFiltered.filter(c => isChildCommunity(c.id));
         childrenInFilter.forEach(child => {
             const parentInList = topLevel.find(p => p.id === communityParents[child.id]);
-            if (!parentInList && !isCommunityDeactivated(child.id)) {
-                html += renderCommunityCard(child);
+            if (!parentInList) {
+                const card = renderCommunityCard(child);
+                html += showInactive ? card.replace('class="community-row', 'class="community-row community-row-deactivated') : card;
             }
         });
 
-        // Deactivated at bottom
-        if (deactivatedTL.length > 0) {
-            html += '<div class="deactivated-section-header">Deactivated Communities</div>';
-            html += deactivatedTL.map(c => {
-                const card = renderCommunityCard(c);
-                return card.replace('class="community-row', 'class="community-row community-row-deactivated');
-            }).join('');
-        }
-
-        container.innerHTML = html || '<div class="empty-state">No communities found.</div>';
+        const emptyMsg = showInactive ? 'No inactive communities.' : 'No communities found.';
+        container.innerHTML = html || `<div class="empty-state">${emptyMsg}</div>`;
     }
 }
 
@@ -1415,6 +1439,8 @@ function inlineSaveContact(el) {
 
     if (field === 'active') {
         c.active = el.value === 'true';
+    } else if (field === 'emailList') {
+        c.emailList = el.value === 'true';
     } else {
         c[field] = newVal;
     }
@@ -2066,16 +2092,17 @@ function showCommunityView(communityId) {
     });
     document.getElementById('community-contacts-list').innerHTML = commContacts.length ? `
         <div class="table-container"><table class="contacts-table"><thead><tr>
-            <th>Name</th><th>Role</th><th>Organization</th><th>Email</th><th>Phone</th><th>Status</th>
+            <th class="col-name">Name</th><th class="col-role">Role</th><th class="col-org">Organization</th><th class="col-email">Email</th><th class="col-phone">Phone</th><th class="col-status">Status</th><th class="col-actions"></th>
         </tr></thead><tbody>
         ${commContacts.map(c => `
             <tr class="${c.active === false ? 'contact-row-inactive' : ''}" onclick="showContactDetail('${c.id}')" style="cursor:pointer">
-                <td><span class="clickable">${c.name}</span></td>
-                <td>${c.role || '—'}</td>
-                <td>${c.org || '—'}</td>
-                <td>${c.email ? `<a href="#" class="clickable" onclick="event.stopPropagation(); openQuickEmail('${c.id}')">${c.email}</a>` : '—'}</td>
-                <td>${c.phone ? `<a href="tel:${c.phone}" class="clickable" onclick="event.stopPropagation()">${c.phone}</a>` : '—'}</td>
-                <td>${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--aurora-green);font-size:11px;font-weight:600">Active</span>'}</td>
+                <td class="col-name"><span class="clickable">${c.name}</span></td>
+                <td class="col-role" title="${escapeHtml(c.role || '')}">${c.role || '—'}</td>
+                <td class="col-org" title="${escapeHtml(c.org || '')}">${c.org || '—'}</td>
+                <td class="col-email"><span class="email-cell">${c.email ? `<a href="#" class="clickable" onclick="event.stopPropagation(); openQuickEmail('${c.id}')">${c.email}</a>` : '<span class="no-email">—</span>'}<label class="email-list-toggle" onclick="event.stopPropagation()" title="${c.emailList ? 'On network-wide email list — click to remove' : 'Not on email list — click to add'}"><input type="checkbox" class="email-list-checkbox" ${c.emailList ? 'checked' : ''} onchange="toggleContactEmailList('${c.id}')"><span class="email-list-label">Email List</span></label></span></td>
+                <td class="col-phone">${c.phone ? `<a href="tel:${c.phone}" class="clickable" onclick="event.stopPropagation()">${c.phone}</a>` : '—'}</td>
+                <td class="col-status">${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--aurora-green);font-size:11px;font-weight:600">Active</span>'}</td>
+                <td class="col-actions"><button class="contact-delete-btn" onclick="event.stopPropagation(); confirmDeleteContact('${c.id}')" title="Delete contact">&#128465;</button></td>
             </tr>
         `).join('')}
         </tbody></table></div>
@@ -2320,16 +2347,17 @@ function renderContacts() {
             <div class="contacts-group-header">${commName}</div>
             <div class="table-container">
                 <table class="contacts-table"><thead><tr>
-                    <th>Name</th><th>Role</th><th>Organization</th><th>Email</th><th>Phone</th><th>Status</th>
+                    <th class="col-name">Name</th><th class="col-role">Role</th><th class="col-org">Organization</th><th class="col-email">Email</th><th class="col-phone">Phone</th><th class="col-status">Status</th><th class="col-actions"></th>
                 </tr></thead><tbody>
                 ${groups[commName].map(c => `
                     <tr class="${c.active === false ? 'contact-row-inactive' : ''}" onclick="showContactDetail('${c.id}')" style="cursor:pointer">
-                        <td><span class="clickable">${c.name}</span></td>
-                        <td>${c.role || '—'}</td>
-                        <td>${c.org || '—'}</td>
-                        <td>${c.email ? `<a href="#" class="clickable" onclick="event.stopPropagation(); openQuickEmail('${c.id}')">${c.email}</a>` : '—'}</td>
-                        <td>${c.phone ? `<a href="tel:${c.phone}" class="clickable" onclick="event.stopPropagation()">${c.phone}</a>` : '—'}</td>
-                        <td>${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--aurora-green);font-size:11px;font-weight:600">Active</span>'}</td>
+                        <td class="col-name"><span class="clickable">${c.name}</span></td>
+                        <td class="col-role" title="${escapeHtml(c.role || '')}">${c.role || '—'}</td>
+                        <td class="col-org" title="${escapeHtml(c.org || '')}">${c.org || '—'}</td>
+                        <td class="col-email"><span class="email-cell">${c.email ? `<a href="#" class="clickable" onclick="event.stopPropagation(); openQuickEmail('${c.id}')">${c.email}</a>` : '<span class="no-email">—</span>'}<label class="email-list-toggle" onclick="event.stopPropagation()" title="${c.emailList ? 'On network-wide email list — click to remove' : 'Not on email list — click to add'}"><input type="checkbox" class="email-list-checkbox" ${c.emailList ? 'checked' : ''} onchange="toggleContactEmailList('${c.id}')"><span class="email-list-label">Email List</span></label></span></td>
+                        <td class="col-phone">${c.phone ? `<a href="tel:${c.phone}" class="clickable" onclick="event.stopPropagation()">${c.phone}</a>` : '—'}</td>
+                        <td class="col-status">${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--aurora-green);font-size:11px;font-weight:600">Active</span>'}</td>
+                        <td class="col-actions"><button class="contact-delete-btn" onclick="event.stopPropagation(); confirmDeleteContact('${c.id}')" title="Delete contact">&#128465;</button></td>
                     </tr>
                 `).join('')}
                 </tbody></table>
@@ -2343,6 +2371,7 @@ function openAddContactModal() {
     document.getElementById('contact-form').reset();
     document.getElementById('contact-edit-id').value = '';
     document.getElementById('contact-active-yes').checked = true;
+    document.getElementById('contact-email-list').checked = false;
     document.getElementById('delete-contact-btn').style.display = 'none';
     populateGroupedCommunitySelect('contact-community-input');
     openModal('modal-add-contact');
@@ -2374,6 +2403,7 @@ async function saveContact(e) {
         phone: document.getElementById('contact-phone-input').value.trim(),
         org: document.getElementById('contact-org-input').value.trim(),
         active: isActive,
+        emailList: document.getElementById('contact-email-list').checked,
     };
 
     let statusChanged = null;
@@ -2546,6 +2576,15 @@ function showContactView(contactId) {
                     <option value="false" ${c.active === false ? 'selected' : ''}>Inactive</option>
                 </select>
             </div>
+            <div class="info-item"><label>Email List</label>
+                <select class="inline-edit-select" data-contact="${c.id}" data-field="emailList" onchange="inlineSaveContact(this)">
+                    <option value="true" ${c.emailList ? 'selected' : ''}>Included</option>
+                    <option value="false" ${!c.emailList ? 'selected' : ''}>Not included</option>
+                </select>
+            </div>
+            <div class="info-item" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--slate-200)">
+                <button class="btn btn-danger btn-sm" onclick="deleteContactFromDetail('${c.id}')">Delete Contact</button>
+            </div>
         `;
     } else {
         document.getElementById('contact-info-card').innerHTML = `
@@ -2555,6 +2594,7 @@ function showContactView(contactId) {
             <div class="info-item"><label>Email</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'email')">${c.email || '<span class="field-placeholder">Email</span>'}</p></div>
             <div class="info-item"><label>Phone</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'phone')">${c.phone || '<span class="field-placeholder">Phone</span>'}</p></div>
             <div class="info-item"><label>Status</label><p>${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--navy-500);font-weight:600">Active</span>'}</p></div>
+            <div class="info-item"><label>Email List</label><p class="editable-field" onclick="toggleContactEmailList('${c.id}')">${c.emailList ? '<span style="color:var(--aurora-green);font-weight:600">Included</span>' : '<span class="field-placeholder">Not included</span>'}</p></div>
         `;
     }
 
@@ -2701,6 +2741,18 @@ function inlineEditContact(contactId, field) {
     });
 }
 
+function toggleContactEmailList(contactId) {
+    const c = contacts.find(x => x.id === contactId);
+    if (!c) return;
+    c.emailList = !c.emailList;
+    persistContact(c);
+    showSuccessToast(c.emailList ? 'Added to email list' : 'Removed from email list');
+    // Re-render current view if on contact detail, otherwise leave checkbox as-is (already toggled by click)
+    if (currentContact === contactId && document.getElementById('view-contact-detail')?.classList.contains('active')) {
+        showContactView(contactId);
+    }
+}
+
 function inlineEditContactCommunity(contactId) {
     const c = contacts.find(x => x.id === contactId);
     if (!c) return;
@@ -2791,6 +2843,59 @@ function deleteCurrentContact() {
     }, { danger: true });
 }
 
+function confirmDeleteContact(contactId) {
+    const c = contacts.find(x => x.id === contactId);
+    if (!c) return;
+    showConfirm(
+        'Delete Contact',
+        `<p>Are you sure you want to permanently delete <strong>${escapeHtml(c.name)}</strong>?</p>
+         <p style="margin-top:8px">This will remove all of their information from the system and cannot be undone.</p>
+         <p style="margin-top:12px;padding:10px 14px;background:rgba(234,179,8,0.08);border-radius:8px;border:1px solid rgba(234,179,8,0.2);font-size:13px;color:var(--slate-600)">
+            <strong style="color:var(--gold-700)">Tip:</strong> If this person is no longer involved but may be relevant later, consider setting them to <strong>Inactive</strong> instead. Inactive contacts are preserved in the system but hidden from active lists.
+         </p>`,
+        () => {
+            db.deleteContact(contactId).catch(err => console.error('Delete error:', err));
+            contacts = contacts.filter(x => x.id !== contactId);
+            showSuccessToast(`${c.name} deleted`);
+
+            // Close tab if open
+            const tabId = getTabId('contact', contactId);
+            const tabIdx = openTabs.findIndex(t => t.id === tabId);
+            if (tabIdx >= 0) openTabs.splice(tabIdx, 1);
+            if (currentContact === contactId) currentContact = null;
+            renderOpenTabs();
+
+            // Re-render whatever view we're on
+            if (document.getElementById('view-contacts')?.classList.contains('active')) {
+                renderContacts();
+            } else if (currentCommunity) {
+                showCommunityView(currentCommunity);
+            } else {
+                showView('contacts');
+            }
+        },
+        { danger: true, confirmText: 'Delete Permanently' }
+    );
+}
+
+function deleteContactFromDetail(contactId) {
+    const c = contacts.find(x => x.id === contactId);
+    if (!c) return;
+    showConfirm('Delete Contact', `Delete contact "${c.name}"? This cannot be undone.`, () => {
+        db.deleteContact(contactId).catch(err => console.error('Delete error:', err));
+        contacts = contacts.filter(x => x.id !== contactId);
+        showSuccessToast('Contact deleted');
+
+        const tabId = getTabId('contact', contactId);
+        const tabIdx = openTabs.findIndex(t => t.id === tabId);
+        if (tabIdx >= 0) openTabs.splice(tabIdx, 1);
+        activeTabId = null;
+        renderOpenTabs();
+        currentContact = null;
+        showView('contacts');
+    }, { danger: true });
+}
+
 function openContactCommModal() {
     if (!currentContact) return;
     const c = contacts.find(x => x.id === currentContact);
@@ -2806,18 +2911,23 @@ function openContactCommModal() {
 // ===== EMAIL COMPOSER =====
 function openEmailModal() {
     populateCommunitySelect('email-community-filter');
+    document.getElementById('btn-network-email-list').classList.remove('active');
     renderEmailRecipients();
+    emailDeselectAll();
     document.getElementById('email-subject').value = '';
     document.getElementById('email-body').value = '';
     openModal('modal-email');
 }
 
-function renderEmailRecipients() {
+function renderEmailRecipients(filter) {
     const list = document.getElementById('email-recipients-list');
+
+    // filter: undefined = all checked, 'community' = specific community, 'network' = email list only
+    const activeContacts = contacts.filter(c => c.active !== false);
 
     // Group active contacts by community alphabetically
     const groups = {};
-    contacts.filter(c => c.active !== false).forEach(c => {
+    activeContacts.forEach(c => {
         const commName = getCommunityName(c.community);
         if (!groups[commName]) groups[commName] = [];
         groups[commName].push(c);
@@ -2827,15 +2937,21 @@ function renderEmailRecipients() {
 
     list.innerHTML = sortedCommunities.map(commName => {
         const groupContacts = groups[commName].sort((a, b) => a.name.localeCompare(b.name));
+        // Skip empty groups when filtering
+        const hasVisible = filter !== 'network' || groupContacts.some(c => c.emailList);
+        if (!hasVisible) return '';
         return `
             <div class="email-community-header">${commName}</div>
-            ${groupContacts.map(c => `
+            ${groupContacts.map(c => {
+                const isChecked = filter === 'network' ? c.emailList : true;
+                const badge = c.emailList ? '<span class="email-list-badge">Email List</span>' : '';
+                return `
                 <div class="email-recipient-row">
-                    <input type="checkbox" id="email-cb-${c.id}" data-contact-id="${c.id}" data-community="${c.community}" checked>
-                    <label for="email-cb-${c.id}">${c.name}</label>
+                    <input type="checkbox" id="email-cb-${c.id}" data-contact-id="${c.id}" data-community="${c.community}" ${isChecked ? 'checked' : ''}>
+                    <label for="email-cb-${c.id}">${c.name}${badge}</label>
                     <span class="recipient-community">${c.email || 'no email'}</span>
-                </div>
-            `).join('')}
+                </div>`;
+            }).join('')}
         `;
     }).join('');
 }
@@ -2848,14 +2964,26 @@ function emailDeselectAll() {
     document.querySelectorAll('#email-recipients-list input[type="checkbox"]').forEach(cb => cb.checked = false);
 }
 
-function emailShowAll() {
+function emailSelectNetworkList() {
+    // Reset community filter
     document.getElementById('email-community-filter').value = '';
-    renderEmailRecipients();
-    emailDeselectAll();
+    // Render all contacts but only check those on the email list
+    renderEmailRecipients('network');
+    // Highlight the button
+    document.getElementById('btn-network-email-list').classList.add('active');
+
+    const onListCount = contacts.filter(c => c.active !== false && c.emailList).length;
+    if (onListCount === 0) {
+        document.getElementById('email-recipients-list').innerHTML =
+            '<div class="empty-state">No contacts on the network-wide email list yet. Use the checkboxes on the Contacts tab to add them.</div>';
+    }
 }
 
 function emailFilterByCommunity() {
     const commId = document.getElementById('email-community-filter').value;
+    // Remove network list button highlight
+    document.getElementById('btn-network-email-list').classList.remove('active');
+
     if (!commId) {
         // Show all contacts, none checked
         renderEmailRecipients();
@@ -2870,13 +2998,15 @@ function emailFilterByCommunity() {
 
     list.innerHTML = `
         <div class="email-community-header">${commName}</div>
-        ${filtered.sort((a, b) => a.name.localeCompare(b.name)).map(c => `
+        ${filtered.sort((a, b) => a.name.localeCompare(b.name)).map(c => {
+            const badge = c.emailList ? '<span class="email-list-badge">Email List</span>' : '';
+            return `
             <div class="email-recipient-row">
                 <input type="checkbox" id="email-cb-${c.id}" data-contact-id="${c.id}" data-community="${c.community}" checked>
-                <label for="email-cb-${c.id}">${c.name}</label>
+                <label for="email-cb-${c.id}">${c.name}${badge}</label>
                 <span class="recipient-community">${c.email || 'no email'}</span>
-            </div>
-        `).join('')}
+            </div>`;
+        }).join('')}
     `;
 
     if (filtered.length === 0) {
@@ -2935,14 +3065,16 @@ function openQuickEmail(contactId) {
 
     // Open the email modal with just this contact selected
     populateCommunitySelect('email-community-filter');
+    document.getElementById('btn-network-email-list').classList.remove('active');
 
     // Render only this contact as a recipient
+    const badge = c.emailList ? '<span class="email-list-badge">Email List</span>' : '';
     const list = document.getElementById('email-recipients-list');
     list.innerHTML = `
         <div class="email-community-header">${getCommunityName(c.community)}</div>
         <div class="email-recipient-row">
             <input type="checkbox" id="email-cb-${c.id}" data-contact-id="${c.id}" data-community="${c.community}" checked>
-            <label for="email-cb-${c.id}">${c.name}</label>
+            <label for="email-cb-${c.id}">${c.name}${badge}</label>
             <span class="recipient-community">${c.email}</span>
         </div>
     `;
@@ -4792,6 +4924,7 @@ const CONTACT_EXPORT_FIELDS = [
     { key: 'org', label: 'Organization', get: c => c.org || '' },
     { key: 'email', label: 'Email', get: c => c.email || '' },
     { key: 'phone', label: 'Phone', get: c => c.phone || '' },
+    { key: 'emailList', label: 'Email List', get: c => c.emailList ? 'Yes' : 'No' },
     { key: 'active', label: 'Status', get: c => c.active === false ? 'Inactive' : 'Active' },
 ];
 
@@ -5301,18 +5434,62 @@ function unpinItem(type, id) {
 let deactivatedCommunities = loadData('deactivatedCommunities', []);
 
 function deactivateCommunity(communityId) {
-    showConfirm('Deactivate Community', 'Deactivate this community? It will move to the bottom of the list. All history is preserved.', () => {
+    const community = COMMUNITIES.find(c => c.id === communityId);
+    const communityName = community ? community.name : communityId;
+    const communityContacts = contacts.filter(c => c.community === communityId && c.active !== false);
+    const contactMsg = communityContacts.length > 0
+        ? `\n\nThis will also inactivate ${communityContacts.length} active contact${communityContacts.length === 1 ? '' : 's'} in this community.`
+        : '';
+
+    showConfirm('Deactivate Community', `Deactivate "${communityName}"? It will move to the Inactive tab. All history is preserved.${contactMsg}`, () => {
         if (!deactivatedCommunities.includes(communityId)) {
             deactivatedCommunities.push(communityId);
             saveData('deactivatedCommunities', deactivatedCommunities);
         }
+        // Persist to Supabase
+        db.updateCommunity(communityId, { active: false }).catch(err => console.error('Deactivate error:', err));
+
+        // Also deactivate child communities
+        const children = COMMUNITIES.filter(c => communityParents[c.id] === communityId);
+        children.forEach(child => {
+            if (!deactivatedCommunities.includes(child.id)) {
+                deactivatedCommunities.push(child.id);
+            }
+            db.updateCommunity(child.id, { active: false }).catch(err => console.error('Deactivate child error:', err));
+        });
+        saveData('deactivatedCommunities', deactivatedCommunities);
+
+        // Auto-inactivate contacts in this community (and children)
+        const allDeactivatedIds = [communityId, ...children.map(c => c.id)];
+        contacts.forEach(c => {
+            if (allDeactivatedIds.includes(c.community) && c.active !== false) {
+                c.active = false;
+                persistContact(c);
+            }
+        });
+
+        showSuccessToast(`${communityName} deactivated`);
         showView('communities');
-    });
+    }, { danger: true });
 }
 
 function reactivateCommunity(communityId) {
+    const community = COMMUNITIES.find(c => c.id === communityId);
+    const communityName = community ? community.name : communityId;
+
     deactivatedCommunities = deactivatedCommunities.filter(id => id !== communityId);
     saveData('deactivatedCommunities', deactivatedCommunities);
+    db.updateCommunity(communityId, { active: true }).catch(err => console.error('Reactivate error:', err));
+
+    // Also reactivate child communities
+    const children = COMMUNITIES.filter(c => communityParents[c.id] === communityId);
+    children.forEach(child => {
+        deactivatedCommunities = deactivatedCommunities.filter(id => id !== child.id);
+        db.updateCommunity(child.id, { active: true }).catch(err => console.error('Reactivate child error:', err));
+    });
+    saveData('deactivatedCommunities', deactivatedCommunities);
+
+    showSuccessToast(`${communityName} reactivated`);
     showView('communities');
 }
 

@@ -385,6 +385,21 @@ body {
     color: var(--slate-500);
 }
 
+.contact-email-list-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.contact-email-list-label input[type="checkbox"] {
+    accent-color: var(--gold-500);
+    width: 16px;
+    height: 16px;
+}
+
 .contact-row-inactive td {
     opacity: 0.45;
 }
@@ -1605,6 +1620,106 @@ tr:last-child td {
 
 .history-actions {
     margin-bottom: 18px;
+}
+
+/* ===== CONTACTS TABLE FIXED WIDTHS ===== */
+.contacts-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.contacts-table th,
+.contacts-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.contacts-table .col-name       { width: 16%; }
+.contacts-table .col-role       { width: 14%; }
+.contacts-table .col-org        { width: 16%; }
+.contacts-table .col-email      { width: 30%; overflow: visible; white-space: normal; }
+.contacts-table .col-phone      { width: 12%; }
+.contacts-table .col-status     { width: 8%; }
+.contacts-table .col-actions    { width: 4%; text-align: center; padding: 0; }
+
+/* Email cell: email address + inline checkbox */
+.email-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.email-cell a {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.email-list-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.email-list-toggle:hover {
+    background: var(--gold-100);
+}
+
+.email-list-toggle .email-list-checkbox {
+    width: 13px;
+    height: 13px;
+    accent-color: var(--gold-500);
+    cursor: pointer;
+    margin: 0;
+}
+
+.email-list-toggle .email-list-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--slate-400);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.email-list-toggle:has(.email-list-checkbox:checked) .email-list-label {
+    color: var(--gold-600);
+}
+
+/* Delete icon — hidden until row hover */
+.contact-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: var(--slate-300);
+    font-size: 15px;
+    cursor: pointer;
+    border-radius: 6px;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+tr:hover .contact-delete-btn {
+    opacity: 1;
+}
+
+.contact-delete-btn:hover {
+    color: var(--aurora-rose);
+    background: rgba(244, 63, 94, 0.08);
 }
 
 /* ===== CONTACTS (grouped by community) ===== */
@@ -2997,16 +3112,66 @@ tr:last-child td {
 .email-toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 10px;
     padding: 14px 28px;
     background: var(--slate-50);
     border-bottom: 1px solid var(--slate-100);
     flex-wrap: wrap;
 }
 
+.email-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.email-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.email-toolbar-right select {
+    min-width: 160px;
+}
+
 .email-toolbar-divider {
     color: var(--slate-200);
     margin: 0 4px;
+}
+
+.btn-email-list {
+    background: var(--gold-500) !important;
+    color: var(--navy-900) !important;
+    font-weight: 600 !important;
+    border: 1px solid var(--gold-400) !important;
+    padding: 6px 14px !important;
+}
+
+.btn-email-list:hover {
+    background: var(--gold-400) !important;
+}
+
+.btn-email-list.active {
+    outline: 2px solid var(--navy-600);
+    outline-offset: 1px;
+}
+
+.email-list-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: var(--gold-100);
+    color: var(--gold-600);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
 }
 
 .email-toolbar-label {
@@ -3726,6 +3891,48 @@ tr:last-child td {
     align-items: center;
 }
 
+/* ===== COMMUNITY LIST TABS ===== */
+.community-list-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--slate-200);
+}
+
+.community-list-tab {
+    padding: 10px 20px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.community-list-tab:hover {
+    color: var(--navy-700);
+}
+
+.community-list-tab.active {
+    color: var(--navy-700);
+    border-bottom-color: var(--gold-500);
+}
+
+.community-tab-count {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    margin-left: 4px;
+}
+
+.community-list-tab.active .community-tab-count {
+    color: var(--navy-500);
+}
+
 /* ===== DEACTIVATED COMMUNITIES ===== */
 .deactivated-section-header {
     font-size: 11px;
@@ -3739,11 +3946,11 @@ tr:last-child td {
 }
 
 .community-row-deactivated {
-    opacity: 0.4;
+    opacity: 0.5;
 }
 
 .community-row-deactivated:hover {
-    opacity: 0.7;
+    opacity: 0.8;
 }
 
 /* ===== IMPORT LINK ===== */

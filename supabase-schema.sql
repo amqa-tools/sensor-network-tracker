@@ -61,8 +61,12 @@ CREATE TABLE communities (
     id text PRIMARY KEY,
     name text NOT NULL,
     parent_id text REFERENCES communities(id),
+    active boolean DEFAULT true,
     created_at timestamptz DEFAULT now()
 );
+
+-- Migration: If communities table already exists, add active column
+-- ALTER TABLE communities ADD COLUMN IF NOT EXISTS active boolean DEFAULT true;
 
 -- ===== COMMUNITY TAGS =====
 CREATE TABLE community_tags (
@@ -97,8 +101,12 @@ CREATE TABLE contacts (
     phone text DEFAULT '',
     org text DEFAULT '',
     active boolean DEFAULT true,
+    email_list boolean DEFAULT false,
     created_at timestamptz DEFAULT now()
 );
+
+-- Migration: If contacts table already exists, add email_list column
+-- ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email_list boolean DEFAULT false;
 
 -- ===== NOTES =====
 CREATE TABLE notes (
