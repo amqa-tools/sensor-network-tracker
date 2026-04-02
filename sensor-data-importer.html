@@ -1002,29 +1002,67 @@ function showDone() {
     <p style="margin-top: 16px; color: var(--text);">You can now open the Sensor Tracker app to verify the imported data.</p>
   `;
 
-  if (skippedItems.length > 0) {
-    const list = document.getElementById('skipped-list');
+  const list = document.getElementById('skipped-list');
+  if (skippedItems.length > 0 || noMatchItems.length > 0) {
     list.style.display = '';
-    list.innerHTML = `
-      <h3>Skipped Sensors (${skippedItems.length})</h3>
-      <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 12px;">You can review these again if needed.</p>
-      ${skippedItems.map((s, i) => `
-        <div class="skipped-item">
-          <div>
-            <strong style="font-family:'JetBrains Mono',monospace">${escHtml(s.sensorId)}</strong>
-            <span style="color: var(--text-dim); margin-left: 8px;">SOA: ${escHtml(s.soaTagId || '—')}</span>
-            <span style="color: var(--text-dim); margin-left: 8px;">Purchased: ${escHtml(s.datePurchased || '—')}</span>
+    let html = '';
+
+    if (skippedItems.length > 0) {
+      html += `
+        <h3>Skipped Sensors (${skippedItems.length})</h3>
+        <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 12px;">You can review these again if needed.</p>
+        ${skippedItems.map((s, i) => `
+          <div class="skipped-item">
+            <div>
+              <strong style="font-family:'JetBrains Mono',monospace">${escHtml(s.sensorId)}</strong>
+              <span style="color: var(--text-dim); margin-left: 8px;">SOA: ${escHtml(s.soaTagId || '—')}</span>
+              <span style="color: var(--text-dim); margin-left: 8px;">Purchased: ${escHtml(s.datePurchased || '—')}</span>
+            </div>
+            <button class="btn btn-approve" style="padding:6px 14px;font-size:0.8rem;" onclick="reviewSkipped(${i})">Review</button>
           </div>
-          <button class="btn btn-approve" style="padding:6px 14px;font-size:0.8rem;" onclick="reviewSkipped(${i})">Review</button>
-        </div>
-      `).join('')}
-    `;
+        `).join('')}
+      `;
+    }
+
+    if (noMatchItems.length > 0) {
+      html += `
+        <h3 style="color: var(--red); ${skippedItems.length > 0 ? 'margin-top: 24px;' : ''}">No Match (${noMatchItems.length})</h3>
+        <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 12px;">These sensor IDs didn't match any sensor in the tracker. Review to try again or skip.</p>
+        ${noMatchItems.map((s, i) => `
+          <div class="skipped-item">
+            <div>
+              <strong style="font-family:'JetBrains Mono',monospace">${escHtml(s.sensorId)}</strong>
+              <span style="color: var(--text-dim); margin-left: 8px;">SF: ${escHtml(s.sfName || '')}</span>
+              <span style="color: var(--text-dim); margin-left: 8px;">SOA: ${escHtml(s.soaTagId || '—')}</span>
+            </div>
+            <button class="btn btn-approve" style="padding:6px 14px;font-size:0.8rem;" onclick="reviewNoMatch(${i})">Review</button>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    list.innerHTML = html;
   }
 }
 
 function reviewSkipped(skipIdx) {
   const s = skippedItems[skipIdx];
   skippedItems.splice(skipIdx, 1);
+
+  const idx = importRows.findIndex(r => r._rowNum === s._rowNum);
+  delete decisions[idx];
+
+  document.getElementById('review-card').style.display = '';
+  document.getElementById('filter-bar').style.display = '';
+  document.getElementById('done-section').style.display = 'none';
+  document.getElementById('skipped-list').style.display = 'none';
+
+  showSensor(idx);
+}
+
+function reviewNoMatch(nmIdx) {
+  const s = noMatchItems[nmIdx];
+  noMatchItems.splice(nmIdx, 1);
 
   const idx = importRows.findIndex(r => r._rowNum === s._rowNum);
   delete decisions[idx];
