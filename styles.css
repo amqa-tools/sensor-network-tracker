@@ -4044,6 +4044,10 @@ tr:hover .contact-delete-btn {
     color: var(--slate-400);
 }
 
+.community-row-deactivated .community-row-sensors {
+    margin-right: 32px;
+}
+
 .community-row-deactivated:hover .community-delete-btn {
     opacity: 1;
 }
