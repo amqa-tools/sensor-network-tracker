@@ -96,6 +96,16 @@ const db = {
         if (error) throw error;
     },
 
+    async deleteCommunity(id) {
+        // Remove community tags first
+        await supa.from('community_tags').delete().eq('community_id', id);
+        // Remove community files
+        await supa.from('community_files').delete().eq('community_id', id);
+        // Delete the community
+        const { error } = await supa.from('communities').delete().eq('id', id);
+        if (error) throw error;
+    },
+
     // --- Community Tags ---
     async getCommunityTags() {
         const { data, error } = await supa.from('community_tags').select('*');

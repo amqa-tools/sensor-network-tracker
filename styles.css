@@ -4021,10 +4021,36 @@ tr:hover .contact-delete-btn {
 
 .community-row-deactivated {
     opacity: 0.5;
+    position: relative;
 }
 
 .community-row-deactivated:hover {
     opacity: 0.8;
+}
+
+.community-delete-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    padding: 4px 6px;
+    border-radius: 4px;
+    color: var(--slate-400);
+}
+
+.community-row-deactivated:hover .community-delete-btn {
+    opacity: 1;
+}
+
+.community-delete-btn:hover {
+    color: var(--aurora-rose, #e74c3c);
+    background: rgba(231, 76, 60, 0.1);
 }
 
 /* ===== IMPORT LINK ===== */

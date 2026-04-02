@@ -985,6 +985,7 @@ function renderCommunityCard(c) {
         // Parent with children — show expandable row, no sensor list
         const childCount = children.length;
         const totalSensors = children.reduce((sum, ch) => sum + sensors.filter(s => s.community === ch.id).length, 0) + commSensors.length;
+        const parentDeleteBtn = isCommunityDeactivated(c.id) ? `<button class="community-delete-btn" onclick="event.stopPropagation(); confirmDeleteCommunity('${c.id}')" title="Delete community">&#128465;</button>` : '';
         return `
             <div class="community-row parent-row" onclick="showCommunity('${c.id}')">
                 <span class="parent-expand-arrow open" onclick="event.stopPropagation(); toggleChildList('${c.id}')">&#9654;</span>
@@ -993,6 +994,7 @@ function renderCommunityCard(c) {
                     ${tagsHtml}
                     <span class="community-row-meta">${childCount} site${childCount !== 1 ? 's' : ''} &middot; ${totalSensors} sensor${totalSensors !== 1 ? 's' : ''}</span>
                 </div>
+                ${parentDeleteBtn}
             </div>
             <div class="child-list open" id="child-list-${c.id}">
                 ${children.map(child => renderCommunityCard(child)).join('')}
@@ -1005,6 +1007,7 @@ function renderCommunityCard(c) {
         const sensorListStr = commSensors.length > 0
             ? commSensors.map(s => s.id).join(', ')
             : 'No sensors';
+        const childDeleteBtn = isCommunityDeactivated(c.id) ? `<button class="community-delete-btn" onclick="event.stopPropagation(); confirmDeleteCommunity('${c.id}')" title="Delete community">&#128465;</button>` : '';
         return `
             <div class="community-row child-row" onclick="showCommunity('${c.id}')">
                 <div class="community-row-info">
@@ -1012,6 +1015,7 @@ function renderCommunityCard(c) {
                     ${tagsHtml}
                 </div>
                 <div class="community-row-sensors">${sensorListStr}</div>
+                ${childDeleteBtn}
             </div>
         `;
     }
@@ -1020,6 +1024,7 @@ function renderCommunityCard(c) {
     const sensorListStr = commSensors.length > 0
         ? commSensors.map(s => s.id).join(', ')
         : 'No sensors';
+    const deleteBtn = isCommunityDeactivated(c.id) ? `<button class="community-delete-btn" onclick="event.stopPropagation(); confirmDeleteCommunity('${c.id}')" title="Delete community">&#128465;</button>` : '';
     return `
         <div class="community-row" onclick="showCommunity('${c.id}')">
             <div class="community-row-info">
@@ -1027,6 +1032,7 @@ function renderCommunityCard(c) {
                 ${tagsHtml}
             </div>
             <div class="community-row-sensors">${sensorListStr}</div>
+            ${deleteBtn}
         </div>
     `;
 }
@@ -2333,13 +2339,8 @@ let contactsListTab = 'active';
 function switchContactsTab(tab) {
     contactsListTab = tab;
     document.getElementById('contacts-tab-active').classList.toggle('active', tab === 'active');
-    document.getElementById('contacts-tab-noncomm').classList.toggle('active', tab === 'noncomm');
     document.getElementById('contacts-tab-inactive').classList.toggle('active', tab === 'inactive');
     renderContacts();
-}
-
-function isNonCommunityContact(c) {
-    return !c.community || !COMMUNITIES.find(cm => cm.id === c.community);
 }
 
 function renderContacts() {
@@ -2347,34 +2348,28 @@ function renderContacts() {
     const isSearching = search.length > 0;
 
     // Update tab counts
-    const nonCommContacts = contacts.filter(c => isNonCommunityContact(c));
-    const activeCommunityContacts = contacts.filter(c => !isNonCommunityContact(c) && !isCommunityDeactivated(c.community));
-    const inactiveCommunityContacts = contacts.filter(c => !isNonCommunityContact(c) && isCommunityDeactivated(c.community));
+    const activeCommunityContacts = contacts.filter(c => c.community && !isCommunityDeactivated(c.community));
+    const inactiveCommunityContacts = contacts.filter(c => !c.community || isCommunityDeactivated(c.community));
     const activeCountEl = document.getElementById('contacts-active-count');
     const inactiveCountEl = document.getElementById('contacts-inactive-count');
-    const noncommCountEl = document.getElementById('contacts-noncomm-count');
     if (activeCountEl) activeCountEl.textContent = `(${activeCommunityContacts.length})`;
     if (inactiveCountEl) inactiveCountEl.textContent = `(${inactiveCommunityContacts.length})`;
-    if (noncommCountEl) noncommCountEl.textContent = `(${nonCommContacts.length})`;
 
     let filtered = contacts.filter(c => {
         if (search && !c.name.toLowerCase().includes(search) && !getCommunityName(c.community).toLowerCase().includes(search) && !(c.org || '').toLowerCase().includes(search)) return false;
         // Filter by tab (skip when searching)
         if (!isSearching) {
-            const isNonComm = isNonCommunityContact(c);
-            if (contactsListTab === 'noncomm') return isNonComm;
-            if (isNonComm) return false; // exclude non-community contacts from active/inactive tabs
             const showInactive = contactsListTab === 'inactive';
-            const communityIsInactive = isCommunityDeactivated(c.community);
-            if (showInactive !== communityIsInactive) return false;
+            const isInactive = !c.community || isCommunityDeactivated(c.community);
+            if (showInactive !== isInactive) return false;
         }
         return true;
     });
 
-    // Group by community (or org for non-community), sorted alphabetically
+    // Group by community, sorted alphabetically
     const groups = {};
     filtered.forEach(c => {
-        const groupName = isNonCommunityContact(c) ? (c.org || 'Unassigned') : getCommunityName(c.community);
+        const groupName = getCommunityName(c.community) || (c.org || 'Unassigned');
         if (!groups[groupName]) groups[groupName] = [];
         groups[groupName].push(c);
     });
@@ -2396,22 +2391,14 @@ function renderContacts() {
 
     const container = document.getElementById('contacts-grid');
 
-    // Description for non-community tab
-    const tabDesc = contactsListTab === 'noncomm' && !isSearching
-        ? `<div class="contacts-tab-description">Contacts outside of the sensor community network — partner agencies, vendors, regional coordinators, and other key people worth keeping on file.</div>`
-        : '';
-
     const emptyMessages = {
         active: 'No contacts found.',
         inactive: 'No contacts in inactive communities.',
-        noncomm: 'No non-community contacts yet.',
     };
 
-    const isNonCommTab = contactsListTab === 'noncomm' && !isSearching;
-
-    container.innerHTML = tabDesc + (sortedCommunities.map(commName => `
+    container.innerHTML = (sortedCommunities.map(commName => `
         <div class="contacts-group">
-            <div class="contacts-group-header">${isNonCommTab && setupMode ? `<span class="editable-group-name" onclick="renameContactGroup('${escapeHtml(commName)}')" title="Click to rename">${commName} <span class="group-edit-icon">&#9998;</span></span>` : commName}</div>
+            <div class="contacts-group-header">${commName}</div>
             <div class="table-container">
                 <table class="contacts-table"><thead><tr>
                     <th class="col-name">Name</th><th class="col-role">Role</th><th class="col-org">Organization</th><th class="col-email">Email</th><th class="col-phone">Phone</th><th class="col-status">Status</th><th class="col-actions"></th>
@@ -2421,21 +2408,6 @@ function renderContacts() {
             </div>
         </div>
     `).join('') || `<div class="empty-state">${isSearching ? 'No contacts found.' : (emptyMessages[contactsListTab] || 'No contacts found.')}</div>`);
-}
-
-function renameContactGroup(oldName) {
-    const newName = prompt('Rename group:', oldName);
-    if (!newName || newName.trim() === oldName) return;
-    const trimmed = newName.trim();
-    // Update org field for all contacts in this group
-    contacts.forEach(c => {
-        if (isNonCommunityContact(c) && (c.org || 'Unassigned') === oldName) {
-            c.org = trimmed === 'Unassigned' ? '' : trimmed;
-            persistContact(c);
-        }
-    });
-    renderContacts();
-    showSuccessToast(`Group renamed to "${trimmed}"`);
 }
 
 function openAddContactModal() {
@@ -5614,6 +5586,45 @@ function reactivateCommunity(communityId) {
 
 function isCommunityDeactivated(communityId) {
     return deactivatedCommunities.includes(communityId);
+}
+
+function confirmDeleteCommunity(communityId) {
+    const community = COMMUNITIES.find(c => c.id === communityId);
+    const communityName = community ? community.name : communityId;
+    const commContacts = contacts.filter(c => c.community === communityId);
+    const commSensors = sensors.filter(s => s.community === communityId);
+    const commNotes = notes.filter(n => n.taggedCommunities && n.taggedCommunities.includes(communityId));
+
+    let warning = `Are you sure you want to permanently delete "${communityName}"?`;
+    if (commContacts.length > 0) warning += `\n\n${commContacts.length} contact${commContacts.length > 1 ? 's' : ''} will be unassigned.`;
+    if (commSensors.length > 0) warning += `\n${commSensors.length} sensor${commSensors.length > 1 ? 's' : ''} will be unassigned.`;
+    if (commNotes.length > 0) warning += `\n${commNotes.length} note${commNotes.length > 1 ? 's' : ''} are tagged to this community.`;
+    warning += '\n\nThis cannot be undone.';
+
+    showConfirm('Delete Community', warning, async () => {
+        try {
+            // Unassign contacts
+            commContacts.forEach(c => { c.community = ''; persistContact(c); });
+            // Unassign sensors
+            commSensors.forEach(s => { s.community = ''; persistSensor(s); });
+            // Remove from COMMUNITIES array
+            const idx = COMMUNITIES.findIndex(c => c.id === communityId);
+            if (idx >= 0) COMMUNITIES.splice(idx, 1);
+            // Remove from deactivated list
+            deactivatedCommunities = deactivatedCommunities.filter(id => id !== communityId);
+            saveData('deactivatedCommunities', deactivatedCommunities);
+            // Delete from DB
+            await db.deleteCommunity(communityId);
+            // Close any open tabs for this community
+            openTabs = openTabs.filter(t => t.id !== getTabId('community', communityId));
+            renderOpenTabs();
+            showSuccessToast(`"${communityName}" deleted`);
+            showView('communities');
+        } catch (err) {
+            console.error('Delete community error:', err);
+            showAlert('Error', 'Failed to delete community: ' + err.message);
+        }
+    }, { danger: true });
 }
 
 // ===== ADD CUSTOM TAG IN NEW COMMUNITY MODAL =====
