@@ -579,14 +579,16 @@ async function doLogin() {
     if (error) throw error;
 
     document.getElementById('login-section').style.display = 'none';
-    document.getElementById('upload-section').style.display = '';
 
     // Load existing sensors
     const { data: sensors, error: sErr } = await supa.from('sensors').select('*').order('id');
     if (sErr) throw sErr;
     existingSensors = sensors || [];
 
-    showToast(`Signed in. ${existingSensors.length} sensors loaded.`, 'success');
+    // Auto-load embedded SF data
+    importRows = SF_SENSOR_DATA.map((r, i) => ({ ...r, _rowNum: i + 1 }));
+    showToast(`Signed in. ${existingSensors.length} sensors loaded, ${importRows.length} Salesforce records ready.`, 'success');
+    startReview();
   } catch (err) {
     document.getElementById('login-error').textContent = err.message;
   }
@@ -795,8 +797,9 @@ function showSensor(index) {
         No matching sensor found for <strong>${escHtml(row.sensorId)}</strong> in the tracker.
       </div>
       <div class="sf-data">
-        <h3>Import Data (Row ${row._rowNum})</h3>
-        <div class="sf-row"><span class="sf-label">Sensor ID:</span> <span class="sf-value">${escHtml(row.sensorId)}</span></div>
+        <h3>Salesforce Data (${row.sfName || 'Row ' + row._rowNum})</h3>
+        <div class="sf-row"><span class="sf-label">SF Name:</span> <span class="sf-value">${escHtml(row.sfName || row.sensorId)}</span></div>
+        <div class="sf-row"><span class="sf-label">Mapped Sensor ID:</span> <span class="sf-value" style="font-family:'JetBrains Mono',monospace">${escHtml(row.sensorId)}</span></div>
         <div class="sf-row"><span class="sf-label">SOA Tag ID:</span> <span class="sf-value">${row.soaTagId || '<em class="empty">empty</em>'}</span></div>
         <div class="sf-row"><span class="sf-label">Purchase Date:</span> <span class="sf-value">${row.datePurchased || '<em class="empty">empty</em>'}</span></div>
       </div>
@@ -853,8 +856,9 @@ function showSensor(index) {
     </div>
 
     <div class="sf-data">
-      <h3>Import Data (Row ${row._rowNum})</h3>
-      <div class="sf-row"><span class="sf-label">Sensor ID:</span> <span class="sf-value">${escHtml(row.sensorId)}</span></div>
+      <h3>Salesforce Data (${row.sfName || 'Row ' + row._rowNum})</h3>
+      <div class="sf-row"><span class="sf-label">SF Name:</span> <span class="sf-value">${escHtml(row.sfName || row.sensorId)}</span></div>
+      <div class="sf-row"><span class="sf-label">Mapped Sensor ID:</span> <span class="sf-value" style="font-family:'JetBrains Mono',monospace">${escHtml(row.sensorId)}</span></div>
       <div class="sf-row"><span class="sf-label">SOA Tag ID:</span> <span class="sf-value">${row.soaTagId || '<em class="empty">empty</em>'}</span></div>
       <div class="sf-row"><span class="sf-label">Purchase Date:</span> <span class="sf-value">${row.datePurchased || '<em class="empty">empty</em>'}</span></div>
     </div>
@@ -1060,6 +1064,81 @@ function showToast(msg, type = 'success') {
   toast.className = `toast ${type} show`;
   setTimeout(() => { toast.className = 'toast'; }, 3000);
 }
+
+// ===== EMBEDDED SALESFORCE DATA =====
+const SF_SENSOR_DATA = [
+  {"sensorId":"MOD-00442","sfName":"QuantAQ_00442","soaTagId":"10223615","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00443","sfName":"QuantAQ_00443","soaTagId":"10223616","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00444","sfName":"QuantAQ_00444","soaTagId":"10223617","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00445","sfName":"QuantAQ_00445","soaTagId":"10223618","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00446","sfName":"QuantAQ_00446","soaTagId":"10223619","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00447","sfName":"QuantAQ_00447","soaTagId":"10223620","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00448","sfName":"QuantAQ_00448","soaTagId":"10223621","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00449","sfName":"QuantAQ_00449","soaTagId":"10223622","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00450","sfName":"QuantAQ_00450","soaTagId":"10223623","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00451","sfName":"QuantAQ_00451","soaTagId":"10223624","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00452","sfName":"QuantAQ_00452","soaTagId":"10223625","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00453","sfName":"QuantAQ_00453","soaTagId":"10223626","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00454","sfName":"QuantAQ_00454","soaTagId":"10223627","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00455","sfName":"QuantAQ_00455","soaTagId":"10223628","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00456","sfName":"QuantAQ_00456","soaTagId":"10228740","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00457","sfName":"QuantAQ_00457","soaTagId":"10228741","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00458","sfName":"QuantAQ_00458","soaTagId":"10228742","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00459","sfName":"QuantAQ_00459","soaTagId":"10228743","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00460","sfName":"QuantAQ_00460","soaTagId":"10228744","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00461","sfName":"QuantAQ_00461","soaTagId":"10228745","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00462","sfName":"QuantAQ_00462","soaTagId":"10228746","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00463","sfName":"QuantAQ_00463","soaTagId":"10228747","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00464","sfName":"QuantAQ_00464","soaTagId":"10228748","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00465","sfName":"QuantAQ_00465","soaTagId":"10228749","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00466","sfName":"QuantAQ_00466","soaTagId":"10228750","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00467","sfName":"QuantAQ_00467","soaTagId":"10228751","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00468","sfName":"QuantAQ_00468","soaTagId":"10228752","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00469","sfName":"QuantAQ_00469","soaTagId":"","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00470","sfName":"QuantAQ_00470","soaTagId":"","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00471","sfName":"QuantAQ_00471","soaTagId":"","datePurchased":"2023-08-01"},
+  {"sensorId":"MOD-00649","sfName":"QuantAQ_00649","soaTagId":"10230740","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00650","sfName":"QuantAQ_00650","soaTagId":"10230741","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00651","sfName":"QuantAQ_00651","soaTagId":"10230742","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00652","sfName":"QuantAQ_00652","soaTagId":"10230743","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00653","sfName":"QuantAQ_00653","soaTagId":"10230744","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00654","sfName":"QuantAQ_00654","soaTagId":"10230745","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00655","sfName":"QuantAQ_00655","soaTagId":"10230746","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00656","sfName":"QuantAQ_00656","soaTagId":"10230747","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00657","sfName":"QuantAQ_00657","soaTagId":"10230748","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00658","sfName":"QuantAQ_00658","soaTagId":"10230749","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00659","sfName":"QuantAQ_00659","soaTagId":"10230750","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00660","sfName":"QuantAQ_00660","soaTagId":"10230751","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00662","sfName":"QuantAQ_00662","soaTagId":"10230752","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00663","sfName":"QuantAQ_00663","soaTagId":"10230753","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00664","sfName":"QuantAQ_00664","soaTagId":"10230753","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00665","sfName":"QuantAQ_00665","soaTagId":"10230755","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00666","sfName":"QuantAQ_00666","soaTagId":"10230756","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00667","sfName":"QuantAQ_00667","soaTagId":"10230757","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00668","sfName":"QuantAQ_00668","soaTagId":"10230758","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00669","sfName":"QuantAQ_00669","soaTagId":"10230759","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00670","sfName":"QuantAQ_00670","soaTagId":"10230760","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00671","sfName":"QuantAQ_00671","soaTagId":"10230761","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00672","sfName":"QuantAQ_00672","soaTagId":"10230762","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00673","sfName":"QuantAQ_00673","soaTagId":"10230763","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-00674","sfName":"QuantAQ_00674","soaTagId":"10230764","datePurchased":"2024-03-01"},
+  {"sensorId":"MOD-X-PM-01656","sfName":"QuantAQ_X_PM_01656","soaTagId":"10230796","datePurchased":"2025-06-27"},
+  {"sensorId":"MOD-X-PM-01657","sfName":"QuantAQ_X_PM_01657","soaTagId":"10230797","datePurchased":"2025-06-27"},
+  {"sensorId":"MOD-X-PM-01658","sfName":"QuantAQ_X_PM_01658","soaTagId":"10230798","datePurchased":"2025-06-27"},
+  {"sensorId":"MOD-X-PM-01754","sfName":"QuantAQ_X_PM_01754","soaTagId":"10228630","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01755","sfName":"QuantAQ_X_PM_01755","soaTagId":"10228631","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01756","sfName":"QuantAQ_X_PM_01756","soaTagId":"10228632","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01757","sfName":"QuantAQ_X_PM_01757","soaTagId":"10228633","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01758","sfName":"QuantAQ_X_PM_01758","soaTagId":"10228634","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01759","sfName":"QuantAQ_X_PM_01759","soaTagId":"10228635","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01760","sfName":"QuantAQ_X_PM_01760","soaTagId":"10228636","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01761","sfName":"QuantAQ_X_PM_01761","soaTagId":"10228637","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01762","sfName":"QuantAQ_X_PM_01762","soaTagId":"10228638","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01763","sfName":"QuantAQ_X_PM_01763","soaTagId":"10228639","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01764","sfName":"QuantAQ_X_PM_01764","soaTagId":"10228646","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01765","sfName":"QuantAQ_X_PM_01765","soaTagId":"10228647","datePurchased":"2025-10-31"},
+  {"sensorId":"MOD-X-PM-01766","sfName":"QuantAQ_X_PM_01766","soaTagId":"10228648","datePurchased":"2025-10-31"}
+];
 </script>
 </body>
 </html>
