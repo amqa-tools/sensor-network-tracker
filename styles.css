@@ -421,6 +421,19 @@ body {
     margin-left: 6px;
 }
 
+.contact-primary-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 7px;
+    border-radius: 100px;
+    background: rgba(184, 155, 56, 0.15);
+    color: var(--gold-600, #92710a);
+    margin-left: 6px;
+}
+
 /* ===== SENSOR TYPE PICKER ===== */
 .type-change-options {
     display: flex;

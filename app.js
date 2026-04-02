@@ -159,6 +159,7 @@ async function loadAllData() {
         org: c.org || '',
         active: c.active !== false,
         emailList: c.email_list === true,
+        primaryContact: c.primary_contact === true,
     }));
 
     // Notes — already mapped by db.getNotes()
@@ -1433,6 +1434,8 @@ function inlineSaveContact(el) {
         c.active = el.value === 'true';
     } else if (field === 'emailList') {
         c.emailList = el.value === 'true';
+    } else if (field === 'primaryContact') {
+        c.primaryContact = el.value === 'true';
     } else {
         c[field] = newVal;
     }
@@ -2078,6 +2081,8 @@ function showCommunityView(communityId) {
 
     // Contacts
     const commContacts = contacts.filter(c => c.community === communityId).sort((a, b) => {
+        const aP = a.primaryContact ? 0 : 1, bP = b.primaryContact ? 0 : 1;
+        if (aP !== bP) return aP - bP;
         const aI = a.active === false ? 1 : 0, bI = b.active === false ? 1 : 0;
         if (aI !== bI) return aI - bI;
         return a.name.localeCompare(b.name);
@@ -2297,9 +2302,10 @@ async function deleteFile(communityId, fileId, storagePath) {
 // ===== CONTACTS =====
 
 function renderContactRow(c) {
+    const primaryBadge = c.primaryContact ? '<span class="contact-primary-badge">Primary</span>' : '';
     if (setupMode) {
         return `<tr>
-            <td class="col-name"><input class="inline-edit-input" data-contact="${c.id}" data-field="name" value="${escapeHtml(c.name)}" onblur="inlineSaveContact(this); renderContacts()" onkeydown="if(event.key==='Enter')this.blur()"></td>
+            <td class="col-name"><input class="inline-edit-input" data-contact="${c.id}" data-field="name" value="${escapeHtml(c.name)}" onblur="inlineSaveContact(this); renderContacts()" onkeydown="if(event.key==='Enter')this.blur()">${primaryBadge}</td>
             <td class="col-role"><input class="inline-edit-input" data-contact="${c.id}" data-field="role" value="${escapeHtml(c.role || '')}" placeholder="Role" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
             <td class="col-org"><input class="inline-edit-input" data-contact="${c.id}" data-field="org" value="${escapeHtml(c.org || '')}" placeholder="Organization" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
             <td class="col-email"><input class="inline-edit-input" type="email" data-contact="${c.id}" data-field="email" value="${escapeHtml(c.email || '')}" placeholder="Email" onblur="inlineSaveContact(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
@@ -2312,7 +2318,7 @@ function renderContactRow(c) {
         </tr>`;
     }
     return `<tr class="${c.active === false ? 'contact-row-inactive' : ''}" onclick="showContactDetail('${c.id}')" style="cursor:pointer">
-        <td class="col-name"><span class="clickable">${c.name}</span></td>
+        <td class="col-name"><span class="clickable">${c.name}</span>${primaryBadge}</td>
         <td class="col-role" title="${escapeHtml(c.role || '')}">${c.role || '—'}</td>
         <td class="col-org" title="${escapeHtml(c.org || '')}">${c.org || '—'}</td>
         <td class="col-email"><span class="email-cell">${c.email ? `<a href="#" class="clickable" onclick="event.stopPropagation(); openQuickEmail('${c.id}')">${c.email}</a>` : '<span class="no-email">—</span>'}<label class="email-list-toggle" onclick="event.stopPropagation()" title="${c.emailList ? 'On network-wide email list — click to remove' : 'Not on email list — click to add'}"><input type="checkbox" class="email-list-checkbox" ${c.emailList ? 'checked' : ''} onchange="toggleContactEmailList('${c.id}')"><span class="email-list-label">Email List</span></label></span></td>
@@ -2376,9 +2382,11 @@ function renderContacts() {
     // Sort community names alphabetically
     const sortedCommunities = Object.keys(groups).sort();
 
-    // Sort: active first alphabetically, then inactive alphabetically
+    // Sort: primary first, then active alphabetically, then inactive alphabetically
     sortedCommunities.forEach(comm => {
         groups[comm].sort((a, b) => {
+            const aP = a.primaryContact ? 0 : 1, bP = b.primaryContact ? 0 : 1;
+            if (aP !== bP) return aP - bP;
             const aInactive = a.active === false ? 1 : 0;
             const bInactive = b.active === false ? 1 : 0;
             if (aInactive !== bInactive) return aInactive - bInactive;
@@ -2436,6 +2444,7 @@ function openAddContactModal() {
     document.getElementById('contact-edit-id').value = '';
     document.getElementById('contact-active-yes').checked = true;
     document.getElementById('contact-email-list').checked = false;
+    document.getElementById('contact-primary-contact').checked = false;
     document.getElementById('delete-contact-btn').style.display = 'none';
     populateGroupedCommunitySelect('contact-community-input');
     openModal('modal-add-contact');
@@ -2468,6 +2477,7 @@ async function saveContact(e) {
         org: document.getElementById('contact-org-input').value.trim(),
         active: isActive,
         emailList: document.getElementById('contact-email-list').checked,
+        primaryContact: document.getElementById('contact-primary-contact').checked,
     };
 
     let statusChanged = null;
@@ -2611,7 +2621,7 @@ function showContactView(contactId) {
     if (!c) return;
     currentContact = contactId;
 
-    document.getElementById('contact-detail-name').innerHTML = '<span class="editable-field" onclick="inlineEditContact(\'' + c.id + '\', \'name\')">' + escapeHtml(c.name) + '</span>' + (c.active === false ? '<span class="contact-inactive-badge" style="margin-left:10px;font-size:12px">Inactive</span>' : '');
+    document.getElementById('contact-detail-name').innerHTML = '<span class="editable-field" onclick="inlineEditContact(\'' + c.id + '\', \'name\')">' + escapeHtml(c.name) + '</span>' + (c.primaryContact ? '<span class="contact-primary-badge" style="margin-left:10px;font-size:12px">Primary</span>' : '') + (c.active === false ? '<span class="contact-inactive-badge" style="margin-left:10px;font-size:12px">Inactive</span>' : '');
     if (setupMode) {
         document.getElementById('contact-info-card').innerHTML = `
             <div class="info-item"><label>Name</label>
@@ -2640,6 +2650,12 @@ function showContactView(contactId) {
                     <option value="false" ${c.active === false ? 'selected' : ''}>Inactive</option>
                 </select>
             </div>
+            <div class="info-item"><label>Primary Contact</label>
+                <select class="inline-edit-select" data-contact="${c.id}" data-field="primaryContact" onchange="inlineSaveContact(this); showContactView('${c.id}')">
+                    <option value="true" ${c.primaryContact ? 'selected' : ''}>Yes</option>
+                    <option value="false" ${!c.primaryContact ? 'selected' : ''}>No</option>
+                </select>
+            </div>
             <div class="info-item"><label>Email List</label>
                 <select class="inline-edit-select" data-contact="${c.id}" data-field="emailList" onchange="inlineSaveContact(this)">
                     <option value="true" ${c.emailList ? 'selected' : ''}>Included</option>
@@ -2658,6 +2674,7 @@ function showContactView(contactId) {
             <div class="info-item"><label>Email</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'email')">${c.email || '<span class="field-placeholder">Email</span>'}</p></div>
             <div class="info-item"><label>Phone</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'phone')">${c.phone || '<span class="field-placeholder">Phone</span>'}</p></div>
             <div class="info-item"><label>Status</label><p>${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--navy-500);font-weight:600">Active</span>'}</p></div>
+            <div class="info-item"><label>Primary Contact</label><p class="editable-field" onclick="togglePrimaryContact('${c.id}')">${c.primaryContact ? '<span class="contact-primary-badge">Primary</span>' : '<span class="field-placeholder">No</span>'}</p></div>
             <div class="info-item"><label>Email List</label><p class="editable-field" onclick="toggleContactEmailList('${c.id}')">${c.emailList ? '<span style="color:var(--aurora-green);font-weight:600">Included</span>' : '<span class="field-placeholder">Not included</span>'}</p></div>
         `;
     }
@@ -2812,6 +2829,17 @@ function toggleContactEmailList(contactId) {
     persistContact(c);
     showSuccessToast(c.emailList ? 'Added to email list' : 'Removed from email list');
     // Re-render current view if on contact detail, otherwise leave checkbox as-is (already toggled by click)
+    if (currentContact === contactId && document.getElementById('view-contact-detail')?.classList.contains('active')) {
+        showContactView(contactId);
+    }
+}
+
+function togglePrimaryContact(contactId) {
+    const c = contacts.find(x => x.id === contactId);
+    if (!c) return;
+    c.primaryContact = !c.primaryContact;
+    persistContact(c);
+    showSuccessToast(c.primaryContact ? 'Marked as primary contact' : 'Removed primary contact tag');
     if (currentContact === contactId && document.getElementById('view-contact-detail')?.classList.contains('active')) {
         showContactView(contactId);
     }

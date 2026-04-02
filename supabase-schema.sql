@@ -102,11 +102,13 @@ CREATE TABLE contacts (
     org text DEFAULT '',
     active boolean DEFAULT true,
     email_list boolean DEFAULT false,
+    primary_contact boolean DEFAULT false,
     created_at timestamptz DEFAULT now()
 );
 
--- Migration: If contacts table already exists, add email_list column
+-- Migration: If contacts table already exists, add email_list and primary_contact columns
 -- ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email_list boolean DEFAULT false;
+-- ALTER TABLE contacts ADD COLUMN IF NOT EXISTS primary_contact boolean DEFAULT false;
 
 -- ===== NOTES =====
 CREATE TABLE notes (

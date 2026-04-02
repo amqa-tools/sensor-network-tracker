@@ -154,6 +154,7 @@ const db = {
             org: contact.org || '',
             active: contact.active !== false,
             email_list: contact.emailList === true,
+            primary_contact: contact.primaryContact === true,
         };
         // Only include id if it's a valid UUID (existing record)
         const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -161,9 +162,9 @@ const db = {
             row.id = contact.id;
         }
         let { data, error } = await supa.from('contacts').upsert(row).select();
-        // If email_list column doesn't exist yet, retry without it
-        if (error && error.message && error.message.includes('email_list')) {
-            const { email_list, ...rowWithout } = row;
+        // If email_list or primary_contact columns don't exist yet, retry without them
+        if (error && error.message && (error.message.includes('email_list') || error.message.includes('primary_contact'))) {
+            const { email_list, primary_contact, ...rowWithout } = row;
             ({ data, error } = await supa.from('contacts').upsert(rowWithout).select());
         }
         if (error) throw error;
