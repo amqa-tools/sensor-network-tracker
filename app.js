@@ -1768,19 +1768,16 @@ function confirmDeleteSensor(sensorId) {
     if (sensorNotes.length > 0) warning += `\n\n${sensorNotes.length} note${sensorNotes.length > 1 ? 's' : ''} are tagged to this sensor.`;
     warning += '\n\nThis cannot be undone.';
 
-    showConfirm('Delete Sensor', warning, async () => {
-        try {
-            const idx = sensors.findIndex(x => x.id === sensorId);
-            if (idx >= 0) sensors.splice(idx, 1);
-            await db.deleteSensor(sensorId);
-            openTabs = openTabs.filter(t => t.id !== getTabId('sensor', sensorId));
-            renderOpenTabs();
-            showSuccessToast(`Sensor ${s.id} deleted`);
-            showView('sensors');
-        } catch (err) {
-            console.error('Delete sensor error:', err);
-            showAlert('Error', 'Failed to delete sensor: ' + err.message);
-        }
+    showConfirm('Delete Sensor', warning, () => {
+        const idx = sensors.findIndex(x => x.id === sensorId);
+        if (idx >= 0) sensors.splice(idx, 1);
+        openTabs = openTabs.filter(t => t.id !== getTabId('sensor', sensorId));
+        renderOpenTabs();
+        showView('sensors');
+        renderSensors();
+        buildSensorSidebar();
+        showSuccessToast(`Sensor ${s.id} deleted`);
+        db.deleteSensor(sensorId).catch(err => console.error('Delete sensor DB error:', err));
     }, { danger: true });
 }
 
