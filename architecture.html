@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How the Sensor Network Tracker Works</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #f8f9fb;
+    color: #1a2332;
+    line-height: 1.7;
+    padding: 40px 20px;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-size: 2rem;
+    color: #1a2332;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 1.05rem;
+    color: #64748b;
+    margin-bottom: 40px;
+  }
+
+  h2 {
+    font-size: 1.35rem;
+    color: #1a2332;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #C9A84C;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    color: #243044;
+    margin-top: 28px;
+    margin-bottom: 10px;
+  }
+
+  p {
+    margin-bottom: 14px;
+    color: #334155;
+  }
+
+  .app-url {
+    display: inline-block;
+    background: #1a2332;
+    color: #C9A84C;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    margin: 8px 0 16px;
+    word-break: break-all;
+  }
+
+  /* Three pieces cards */
+  .pieces-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    margin: 24px 0;
+  }
+  .piece-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .piece-card.app { border-left: 5px solid #2563eb; }
+  .piece-card.database { border-left: 5px solid #16a34a; }
+  .piece-card.github { border-left: 5px solid #1a2332; }
+  .piece-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+  }
+  .piece-card h3 {
+    margin-top: 0;
+    font-size: 1.15rem;
+  }
+  .piece-card .analogy {
+    background: #faf5e4;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    color: #92710a;
+    margin-top: 12px;
+    font-style: italic;
+  }
+
+  /* Flow diagram */
+  .flow-diagram {
+    background: white;
+    border-radius: 12px;
+    padding: 28px;
+    border: 1px solid #e2e8f0;
+    margin: 24px 0;
+  }
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 4px;
+  }
+  .flow-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #C9A84C;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .flow-text {
+    font-size: 0.95rem;
+    color: #334155;
+    padding-top: 4px;
+  }
+  .flow-arrow {
+    width: 32px;
+    display: flex;
+    justify-content: center;
+    color: #cbd5e1;
+    font-size: 18px;
+    margin: -2px 0;
+  }
+
+  /* Info boxes */
+  .info-box {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+  .info-box.green {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+  }
+  .info-box.gold {
+    background: #faf5e4;
+    border-color: #e3d192;
+  }
+  .info-box.red {
+    background: #fef2f2;
+    border-color: #fecaca;
+  }
+  .info-box p { margin-bottom: 6px; color: inherit; }
+  .info-box p:last-child { margin-bottom: 0; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.92rem;
+  }
+  th {
+    background: #1a2332;
+    color: white;
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 600;
+  }
+  th:first-child { border-radius: 8px 0 0 0; }
+  th:last-child { border-radius: 0 8px 0 0; }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .cost-free { color: #16a34a; font-weight: 700; }
+  .cost-paid { color: #C9A84C; font-weight: 600; }
+
+  /* Bullet lists */
+  ul {
+    margin: 10px 0 14px 20px;
+    color: #334155;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+
+  /* Glossary */
+  .glossary-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .glossary-item:last-child { border: none; }
+  .glossary-term {
+    font-weight: 700;
+    color: #1a2332;
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+  .glossary-def { color: #475569; }
+
+  /* Key takeaway */
+  .takeaway {
+    background: #1a2332;
+    color: white;
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin: 24px 0;
+  }
+  .takeaway h3 {
+    color: #C9A84C;
+    margin-top: 0;
+    font-size: 1.1rem;
+  }
+  .takeaway p {
+    color: #cbd5e1;
+    margin-bottom: 8px;
+  }
+  .takeaway strong { color: white; }
+
+  .print-btn {
+    display: inline-block;
+    background: #1a2332;
+    color: #C9A84C;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    margin-top: 32px;
+  }
+  .print-btn:hover { background: #243044; }
+
+  @media print {
+    body { padding: 0; background: white; }
+    .print-btn { display: none; }
+    h2 { break-after: avoid; }
+    .piece-card, .flow-diagram, .takeaway { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>How the Sensor Network Tracker Works</h1>
+<p class="subtitle">A plain-language guide for anyone &mdash; no technical background needed</p>
+
+<!-- ===== WHAT IS THIS ===== -->
+<h2>What Is This App?</h2>
+<p>The Sensor Network Tracker is a website that helps ADEC manage air quality sensors across Alaska. It tracks which sensors are where, who the contacts are at each community, and whether the sensors are working properly.</p>
+<p>You access it by visiting this link in any web browser:</p>
+<div class="app-url">https://amqa-tools.github.io/platform/</div>
+
+<!-- ===== THREE PIECES ===== -->
+<h2>The Three Pieces</h2>
+<p>The app is made up of three separate services that work together:</p>
+
+<div class="pieces-grid">
+  <div class="piece-card app">
+    <div class="piece-icon">&#127760;</div>
+    <h3>The App Itself</h3>
+    <p>A collection of files that tell your web browser what to show on screen and how to behave when you click buttons. When you visit the app's web address, your browser downloads these files and runs them &mdash; like how a PDF opens in your browser. No special software to install.</p>
+    <p>These files are hosted for free on <strong>GitHub Pages</strong>, which turns them into a website anyone with the link can visit.</p>
+    <div class="analogy">Think of it like: a set of instructions your browser follows to build the app on your screen.</div>
+  </div>
+
+  <div class="piece-card database">
+    <div class="piece-icon">&#128451;</div>
+    <h3>The Database (Supabase)</h3>
+    <p>All the actual information &mdash; every sensor, every contact, every note, every alert &mdash; is stored in an online database called <strong>Supabase</strong>.</p>
+    <p>When you add a new contact or write a note, the app saves it to Supabase. When you open the app next time, it pulls everything back out to show you.</p>
+    <p><strong>What's stored there:</strong> sensor records, contacts, communities, notes, communication logs, alerts, uploaded files, and login accounts.</p>
+    <div class="analogy">Think of it like: a secure filing cabinet in the cloud that only the app can open.</div>
+  </div>
+
+  <div class="piece-card github">
+    <div class="piece-icon">&#128190;</div>
+    <h3>GitHub &mdash; Code Storage</h3>
+    <p>GitHub stores the app's files with a complete history of every change ever made. It records who changed what, when, and why &mdash; so nothing is ever truly lost.</p>
+    <p>The account is owned by the <strong>amqa-tools organization</strong>, not any individual person. If someone leaves, the organization still owns everything.</p>
+    <div class="analogy">Think of it like: a shared drive that keeps every version of every document forever.</div>
+  </div>
+</div>
+
+<div class="takeaway">
+  <h3>The Key Thing to Understand</h3>
+  <p><strong>GitHub</strong> stores the app. <strong>Supabase</strong> stores the data. <strong>Your browser</strong> brings them together.</p>
+</div>
+
+<!-- ===== HOW THEY CONNECT ===== -->
+<h2>How They Work Together</h2>
+<p>Here's what happens when you use the app:</p>
+
+<div class="flow-diagram">
+  <div class="flow-step"><div class="flow-dot">1</div><div class="flow-text">You open the website in your browser</div></div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step"><div class="flow-dot">2</div><div class="flow-text">Your browser loads the app files from GitHub Pages</div></div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step"><div class="flow-dot">3</div><div class="flow-text">The app connects to Supabase and pulls in all your data</div></div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step"><div class="flow-dot">4</div><div class="flow-text">You see your sensors, contacts, communities, and alerts</div></div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step"><div class="flow-dot">5</div><div class="flow-text">You make a change (add a contact, write a note, etc.)</div></div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step"><div class="flow-dot">6</div><div class="flow-text">The app sends that change to Supabase, which saves it</div></div>
+  <div class="flow-arrow">&darr;</div>
+  <div class="flow-step"><div class="flow-dot">7</div><div class="flow-text">Next time <em>anyone</em> opens the app, they see the updated data</div></div>
+</div>
+
+<!-- ===== QUANTAQ ===== -->
+<h2>QuantAQ Sensor Health Checks</h2>
+<p>The app can check whether your air quality sensors are working properly by talking to QuantAQ (the sensor manufacturer's system).</p>
+<p>When you click "Run QuantAQ Check," the app asks QuantAQ: <em>"How are all our sensors doing?"</em> QuantAQ sends back status info, and the app looks for problems (sensor offline, readings look wrong, etc.).</p>
+
+<div class="info-box gold">
+  <p><strong>Smart filtering built in:</strong> Not every flag means something is actually wrong. For example, after a power outage, gas sensors need hours to warm up and will <em>look</em> broken even though they're fine. The app now waits a grace period before creating an alert:</p>
+  <ul style="margin-bottom:0">
+    <li><strong>Gas sensor flags:</strong> 6-hour waiting period</li>
+    <li><strong>Lost connection:</strong> 2-hour waiting period</li>
+    <li><strong>PM sensor or SD card issues:</strong> Alert created immediately (these are real hardware problems)</li>
+  </ul>
+  <p style="margin-top:10px">If the issue goes away on its own during the waiting period, no alert is ever created. This prevents a flood of false alarms from routine power cycles and sensor warmups.</p>
+</div>
+
+<!-- ===== LONGEVITY ===== -->
+<h2>What Happens If Someone Leaves ADEC?</h2>
+
+<div class="info-box green">
+  <p><strong>The app keeps running.</strong> Nobody needs to do anything for it to continue working day-to-day. It's not running on anyone's personal computer &mdash; it's hosted on the internet.</p>
+</div>
+
+<p><strong>Specifically:</strong></p>
+<ul>
+  <li>The website stays live at the same URL &mdash; no action needed</li>
+  <li>All data stays in Supabase &mdash; no action needed</li>
+  <li>The code stays on GitHub, owned by the organization &mdash; no action needed</li>
+  <li>QuantAQ checks keep working as long as the QuantAQ subscription is active</li>
+</ul>
+
+<p><strong>What someone would eventually need to do:</strong></p>
+<ul>
+  <li>If you want <em>new features</em> or need to <em>fix something</em>, you'd need someone who can edit the code (a web developer, or someone using an AI coding tool)</li>
+  <li>Keep the Supabase account active (free right now; $25/month if you want automatic backups)</li>
+  <li>Keep the QuantAQ subscription active for sensor health checks</li>
+</ul>
+
+<!-- ===== SECURITY ===== -->
+<h2>Is the Data Secure?</h2>
+
+<table>
+  <tr><th>Protection</th><th>How It Works</th></tr>
+  <tr><td><strong>Login required</strong></td><td>You need an email and password to access data</td></tr>
+  <tr><td><strong>Encrypted in transit</strong></td><td>Data is scrambled while traveling between your browser and the database (same security your bank uses)</td></tr>
+  <tr><td><strong>Access controls</strong></td><td>The database has rules about who can read and write data</td></tr>
+  <tr><td><strong>Nothing on your computer</strong></td><td>No data is stored on your laptop. If your computer is lost or broken, no data is lost &mdash; it's all in the cloud</td></tr>
+</table>
+
+<!-- ===== COST ===== -->
+<h2>What Does It Cost?</h2>
+
+<table>
+  <tr><th>Service</th><th>Cost</th><th>Notes</th></tr>
+  <tr><td>Website hosting (GitHub Pages)</td><td class="cost-free">Free</td><td>No limits, no expiration</td></tr>
+  <tr><td>Code storage (GitHub)</td><td class="cost-free">Free</td><td>Includes full version history</td></tr>
+  <tr><td>Database (Supabase free plan)</td><td class="cost-free">Free</td><td>Works for current usage</td></tr>
+  <tr><td>Automatic daily backups (Supabase Pro)</td><td class="cost-paid">$25/month</td><td>Optional &mdash; recommended for peace of mind</td></tr>
+  <tr><td>QuantAQ sensor checks</td><td class="cost-free">Included</td><td>Part of existing QuantAQ subscription</td></tr>
+  <tr><td><strong>Total</strong></td><td><strong>$0 &ndash; $25/month</strong></td><td></td></tr>
+</table>
+
+<!-- ===== BACKUPS ===== -->
+<h2>Backing Up Your Data</h2>
+
+<p><strong>The code</strong> is already backed up &mdash; GitHub keeps every version of every file ever saved.</p>
+
+<p><strong>The data</strong> (sensors, contacts, notes) has a few backup options:</p>
+
+<table>
+  <tr><th>Method</th><th>How</th><th>Cost</th></tr>
+  <tr><td>Export from the app</td><td>Use the "Export" button on the contacts or sensors page to download a spreadsheet</td><td>Free</td></tr>
+  <tr><td>Supabase dashboard export</td><td>Log into the Supabase website and export the full database</td><td>Free</td></tr>
+  <tr><td>Automatic daily backups</td><td>Supabase Pro plan backs up everything daily, with the ability to restore to any point in time</td><td>$25/month</td></tr>
+</table>
+
+<div class="info-box">
+  <p><strong>Recommendation:</strong> If losing this data would be a serious problem, the $25/month plan for automatic daily backups is worth it. Otherwise, periodic manual exports give you a safety net at no cost.</p>
+</div>
+
+<!-- ===== OWNERSHIP ===== -->
+<h2>Who Owns What</h2>
+
+<table>
+  <tr><th>Resource</th><th>Owner</th><th>Location</th></tr>
+  <tr><td>The live app</td><td>amqa-tools (GitHub org)</td><td>The app URL linked above</td></tr>
+  <tr><td>The code</td><td>amqa-tools (GitHub org)</td><td>github.com/amqa-tools/platform</td></tr>
+  <tr><td>The database</td><td>Whichever ADEC email is on the Supabase account</td><td>supabase.com/dashboard</td></tr>
+  <tr><td>QuantAQ access</td><td>ADEC's QuantAQ account</td><td>quant-aq.com</td></tr>
+</table>
+
+<div class="info-box red">
+  <p><strong>Important:</strong> Make sure the Supabase and GitHub accounts are registered under an ADEC organizational email (not a personal email) so access transfers naturally when staff change.</p>
+</div>
+
+<!-- ===== GLOSSARY ===== -->
+<h2>Quick Glossary</h2>
+
+<div class="glossary-item"><span class="glossary-term">GitHub</span><span class="glossary-def">A website that stores code files and keeps version history (like Google Drive for code)</span></div>
+<div class="glossary-item"><span class="glossary-term">GitHub Pages</span><span class="glossary-def">A free feature of GitHub that turns your files into a website anyone can visit</span></div>
+<div class="glossary-item"><span class="glossary-term">Supabase</span><span class="glossary-def">An online database service (think: a secure cloud spreadsheet that only the app reads and writes to)</span></div>
+<div class="glossary-item"><span class="glossary-term">Repository (repo)</span><span class="glossary-def">A project folder on GitHub containing all the app's files</span></div>
+<div class="glossary-item"><span class="glossary-term">API</span><span class="glossary-def">A way for two systems to talk to each other over the internet (like how the app talks to Supabase and QuantAQ)</span></div>
+<div class="glossary-item"><span class="glossary-term">Edge Function</span><span class="glossary-def">A small program that runs on Supabase's servers, used as a secure go-between for QuantAQ checks so the API key isn't exposed</span></div>
+
+<button class="print-btn" onclick="window.print()">Print This Page</button>
+
+</div>
+</body>
+</html>
