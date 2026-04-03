@@ -725,7 +725,7 @@ body {
 #main-content {
     flex: 1;
     overflow-y: auto;
-    padding: 32px 36px;
+    padding: 32px 20px;
 }
 
 .view {
@@ -1646,6 +1646,7 @@ tr:last-child td {
     white-space: normal;
     word-break: break-word;
     vertical-align: top;
+    padding: 8px 6px;
 }
 
 .contacts-table .col-name       { width: 18%; }
