@@ -2477,9 +2477,17 @@ function renderContacts() {
 
     const isNonCommTab = contactsListTab === 'noncomm' && !isSearching;
 
-    container.innerHTML = tabDesc + (sortedCommunities.map(commName => `
+    container.innerHTML = tabDesc + (sortedCommunities.map(commName => {
+        const commId = groups[commName][0]?.community || '';
+        const commExists = commId && COMMUNITIES.find(cm => cm.id === commId);
+        const headerContent = isNonCommTab && setupMode
+            ? `<span class="editable-group-name" onclick="renameContactGroup('${escapeHtml(commName)}')" title="Click to rename">${commName} <span class="group-edit-icon">&#9998;</span></span>`
+            : commExists
+                ? `<a class="contacts-group-link" onclick="showCommunity('${commId}')">${commName}</a>`
+                : commName;
+        return `
         <div class="contacts-group">
-            <div class="contacts-group-header">${isNonCommTab && setupMode ? `<span class="editable-group-name" onclick="renameContactGroup('${escapeHtml(commName)}')" title="Click to rename">${commName} <span class="group-edit-icon">&#9998;</span></span>` : commName}</div>
+            <div class="contacts-group-header">${headerContent}</div>
             <div class="table-container">
                 <table class="contacts-table"><thead><tr>
                     <th class="col-name">Name</th><th class="col-role">Role</th><th class="col-org">Organization</th><th class="col-email">Email</th><th class="col-phone">Phone</th><th class="col-status">Status</th><th class="col-actions"></th>
@@ -2488,7 +2496,7 @@ function renderContacts() {
                 </tbody></table>
             </div>
         </div>
-    `).join('') || `<div class="empty-state">${isSearching ? 'No contacts found.' : (emptyMessages[contactsListTab] || 'No contacts found.')}</div>`);
+    `}).join('') || `<div class="empty-state">${isSearching ? 'No contacts found.' : (emptyMessages[contactsListTab] || 'No contacts found.')}</div>`);
 }
 
 function renameContactGroup(oldName) {

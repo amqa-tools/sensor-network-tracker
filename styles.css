@@ -1823,6 +1823,16 @@ tr:hover .contact-delete-btn {
     border-radius: 2px;
 }
 
+.contacts-group-link {
+    color: var(--slate-400);
+    text-decoration: none;
+    cursor: pointer;
+}
+.contacts-group-link:hover {
+    color: var(--navy-500);
+    text-decoration: underline;
+}
+
 
 .contact-info-card {
     background: var(--surface);
