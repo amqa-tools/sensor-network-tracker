@@ -1229,7 +1229,7 @@ const ALL_SENSOR_COLUMNS = [
     { key: 'community', label: 'Community', sortable: true, removable: false },
     { key: 'location', label: 'Location', sortable: true, removable: true },
     { key: 'dateInstalled', label: 'Install Date', sortable: true, removable: true },
-    { key: 'collocationDates', label: 'Most Recent Collocation', sortable: false, removable: true },
+    { key: 'collocationDates', label: 'Initial Collocation', sortable: false, removable: true },
     { key: 'soaTagId', label: 'SOA Tag ID', sortable: true, removable: true },
     { key: 'datePurchased', label: 'Purchase Date', sortable: true, removable: true },
 ];
@@ -1596,7 +1596,7 @@ function saveSensor(e) {
         const fieldLabels = {
             soaTagId: 'SOA Tag ID', type: 'Type', status: 'Status',
             community: 'Community', location: 'Location',
-            datePurchased: 'Purchase Date', collocationDates: 'Most Recent Collocation'
+            datePurchased: 'Purchase Date', collocationDates: 'Initial Collocation'
         };
 
         const changes = [];
@@ -1790,6 +1790,33 @@ function saveStatusChange(e) {
     renderSensors();
     if (currentSensor === sensorId) showSensorView(sensorId);
     if (currentCommunity) showCommunityView(currentCommunity);
+
+    // Prompt to update install date if "Online" was just added
+    if (!setupMode && newStatuses.includes('Online') && !oldStatuses.includes('Online')) {
+        const today = nowDatetime().split('T')[0];
+        promptInstallDateUpdate(sensorId, today, `${sensorId} status was changed to Online.`);
+    }
+}
+
+// ===== INSTALL DATE PROMPT =====
+function promptInstallDateUpdate(sensorId, suggestedDate, reason) {
+    const s = sensors.find(x => x.id === sensorId);
+    if (!s) return;
+    const currentDate = s.dateInstalled || 'not set';
+    showConfirm('Update Install Date?',
+        `${reason}<br><br><strong>${s.id}</strong> install date is currently: <strong>${currentDate}</strong><br><br>` +
+        `Update install date to <strong>${suggestedDate}</strong>?<br><br>` +
+        `<input type="date" id="install-date-prompt-input" value="${suggestedDate}" style="margin-top:4px;padding:6px 10px;border:1px solid var(--slate-200);border-radius:6px;font-size:14px;">`,
+        () => {
+            const dateInput = document.getElementById('install-date-prompt-input');
+            const newDate = dateInput ? dateInput.value : suggestedDate;
+            s.dateInstalled = newDate;
+            persistSensor(s);
+            if (currentSensor === sensorId) showSensorView(sensorId);
+            showSuccessToast(`Install date updated to ${newDate}`);
+        },
+        { confirmText: 'Update', cancelText: 'Keep Current' }
+    );
 }
 
 // ===== MOVE SENSOR =====
@@ -1846,7 +1873,6 @@ function moveSensor(e) {
     const beforeDateInstalled = s.dateInstalled || '';
 
     s.community = toCommunityId;
-    s.dateInstalled = moveDate.split('T')[0] || nowDatetime().split('T')[0];
     persistSensor(s);
 
     let noteText = `${sensorId} removed from ${fromName} and brought to ${toName}.`;
@@ -1879,6 +1905,12 @@ function moveSensor(e) {
     renderSensors();
     if (currentSensor === sensorId) showSensorView(sensorId);
     if (currentCommunity) showCommunityView(currentCommunity);
+
+    // Prompt to update install date after move
+    if (!setupMode) {
+        const suggestedDate = moveDate.split('T')[0] || nowDatetime().split('T')[0];
+        promptInstallDateUpdate(sensorId, suggestedDate, `${s.id} was moved to ${toName}.`);
+    }
 }
 
 // ===== SENSOR DETAIL =====
@@ -1927,7 +1959,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Install Date</label>
                 <input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="dateInstalled" value="${s.dateInstalled || ''}" onblur="inlineSaveSensor(this)">
             </div>
-            <div class="info-item"><label>Most Recent Collocation</label>
+            <div class="info-item"><label>Initial Collocation</label>
                 <input class="inline-edit-input" data-sensor="${s.id}" data-field="collocationDates" value="${s.collocationDates || ''}" placeholder="e.g. Floyd Dryden, Mar 5-25" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
             <div class="info-item"><label>SOA Tag ID</label>
@@ -1946,8 +1978,8 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
             <div class="info-item"><label>Community</label><p>${getCommunityName(s.community)} <a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move &rarr;</a></p></div>
             <div class="info-item"><label>Location</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
-            <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'} <a class="move-sensor-link" onclick="viewInstallHistory()">View history &rarr;</a></p></div>
-            <div class="info-item"><label>Most Recent Collocation</label><p>${(() => { const c = getMostRecentCollocation(s.id); return c ? `${c.communityName}, ${c.dateRange}` : (s.collocationDates || '\u2014'); })()} <a class="move-sensor-link" onclick="viewCollocationHistory()">View history &rarr;</a></p></div>
+            <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'}</p></div>
+            <div class="info-item"><label>Initial Collocation</label><p>${(() => { const c = getMostRecentCollocation(s.id); return c ? `${c.communityName}, ${c.dateRange}` : (s.collocationDates || '\u2014'); })()}</p></div>
             <div class="info-item"><label>SOA Tag ID</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'soaTagId')">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
@@ -1977,7 +2009,7 @@ function inlineEditSensor(sensorId, field) {
     const s = sensors.find(x => x.id === sensorId);
     if (!s) return;
 
-    const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date', collocationDates: 'Most Recent Collocation' };
+    const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date', collocationDates: 'Initial Collocation' };
     const label = labels[field] || field;
     const oldVal = s[field] || '';
     const promptMsg = field === 'location' ? `Edit ${label} (enter an address or GPS coordinates):` : `Edit ${label}:`;
@@ -2107,7 +2139,7 @@ function showCommunityView(communityId) {
 
     const sensorTableHead = `<thead><tr>
         <th>Sensor ID</th><th>Status</th>
-        <th>Location</th><th>Install Date</th><th>Most Recent Collocation</th><th>SOA Tag ID</th><th>Purchase Date</th><th>Actions</th>
+        <th>Location</th><th>Install Date</th><th>Initial Collocation</th><th>SOA Tag ID</th><th>Purchase Date</th><th>Actions</th>
     </tr></thead>`;
 
     function renderSensorRows(list) {
@@ -5150,7 +5182,7 @@ const SENSOR_EXPORT_FIELDS = [
     { key: 'community', label: 'Community', get: s => getCommunityName(s.community) },
     { key: 'location', label: 'Location', get: s => s.location || '' },
     { key: 'dateInstalled', label: 'Install Date', get: s => s.dateInstalled || '' },
-    { key: 'collocationDates', label: 'Most Recent Collocation', get: s => s.collocationDates || '' },
+    { key: 'collocationDates', label: 'Initial Collocation', get: s => s.collocationDates || '' },
     { key: 'soaTagId', label: 'SOA Tag ID', get: s => s.soaTagId || '' },
     { key: 'datePurchased', label: 'Purchase Date', get: s => s.datePurchased || '' },
 ];
@@ -8513,7 +8545,7 @@ async function importSensors(event) {
                 community: '',
                 location: String(row['Location'] || row['location'] || '').trim(),
                 datePurchased: String(row['Purchase Date'] || row['date_purchased'] || '').trim(),
-                collocationDates: String(row['Most Recent Collocation'] || row['collocation_dates'] || '').trim(),
+                collocationDates: String(row['Initial Collocation'] || row['collocation_dates'] || '').trim(),
                 dateInstalled: '',
             };
 
