@@ -8,7 +8,7 @@
 The Sensor Network Tracker is a website that helps ADEC manage air quality sensors across Alaska. It tracks which sensors are where, who the contacts are at each community, and whether the sensors are working properly.
 
 You access it by visiting this link in any web browser:
-**https://amqa-tools.github.io/platform/**
+**https://amqa-tools.github.io/sensor-network-tracker/**
 
 ---
 
@@ -153,8 +153,8 @@ This is one of the most important questions. Here's the answer:
 
 | Resource | Who Owns It | Where |
 |----------|------------|-------|
-| The live app | amqa-tools (GitHub org) | https://amqa-tools.github.io/platform/ |
-| The code | amqa-tools (GitHub org) | https://github.com/amqa-tools/platform |
+| The live app | amqa-tools (GitHub org) | https://amqa-tools.github.io/sensor-network-tracker/ |
+| The code | amqa-tools (GitHub org) | https://github.com/amqa-tools/sensor-network-tracker |
 | The database | Whichever ADEC email is on the Supabase account | https://supabase.com/dashboard |
 | QuantAQ access | ADEC's QuantAQ account | https://www.quant-aq.com/ |
 
