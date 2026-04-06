@@ -2059,6 +2059,7 @@ function showCommunityView(communityId) {
     const isDeactivated = isCommunityDeactivated(communityId);
     const isChild = isChildCommunity(communityId);
     document.getElementById('add-sub-community-btn').style.display = isChild || isDeactivated ? 'none' : '';
+    document.getElementById('detach-community-btn').style.display = isChild && !isDeactivated ? '' : 'none';
     document.getElementById('deactivate-community-btn').style.display = isDeactivated ? 'none' : '';
     document.getElementById('reactivate-community-btn').style.display = isDeactivated ? '' : 'none';
     updatePinButton(communityId);
@@ -5643,6 +5644,37 @@ function editCommunityName() {
     renderPinnedSidebar();
 }
 
+function detachFromParent(communityId) {
+    const community = COMMUNITIES.find(c => c.id === communityId);
+    if (!community) return;
+    const parent = getParentCommunity(communityId);
+    if (!parent) return;
+
+    showConfirm('Make Standalone', `Remove "${community.name}" from under "${parent.name}" and make it a standalone community?`, () => {
+        delete communityParents[communityId];
+        db.updateCommunity(communityId, { parent_id: null }).catch(err => console.error('Detach error:', err));
+
+        if (!setupMode) {
+            const note = {
+                id: generateId('n'),
+                date: nowDatetime(),
+                type: 'Info Edit',
+                text: `Community "${community.name}" detached from parent "${parent.name}" and is now standalone.`,
+                createdBy: getCurrentUserName(), createdById: currentUserId,
+                taggedSensors: [],
+                taggedCommunities: [communityId, parent.id],
+                taggedContacts: [],
+            };
+            notes.push(note); persistNote(note);
+        }
+
+        showCommunityView(communityId);
+        buildSidebar();
+        renderPinnedSidebar();
+        showSuccessToast(`"${community.name}" is now a standalone community`);
+    });
+}
+
 function pinTag(tag) {
     if (pinnedItems.find(p => p.type === 'tag' && p.id === tag)) return;
     pinnedItems.push({ type: 'tag', id: tag, label: tag });
@@ -5742,13 +5774,16 @@ function confirmDeleteCommunity(communityId) {
             commContacts.forEach(c => { c.community = ''; persistContact(c); });
             // Unassign sensors
             commSensors.forEach(s => { s.community = ''; persistSensor(s); });
+            // Detach child communities (make them standalone)
+            const children = COMMUNITIES.filter(c => communityParents[c.id] === communityId);
+            children.forEach(child => { delete communityParents[child.id]; });
             // Remove from COMMUNITIES array
             const idx = COMMUNITIES.findIndex(c => c.id === communityId);
             if (idx >= 0) COMMUNITIES.splice(idx, 1);
             // Remove from deactivated list
             deactivatedCommunities = deactivatedCommunities.filter(id => id !== communityId);
             saveData('deactivatedCommunities', deactivatedCommunities);
-            // Delete from DB
+            // Delete from DB (handles all FK cleanup)
             await db.deleteCommunity(communityId);
             // Close any open tabs for this community
             openTabs = openTabs.filter(t => t.id !== getTabId('community', communityId));
@@ -5950,8 +5985,8 @@ function renderTicketCard(ticket) {
         ${ticket.issueDescription ? `<div class="ticket-description">${escapeHtml(ticket.issueDescription)}</div>` : ''}
         <div class="ticket-meta">
             ${ticket.rmaNumber ? `<span>RMA: ${escapeHtml(ticket.rmaNumber)}</span>` : ''}
-            ${ticket.fedexTrackingTo ? `<span>To Quant: ${escapeHtml(ticket.fedexTrackingTo)}</span>` : ''}
-            ${ticket.fedexTrackingFrom ? `<span>From Quant: ${escapeHtml(ticket.fedexTrackingFrom)}</span>` : ''}
+            ${ticket.fedexTrackingTo ? `<span>Tracking to Quant: ${escapeHtml(ticket.fedexTrackingTo)}</span>` : ''}
+            ${ticket.fedexTrackingFrom ? `<span>Tracking from Quant: ${escapeHtml(ticket.fedexTrackingFrom)}</span>` : ''}
             <span>${formatDate(ticket.createdAt)}</span>
         </div>
         <div class="ticket-steps">${renderTicketProgress(ticket)}</div>
@@ -5982,8 +6017,8 @@ function openTicketDetail(ticketId) {
             <div class="ticket-field"><label>Opened</label><p>${escapeHtml(ticket.createdBy)} on ${formatDate(ticket.createdAt)}</p></div>
             <div class="ticket-field full-width"><label>Issue Description</label><p>${escapeHtml(ticket.issueDescription) || '—'}</p></div>
             <div class="ticket-field"><label>RMA Number</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.rmaNumber)}" placeholder="e.g. RMA-2026-0042" onblur="saveTicketField('${ticket.id}','rmaNumber',this.value)">` : `<p>${escapeHtml(ticket.rmaNumber) || '—'}</p>`}</div>
-            <div class="ticket-field"><label>FedEx Tracking (to QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingTo)}" placeholder="Tracking number" onblur="saveTicketField('${ticket.id}','fedexTrackingTo',this.value)">${ticket.fedexTrackingTo ? ` <a href="https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(ticket.fedexTrackingTo)}" target="_blank" class="tracking-link">Track &#8599;</a>` : ''}` : `<p>${ticket.fedexTrackingTo ? `<a href="https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(ticket.fedexTrackingTo)}" target="_blank" class="tracking-link">${escapeHtml(ticket.fedexTrackingTo)} &#8599;</a>` : '—'}</p>`}</div>
-            <div class="ticket-field"><label>FedEx Tracking (from QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingFrom)}" placeholder="Tracking number" onblur="saveTicketField('${ticket.id}','fedexTrackingFrom',this.value)">${ticket.fedexTrackingFrom ? ` <a href="https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(ticket.fedexTrackingFrom)}" target="_blank" class="tracking-link">Track &#8599;</a>` : ''}` : `<p>${ticket.fedexTrackingFrom ? `<a href="https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(ticket.fedexTrackingFrom)}" target="_blank" class="tracking-link">${escapeHtml(ticket.fedexTrackingFrom)} &#8599;</a>` : '—'}</p>`}</div>
+            <div class="ticket-field"><label>Return Tracking Info (to QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingTo)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingTo',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingTo) || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Return Tracking Info (from QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingFrom)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingFrom',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingFrom) || '—'}</p>`}</div>
             <div class="ticket-field"><label>Closed</label><p>${ticket.closedAt ? formatDate(ticket.closedAt) : '—'}</p></div>
             <div class="ticket-field full-width"><label>QuantAQ Notes</label>${isOpen ? `<textarea class="ticket-edit-input" rows="3" placeholder="Notes from QuantAQ..." onblur="saveTicketField('${ticket.id}','quantNotes',this.value)">${escapeHtml(ticket.quantNotes)}</textarea>` : `<p>${escapeHtml(ticket.quantNotes) || '—'}</p>`}</div>
             <div class="ticket-field full-width"><label>Work Completed</label>${isOpen ? `<textarea class="ticket-edit-input" rows="3" placeholder="Describe work done..." onblur="saveTicketField('${ticket.id}','workCompleted',this.value)">${escapeHtml(ticket.workCompleted)}</textarea>` : `<p>${escapeHtml(ticket.workCompleted) || '—'}</p>`}</div>
@@ -6012,10 +6047,12 @@ function advanceTicketStatus(ticketId) {
     persistServiceTicketUpdate(ticketId, { status: newStatus });
 
     const sensorStatusMap = { 'Shipped to Quant': ['Shipped to Quant'], 'At Quant': ['Service at Quant'], 'Shipped from Quant': ['Shipped from Quant'] };
+    const allServiceStatuses = ['Shipped to Quant', 'Service at Quant', 'Shipped from Quant'];
     if (sensorStatusMap[newStatus]) {
         const s = sensors.find(x => x.id === ticket.sensorId);
         if (s) {
-            const current = getStatusArray(s).filter(st => st !== 'Quant Ticket in Progress' && !sensorStatusMap[newStatus].includes(st));
+            // Strip ALL service-related statuses, then apply only the current stage's status
+            const current = getStatusArray(s).filter(st => st !== 'Quant Ticket in Progress' && !allServiceStatuses.includes(st));
             s.status = [...current, ...sensorStatusMap[newStatus]];
             persistSensor(s); buildSensorSidebar();
         }

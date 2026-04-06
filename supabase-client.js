@@ -97,9 +97,19 @@ const db = {
     },
 
     async deleteCommunity(id) {
-        // Remove community tags first
+        // Unassign sensors and contacts
+        await supa.from('sensors').update({ community_id: null }).eq('community_id', id);
+        await supa.from('contacts').update({ community_id: null }).eq('community_id', id);
+        // Nullify comms and audits references
+        await supa.from('comms').update({ community_id: null }).eq('community_id', id);
+        await supa.from('audits').update({ community_id: null }).eq('community_id', id);
+        // Detach any child communities
+        await supa.from('communities').update({ parent_id: null }).eq('parent_id', id);
+        // Clean up note tags and comm tags referencing this community
+        await supa.from('note_tags').delete().eq('tag_type', 'community').eq('tag_id', id);
+        await supa.from('comm_tags').delete().eq('tag_type', 'community').eq('tag_id', id);
+        // Remove community tags and files (CASCADE handles these, but be explicit)
         await supa.from('community_tags').delete().eq('community_id', id);
-        // Remove community files
         await supa.from('community_files').delete().eq('community_id', id);
         // Delete the community
         const { error } = await supa.from('communities').delete().eq('id', id);
