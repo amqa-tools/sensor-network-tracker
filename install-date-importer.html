@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sensor Install Date Importer</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --navy: #1a2332;
+    --navy-light: #243044;
+    --navy-mid: #2d3d56;
+    --gold: #d4a84b;
+    --gold-light: #e8c97a;
+    --white: #ffffff;
+    --off-white: #f0f2f5;
+    --text: #e8ecf1;
+    --text-dim: #8899aa;
+    --green: #4caf50;
+    --red: #e74c3c;
+    --orange: #f39c12;
+    --blue: #5b9bd5;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--navy);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+
+  h1 {
+    color: var(--gold);
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+  }
+
+  /* Login */
+  #login-section {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 32px;
+    width: 100%;
+    max-width: 400px;
+    margin-top: 40px;
+  }
+  #login-section h2 { color: var(--gold); margin-bottom: 16px; font-size: 1.2rem; }
+  #login-section p { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px; }
+  #login-section input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+  }
+  #login-section button {
+    width: 100%;
+    padding: 10px;
+    background: var(--gold);
+    color: var(--navy);
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  #login-section button:hover { background: var(--gold-light); }
+  #login-error { color: var(--red); font-size: 0.85rem; margin-top: 8px; }
+
+  /* Progress bar */
+  .progress-bar-container {
+    width: 100%;
+    max-width: 800px;
+    margin-bottom: 16px;
+  }
+  .progress-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .progress-track {
+    height: 8px;
+    background: var(--navy-mid);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  /* Counters */
+  .counter-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .counter {
+    background: var(--navy-light);
+    border-radius: 8px;
+    padding: 8px 16px;
+    text-align: center;
+    min-width: 100px;
+  }
+  .counter .num {
+    font-size: 1.4rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .counter .label { font-size: 0.75rem; color: var(--text-dim); }
+  .counter.updated .num { color: var(--green); }
+  .counter.skipped .num { color: var(--orange); }
+  .counter.no-match .num { color: var(--red); }
+  .counter.remaining .num { color: var(--text-dim); }
+
+  /* Card */
+  .review-card {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 28px;
+    width: 100%;
+    max-width: 800px;
+    border: 1px solid var(--navy-mid);
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-header h2 { font-size: 1.1rem; color: var(--gold); font-family: 'JetBrains Mono', monospace; }
+
+  .data-box {
+    background: var(--navy);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    border: 1px solid var(--navy-mid);
+  }
+  .data-box h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+  .data-box.current h3 { color: var(--green); }
+  .data-box.history h3 { color: var(--blue); }
+  .data-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+  }
+  .data-label {
+    color: var(--text-dim);
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+  .data-value { color: var(--text); }
+  .data-value.empty { color: var(--navy-mid); font-style: italic; }
+
+  .match-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .match-badge.matched { background: rgba(76, 175, 80, 0.15); color: var(--green); }
+  .match-badge.no-match { background: rgba(231, 76, 60, 0.15); color: var(--red); }
+  .match-badge.no-data { background: rgba(136, 153, 170, 0.15); color: var(--text-dim); }
+
+  .change-preview {
+    background: rgba(212, 168, 75, 0.08);
+    border: 1px solid rgba(212, 168, 75, 0.3);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 20px;
+  }
+  .change-preview h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+  .change-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    align-items: center;
+  }
+  .change-item .field-name { color: var(--text-dim); min-width: 140px; }
+  .change-item .old-val { color: var(--red); text-decoration: line-through; }
+  .change-item .arrow { color: var(--text-dim); }
+  .change-item .new-val { color: var(--green); font-weight: 600; }
+  .change-item .same { color: var(--text-dim); font-style: italic; }
+
+  .history-entry {
+    background: rgba(91, 155, 213, 0.08);
+    border: 1px solid rgba(91, 155, 213, 0.25);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    font-size: 0.88rem;
+  }
+  .history-entry .history-sensor {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--gold);
+    font-weight: 600;
+  }
+  .history-entry .history-date { color: var(--green); font-weight: 500; }
+  .history-entry .history-note { color: var(--text-dim); margin-top: 4px; font-size: 0.82rem; }
+
+  .already-set {
+    background: rgba(76, 175, 80, 0.12);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    color: var(--green);
+  }
+
+  .no-match-warning {
+    background: rgba(231, 76, 60, 0.12);
+    border: 1px solid rgba(231, 76, 60, 0.4);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    color: var(--red);
+  }
+
+  .no-data-info {
+    background: rgba(136, 153, 170, 0.1);
+    border: 1px solid rgba(136, 153, 170, 0.25);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+  }
+
+  /* Form fields */
+  .form-section { margin-bottom: 16px; }
+  .form-section h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .form-group label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .form-group input, .form-group textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+  .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--gold); }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .form-group.full-width { grid-column: 1 / -1; }
+
+  /* Buttons */
+  .button-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-approve { background: var(--green); color: white; flex: 1; }
+  .btn-skip { background: var(--navy-mid); color: var(--text); }
+  .btn-back { background: transparent; color: var(--text-dim); border: 1px solid var(--navy-mid); }
+
+  /* Filter */
+  .filter-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+    max-width: 800px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-bar select, .filter-bar input {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--navy-mid);
+    background: var(--navy-light);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .filter-bar label { font-size: 0.8rem; color: var(--text-dim); }
+
+  /* Done */
+  .done-section {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    width: 100%;
+    max-width: 800px;
+  }
+  .done-section h2 { color: var(--green); font-size: 1.4rem; margin-bottom: 12px; }
+  .done-section p { color: var(--text-dim); margin-bottom: 8px; }
+
+  .skipped-list {
+    background: var(--navy-light);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 800px;
+    margin-top: 20px;
+  }
+  .skipped-list h3 { color: var(--orange); margin-bottom: 12px; }
+  .skipped-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--navy-mid);
+    font-size: 0.9rem;
+  }
+  .skipped-item:last-child { border: none; }
+  .skipped-item .btn { padding: 6px 14px; font-size: 0.8rem; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.success { background: var(--green); color: white; }
+  .toast.error { background: var(--red); color: white; }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 0.88rem;
+    color: var(--text-dim);
+  }
+  .checkbox-row input[type="checkbox"] { accent-color: var(--gold); }
+</style>
+</head>
+<body>
+
+<h1>Sensor Install Date Importer</h1>
+<p class="subtitle">Review install dates and create event history for each sensor</p>
+
+<!-- Login -->
+<div id="login-section">
+  <h2>Sign In</h2>
+  <p>Log in with your Sensor Tracker account.</p>
+  <input type="email" id="login-email" placeholder="Email">
+  <input type="password" id="login-password" placeholder="Password">
+  <button onclick="doLogin()">Sign In</button>
+  <div id="login-error"></div>
+</div>
+
+<!-- Review area -->
+<div id="review-area" style="display:none; width:100%; max-width:800px; margin:0 auto;">
+
+  <!-- Filter -->
+  <div class="filter-bar" id="filter-bar">
+    <label>Search:</label>
+    <input type="text" id="search-box" placeholder="Sensor ID..." oninput="searchSensor()">
+    <label style="margin-left:auto;">Show:</label>
+    <select id="show-filter" onchange="applyShowFilter()">
+      <option value="all">All</option>
+      <option value="has-date">Has Install Date</option>
+      <option value="no-date">No Install Date</option>
+      <option value="has-history">Has History Notes</option>
+      <option value="matched">Matched Only</option>
+      <option value="no-match">No Match Only</option>
+    </select>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-bar-container">
+    <div class="progress-stats">
+      <span id="progress-label">Sensor 1 of 71</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Counters -->
+  <div class="counter-row">
+    <div class="counter updated"><div class="num" id="count-updated">0</div><div class="label">Updated</div></div>
+    <div class="counter skipped"><div class="num" id="count-skipped">0</div><div class="label">Skipped</div></div>
+    <div class="counter no-match"><div class="num" id="count-nomatch">0</div><div class="label">No Match</div></div>
+    <div class="counter remaining"><div class="num" id="count-remaining">0</div><div class="label">Remaining</div></div>
+  </div>
+
+  <!-- Review Card -->
+  <div class="review-card" id="review-card"></div>
+
+  <!-- Done -->
+  <div class="done-section" id="done-section" style="display:none;"></div>
+
+  <!-- Skipped list -->
+  <div class="skipped-list" id="skipped-list" style="display:none;"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== SUPABASE SETUP =====
+const SUPABASE_URL = 'https://uejryzioxogquflijgyf.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlanJ5emlveG9ncXVmbGlqZ3lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTkyODMsImV4cCI6MjA4OTI3NTI4M30.YD349-X2PeoeCTVp34FbzdGwachr9YCpzIPSXuSURfM';
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ===== DATA =====
+let importRows = [];
+let existingSensors = [];
+let existingNotes = [];
+let currentIndex = 0;
+let currentUserId = null;
+let updated = [];
+let skippedItems = [];
+let noMatchItems = [];
+let decisions = {};
+
+// ===== LOGIN =====
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  document.getElementById('login-error').textContent = '';
+
+  try {
+    const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+    if (error) throw error;
+    currentUserId = data.user.id;
+
+    document.getElementById('login-section').style.display = 'none';
+
+    // Load existing sensors
+    const { data: sensors, error: sErr } = await supa.from('sensors').select('*').order('id');
+    if (sErr) throw sErr;
+    existingSensors = sensors || [];
+
+    // Load existing notes (to check for duplicate history entries)
+    const { data: notes, error: nErr } = await supa.from('notes').select('id, type, text, date').order('date', { ascending: false });
+    if (nErr) console.warn('Could not load notes:', nErr);
+    existingNotes = notes || [];
+
+    importRows = INSTALL_DATA.map((r, i) => ({ ...r, _rowNum: i + 1 }));
+    showToast(`Signed in. ${existingSensors.length} sensors loaded, ${importRows.length} records ready.`, 'success');
+    startReview();
+  } catch (err) {
+    console.error('Login error:', err);
+    document.getElementById('login-error').textContent = err.message;
+  }
+}
+
+document.getElementById('login-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ===== SENSOR MATCHING =====
+function matchSensor(sensorId) {
+  let match = existingSensors.find(s => s.id === sensorId);
+  if (match) return match;
+
+  const lower = sensorId.toLowerCase();
+  match = existingSensors.find(s => s.id.toLowerCase() === lower);
+  if (match) return match;
+
+  // Numeric match: "442" -> "MOD-00442"
+  if (sensorId.match(/^\d+$/)) {
+    const padded = sensorId.padStart(5, '0');
+    match = existingSensors.find(s => s.id === 'MOD-00' + sensorId || s.id === 'MOD-00' + padded || s.id.endsWith(sensorId));
+    if (match) return match;
+  }
+
+  // X_ prefix match: "X_1656" -> "MOD-X-PM-01656"
+  if (sensorId.startsWith('X_')) {
+    const num = sensorId.replace('X_', '');
+    match = existingSensors.find(s => s.id.includes('X-PM-') && s.id.endsWith(num));
+    if (!match) match = existingSensors.find(s => s.id.includes(num));
+    if (match) return match;
+  }
+
+  return null;
+}
+
+function normalizeDate(dateStr) {
+  if (!dateStr) return '';
+  dateStr = dateStr.trim();
+
+  // Handle "Feb-26" style
+  const monthYear = dateStr.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(\d{2,4})$/i);
+  if (monthYear) {
+    const months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+    const m = months[monthYear[1].toLowerCase()];
+    let y = parseInt(monthYear[2]);
+    if (y < 100) y += 2000;
+    return `${y}-${String(m).padStart(2,'0')}-01`;
+  }
+
+  // Handle M/D/YY or M/D/YYYY
+  const parts = dateStr.split('/');
+  if (parts.length === 3) {
+    let [m, d, y] = parts.map(p => parseInt(p));
+    if (y < 100) y += 2000;
+    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+
+  // Try native parse
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+
+  return dateStr;
+}
+
+function formatDateForDisplay(dateStr) {
+  if (!dateStr) return '—';
+  const norm = normalizeDate(dateStr);
+  if (norm.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const d = new Date(norm + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  return dateStr;
+}
+
+// ===== REVIEW =====
+function startReview() {
+  document.getElementById('review-area').style.display = 'block';
+  showSensor(0);
+}
+
+function showSensor(index) {
+  while (index < importRows.length && decisions[index] !== undefined) index++;
+  if (index >= importRows.length) { showDone(); return; }
+  currentIndex = index;
+  const row = importRows[index];
+  const match = matchSensor(row.sensorId);
+
+  const totalDecided = updated.length + skippedItems.length + noMatchItems.length;
+  const remaining = importRows.length - totalDecided;
+  const pct = Math.round((totalDecided / importRows.length) * 100);
+
+  document.getElementById('progress-label').textContent = `Sensor ${totalDecided + 1} of ${importRows.length}`;
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('count-updated').textContent = updated.length;
+  document.getElementById('count-skipped').textContent = skippedItems.length;
+  document.getElementById('count-nomatch').textContent = noMatchItems.length;
+  document.getElementById('count-remaining').textContent = remaining;
+
+  const card = document.getElementById('review-card');
+  card.style.display = '';
+  const backBtn = totalDecided > 0 ? '<button class="btn btn-back" onclick="goBack()">Back</button>' : '';
+
+  // No match
+  if (!match) {
+    card.innerHTML = `
+      <div class="no-match-warning">No matching sensor found for <strong>${esc(row.sensorId)}</strong> in the tracker.</div>
+      <div class="data-box">
+        <h3>Import Data</h3>
+        <div class="data-row"><span class="data-label">ID:</span> <span class="data-value" style="font-family:'JetBrains Mono',monospace">${esc(row.sensorId)}</span></div>
+        <div class="data-row"><span class="data-label">Location:</span> <span class="data-value ${row.location ? '' : 'empty'}">${esc(row.location) || 'empty'}</span></div>
+        <div class="data-row"><span class="data-label">Install Date:</span> <span class="data-value ${row.installDate ? '' : 'empty'}">${esc(row.installDate) || 'empty'}</span></div>
+        ${row.history.length > 0 ? `<div class="data-row"><span class="data-label">History:</span> <span class="data-value">${row.history.map(h => esc(h.raw)).join(', ')}</span></div>` : ''}
+      </div>
+      <div class="button-row">
+        ${backBtn}
+        <button class="btn btn-skip" onclick="markNoMatch()">No Match — Skip</button>
+      </div>`;
+    return;
+  }
+
+  // No data to import
+  if (!row.installDate && row.history.length === 0) {
+    card.innerHTML = `
+      <div class="card-header">
+        <h2>${esc(match.id)}</h2>
+        <span class="match-badge no-data">No Data</span>
+      </div>
+      <div class="no-data-info">No install date or history data to import for this sensor.</div>
+      <div class="data-box current">
+        <h3>Current Data in Tracker</h3>
+        <div class="data-row"><span class="data-label">Community:</span> <span class="data-value">${esc(match.community_id || '—')}</span></div>
+        <div class="data-row"><span class="data-label">Location:</span> <span class="data-value">${esc(match.location || '—')}</span></div>
+        <div class="data-row"><span class="data-label">Install Date:</span> <span class="data-value">${esc(match.date_installed || '—')}</span></div>
+      </div>
+      <div class="button-row">
+        ${backBtn}
+        <button class="btn btn-skip" onclick="skipSensor()">Skip (No Data)</button>
+      </div>`;
+    return;
+  }
+
+  // Matched with data — full card
+  const currentInstallDate = match.date_installed || '';
+  const newInstallDate = row.installDate ? normalizeDate(row.installDate) : '';
+  const installDateChanged = newInstallDate && newInstallDate !== currentInstallDate;
+
+  // Build history entries display
+  let historyHtml = '';
+  if (row.history.length > 0) {
+    historyHtml = `<div class="data-box history"><h3>Install History (from spreadsheet notes)</h3>`;
+    row.history.forEach(h => {
+      historyHtml += `<div class="history-entry">
+        <span class="history-sensor">${esc(h.sensor)}</span> installed
+        <span class="history-date">${formatDateForDisplay(h.date)}</span>
+        <div class="history-note">${esc(h.raw)}</div>
+      </div>`;
+    });
+    historyHtml += '</div>';
+  }
+
+  // Change preview
+  let changeHtml = '';
+  if (installDateChanged) {
+    changeHtml = `<div class="change-preview"><h3>Changes to Apply</h3>
+      <div class="change-item">
+        <span class="field-name">Install Date:</span>
+        ${currentInstallDate ? `<span class="old-val">${esc(currentInstallDate)}</span> <span class="arrow">&rarr;</span>` : ''}
+        <span class="new-val">${formatDateForDisplay(newInstallDate)}</span>
+      </div>
+    </div>`;
+  } else if (newInstallDate && newInstallDate === currentInstallDate) {
+    changeHtml = `<div class="already-set">Install date already matches: ${formatDateForDisplay(currentInstallDate)}</div>`;
+  }
+
+  // Auto-generate suggested note text
+  let suggestedNote = '';
+  if (row.history.length > 0) {
+    suggestedNote = row.history.map(h => {
+      const sensorLabel = h.sensor === match.id ? 'this sensor' : h.sensor;
+      return `${sensorLabel} installed ${formatDateForDisplay(h.date)}`;
+    }).join('; ');
+    if (row.location) suggestedNote += ` at ${row.location}`;
+    suggestedNote += '.';
+  } else if (newInstallDate && row.location) {
+    suggestedNote = `Installed ${formatDateForDisplay(newInstallDate)} at ${row.location}.`;
+  } else if (newInstallDate) {
+    suggestedNote = `Installed ${formatDateForDisplay(newInstallDate)}.`;
+  }
+
+  card.innerHTML = `
+    <div class="card-header">
+      <h2>${esc(match.id)}</h2>
+      <span class="match-badge matched">Matched</span>
+    </div>
+
+    <div class="data-box">
+      <h3>Import Data</h3>
+      <div class="data-row"><span class="data-label">ID:</span> <span class="data-value" style="font-family:'JetBrains Mono',monospace">${esc(row.sensorId)}</span></div>
+      <div class="data-row"><span class="data-label">Location:</span> <span class="data-value ${row.location ? '' : 'empty'}">${esc(row.location) || 'empty'}</span></div>
+      <div class="data-row"><span class="data-label">Install Date:</span> <span class="data-value ${row.installDate ? '' : 'empty'}">${row.installDate ? formatDateForDisplay(row.installDate) : 'empty'}</span></div>
+      ${row.installDateRaw !== row.installDate && row.installDateRaw ? `<div class="data-row"><span class="data-label">Raw Date Field:</span> <span class="data-value" style="font-size:0.82rem;color:var(--text-dim)">${esc(row.installDateRaw)}</span></div>` : ''}
+    </div>
+
+    <div class="data-box current">
+      <h3>Current Data in Tracker</h3>
+      <div class="data-row"><span class="data-label">Sensor ID:</span> <span class="data-value" style="font-family:'JetBrains Mono',monospace">${esc(match.id)}</span></div>
+      <div class="data-row"><span class="data-label">Community:</span> <span class="data-value">${esc(match.community_id || '—')}</span></div>
+      <div class="data-row"><span class="data-label">Location:</span> <span class="data-value">${esc(match.location || '—')}</span></div>
+      <div class="data-row"><span class="data-label">Install Date:</span> <span class="data-value">${esc(currentInstallDate || '—')}</span></div>
+      <div class="data-row"><span class="data-label">Status:</span> <span class="data-value">${esc(Array.isArray(match.status) ? match.status.join(', ') : (match.status || '—'))}</span></div>
+    </div>
+
+    ${historyHtml}
+    ${changeHtml}
+
+    <div class="form-section">
+      <h3>Install Date & History Note</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Install Date (to save)</label>
+          <input type="date" id="inp-install-date" value="${esc(newInstallDate || currentInstallDate)}">
+        </div>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <div class="checkbox-row">
+            <input type="checkbox" id="chk-create-note" ${suggestedNote ? 'checked' : ''}>
+            <label for="chk-create-note">Create history note</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-group full-width" id="note-group">
+        <label>History Note (will be saved as an "Info Edit" note tagged to this sensor)</label>
+        <textarea id="inp-note">${esc(suggestedNote)}</textarea>
+      </div>
+    </div>
+
+    <div class="button-row">
+      ${backBtn}
+      <button class="btn btn-skip" onclick="skipSensor()">Skip</button>
+      <button class="btn btn-approve" onclick="updateSensor('${esc(match.id)}')">${installDateChanged || suggestedNote ? 'Save & Next' : 'Confirm & Next'}</button>
+    </div>`;
+}
+
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ===== ACTIONS =====
+async function updateSensor(sensorId) {
+  const installDate = document.getElementById('inp-install-date').value.trim();
+  const createNote = document.getElementById('chk-create-note').checked;
+  const noteText = document.getElementById('inp-note').value.trim();
+
+  const btn = document.querySelector('.btn-approve');
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  try {
+    // Update install date
+    if (installDate) {
+      const { error } = await supa.from('sensors').update({
+        date_installed: installDate,
+        updated_at: new Date().toISOString()
+      }).eq('id', sensorId);
+      if (error) throw error;
+
+      const sensor = existingSensors.find(s => s.id === sensorId);
+      if (sensor) sensor.date_installed = installDate;
+    }
+
+    // Create history note
+    if (createNote && noteText) {
+      const noteData = {
+        type: 'Info Edit',
+        text: noteText,
+        date: installDate || new Date().toISOString(),
+        created_by: currentUserId,
+        created_at: new Date().toISOString()
+      };
+      const { data: savedNote, error: nErr } = await supa.from('notes').insert(noteData).select().single();
+      if (nErr) throw nErr;
+
+      // Tag the note to the sensor
+      if (savedNote) {
+        await supa.from('note_tags').insert({ note_id: savedNote.id, tag_type: 'sensor', tag_id: sensorId });
+
+        // Also tag to community if sensor has one
+        const sensor = existingSensors.find(s => s.id === sensorId);
+        if (sensor && sensor.community_id) {
+          await supa.from('note_tags').insert({ note_id: savedNote.id, tag_type: 'community', tag_id: sensor.community_id });
+        }
+      }
+    }
+
+    updated.push({ ...importRows[currentIndex], sensorId });
+    decisions[currentIndex] = 'updated';
+    showToast(`${sensorId} updated`, 'success');
+    showSensor(currentIndex + 1);
+  } catch (err) {
+    showToast('Update failed: ' + err.message, 'error');
+    btn.textContent = 'Save & Next';
+    btn.disabled = false;
+  }
+}
+
+function skipSensor() {
+  skippedItems.push(importRows[currentIndex]);
+  decisions[currentIndex] = 'skipped';
+  showSensor(currentIndex + 1);
+}
+
+function markNoMatch() {
+  noMatchItems.push(importRows[currentIndex]);
+  decisions[currentIndex] = 'no-match';
+  showSensor(currentIndex + 1);
+}
+
+function goBack() {
+  let prevIndex = currentIndex - 1;
+  while (prevIndex >= 0) {
+    if (decisions[prevIndex] !== undefined) {
+      const decision = decisions[prevIndex];
+      if (decision === 'updated') updated = updated.filter(u => u._rowNum !== importRows[prevIndex]._rowNum);
+      else if (decision === 'skipped') skippedItems = skippedItems.filter(s => s._rowNum !== importRows[prevIndex]._rowNum);
+      else if (decision === 'no-match') noMatchItems = noMatchItems.filter(n => n._rowNum !== importRows[prevIndex]._rowNum);
+      delete decisions[prevIndex];
+      currentIndex = prevIndex;
+      showSensor(prevIndex);
+      return;
+    }
+    prevIndex--;
+  }
+}
+
+function searchSensor() {
+  const q = document.getElementById('search-box').value.toLowerCase().trim();
+  if (!q) return;
+  const idx = importRows.findIndex((r, i) =>
+    decisions[i] === undefined && (r.sensorId.toLowerCase().includes(q) || (r.location || '').toLowerCase().includes(q))
+  );
+  if (idx >= 0) showSensor(idx);
+}
+
+function applyShowFilter() {
+  const filter = document.getElementById('show-filter').value;
+  const idx = importRows.findIndex((r, i) => {
+    if (decisions[i] !== undefined) return false;
+    if (filter === 'all') return true;
+    if (filter === 'has-date') return !!r.installDate;
+    if (filter === 'no-date') return !r.installDate;
+    if (filter === 'has-history') return r.history.length > 0;
+    const match = matchSensor(r.sensorId);
+    if (filter === 'matched') return !!match;
+    if (filter === 'no-match') return !match;
+    return true;
+  });
+  if (idx >= 0) showSensor(idx);
+  else showToast('No matching undecided sensors for that filter', 'error');
+}
+
+// ===== DONE =====
+function showDone() {
+  document.getElementById('review-card').style.display = 'none';
+  document.getElementById('filter-bar').style.display = 'none';
+
+  document.getElementById('progress-label').textContent = 'All sensors reviewed';
+  document.getElementById('progress-pct').textContent = '100%';
+  document.getElementById('progress-fill').style.width = '100%';
+  document.getElementById('count-updated').textContent = updated.length;
+  document.getElementById('count-skipped').textContent = skippedItems.length;
+  document.getElementById('count-nomatch').textContent = noMatchItems.length;
+  document.getElementById('count-remaining').textContent = '0';
+
+  const done = document.getElementById('done-section');
+  done.style.display = '';
+  done.innerHTML = `
+    <h2>Import Complete</h2>
+    <p>${updated.length} sensor${updated.length !== 1 ? 's' : ''} updated</p>
+    <p>${skippedItems.length} skipped</p>
+    <p>${noMatchItems.length} had no match</p>
+    <p style="margin-top: 16px; color: var(--text);">You can now open the Sensor Tracker app to verify the imported data.</p>`;
+
+  const list = document.getElementById('skipped-list');
+  if (skippedItems.length > 0 || noMatchItems.length > 0) {
+    list.style.display = '';
+    let html = '';
+    if (skippedItems.length > 0) {
+      html += `<h3>Skipped (${skippedItems.length})</h3>
+        <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 12px;">Click Review to go back to any skipped sensor.</p>
+        ${skippedItems.map((s, i) => `
+          <div class="skipped-item">
+            <div>
+              <strong style="font-family:'JetBrains Mono',monospace">${esc(s.sensorId)}</strong>
+              <span style="color: var(--text-dim); margin-left: 8px;">${esc(s.location || '—')}</span>
+              <span style="color: var(--text-dim); margin-left: 8px;">${esc(s.installDate || '—')}</span>
+            </div>
+            <button class="btn btn-approve" style="padding:6px 14px;font-size:0.8rem;" onclick="reviewSkipped(${i})">Review</button>
+          </div>`).join('')}`;
+    }
+    if (noMatchItems.length > 0) {
+      html += `<h3 style="color: var(--red); ${skippedItems.length > 0 ? 'margin-top: 24px;' : ''}">No Match (${noMatchItems.length})</h3>
+        ${noMatchItems.map((s, i) => `
+          <div class="skipped-item">
+            <div>
+              <strong style="font-family:'JetBrains Mono',monospace">${esc(s.sensorId)}</strong>
+              <span style="color: var(--text-dim); margin-left: 8px;">${esc(s.location || '—')}</span>
+            </div>
+            <button class="btn btn-approve" style="padding:6px 14px;font-size:0.8rem;" onclick="reviewNoMatch(${i})">Review</button>
+          </div>`).join('')}`;
+    }
+    list.innerHTML = html;
+  }
+}
+
+function reviewSkipped(skipIdx) {
+  const s = skippedItems[skipIdx];
+  skippedItems.splice(skipIdx, 1);
+  const idx = importRows.findIndex(r => r._rowNum === s._rowNum);
+  delete decisions[idx];
+  document.getElementById('review-card').style.display = '';
+  document.getElementById('filter-bar').style.display = '';
+  document.getElementById('done-section').style.display = 'none';
+  document.getElementById('skipped-list').style.display = 'none';
+  showSensor(idx);
+}
+
+function reviewNoMatch(nmIdx) {
+  const s = noMatchItems[nmIdx];
+  noMatchItems.splice(nmIdx, 1);
+  const idx = importRows.findIndex(r => r._rowNum === s._rowNum);
+  delete decisions[idx];
+  document.getElementById('review-card').style.display = '';
+  document.getElementById('filter-bar').style.display = '';
+  document.getElementById('done-section').style.display = 'none';
+  document.getElementById('skipped-list').style.display = 'none';
+  showSensor(idx);
+}
+
+// ===== TOAST =====
+function showToast(msg, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = `toast ${type} show`;
+  setTimeout(() => { toast.className = 'toast'; }, 3000);
+}
+
+// ===== EMBEDDED DATA =====
+// Parsed from Ayla's spreadsheet data. Each entry has:
+// - sensorId: the sensor number (will be matched to MOD-00xxx or MOD-X-PM-0xxxx)
+// - location: community/location name
+// - installDate: the current/most recent install date for THIS sensor at this location
+// - installDateRaw: the raw text from the spreadsheet
+// - history: array of { sensor, date, raw } for sensors that were previously at this location
+const INSTALL_DATA = [
+  { sensorId: "442", location: "Napaskiak", installDate: "8/9/23", installDateRaw: "8/9/23", history: [] },
+  { sensorId: "443", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "444", location: "Wrangell", installDate: "11/13/25", installDateRaw: "11/13/25", history: []},
+  { sensorId: "445", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "446", location: "Galena", installDate: "9/27/23", installDateRaw: "9/27/23", history: [] },
+  { sensorId: "447", location: "Delta Junction", installDate: "11/2/23", installDateRaw: "11/2/23", history: [] },
+  { sensorId: "448", location: "Goldstream", installDate: "2/20/24", installDateRaw: "2/20/24", history: [] },
+  { sensorId: "449", location: "Ketchikan", installDate: "1/31/24", installDateRaw: "1/31/24", history: [] },
+  { sensorId: "450", location: "Haines", installDate: "1/30/24", installDateRaw: "1/30/24", history: [] },
+  { sensorId: "451", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "452", location: "Hoonah", installDate: "1/30/24", installDateRaw: "1/30/24", history: [] },
+  { sensorId: "453", location: "Skagway", installDate: "1/31/24", installDateRaw: "1/31/24", history: [] },
+  { sensorId: "454", location: "Sitka", installDate: "3/21/24", installDateRaw: "3/21/24", history: [] },
+  { sensorId: "455", location: "JNU 5th St", installDate: "1/29/24", installDateRaw: "1/29/24", history: [] },
+  { sensorId: "456", location: "JNU State Museum", installDate: "1/29/24", installDateRaw: "1/29/24", history: [] },
+  { sensorId: "457", location: "Denali NP", installDate: "6/12/24", installDateRaw: "6/12/24", history: [] },
+  { sensorId: "458", location: "Valdez", installDate: "5/13/25", installDateRaw: "5/13/25", history: []},
+  { sensorId: "459", location: "Soldotna", installDate: "6/5/25", installDateRaw: "6/5/25", history: []},
+  { sensorId: "460", location: "ANC Garden Audit Pod #2", installDate: "2/12/26", installDateRaw: "2/12/26", history: [] },
+  { sensorId: "461", location: "Ninilchik", installDate: "5/13/24", installDateRaw: "5/13/24", history: [] },
+  { sensorId: "462", location: "CCSC (ANC)", installDate: "6/18/24", installDateRaw: "6/18/24", history: [] },
+  { sensorId: "463", location: "ANC Garden Perma Pod", installDate: "4/16/24", installDateRaw: "4/16/24", history: [] },
+  { sensorId: "464", location: "Homer", installDate: "5/14/24", installDateRaw: "5/14/24", history: [] },
+  { sensorId: "465", location: "Seward", installDate: "6/5/24", installDateRaw: "6/5/24", history: [] },
+  { sensorId: "466", location: "Glennallen", installDate: "7/18/24", installDateRaw: "7/18/24", history: [] },
+  { sensorId: "467", location: "Talkeetna", installDate: "7/1/24", installDateRaw: "7/1/24", history: [] },
+  { sensorId: "468", location: "Big Lake", installDate: "7/1/24", installDateRaw: "7/1/24", history: [] },
+  { sensorId: "469", location: "Tyonek", installDate: "11/20/24", installDateRaw: "11/20/24", history: [] },
+  { sensorId: "470", location: "Willow", installDate: "8/6/24", installDateRaw: "8/6/24", history: [] },
+  { sensorId: "471", location: "ANC Garden Audit Pod #1", installDate: "10/3/23", installDateRaw: "10/3/23", history: [] },
+  { sensorId: "649", location: "Chickaloon/Sutton", installDate: "8/7/24", installDateRaw: "8/7/24", history: [] },
+  { sensorId: "650", location: "Kenai", installDate: "11/19/24", installDateRaw: "11/19/24", history: [] },
+  { sensorId: "651", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "652", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "653", location: "Tok", installDate: "12/2/24", installDateRaw: "12/2/24", history: []},
+  { sensorId: "654", location: "Nome", installDate: "5/23/24", installDateRaw: "5/23/24", history: [] },
+  { sensorId: "655", location: "Nenana", installDate: "9/6/24", installDateRaw: "9/6/24", history: [] },
+  { sensorId: "656", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "657", location: "Palmer", installDate: "8/6/24", installDateRaw: "8/6/24", history: [] },
+  { sensorId: "658", location: "Yakutat", installDate: "10/24/24", installDateRaw: "10/24/24", history: [] },
+  { sensorId: "659", location: "Bethel", installDate: "2/18/25", installDateRaw: "2/18/25", history: []},
+  { sensorId: "660", location: "Kodiak", installDate: "7/2/24", installDateRaw: "7/2/24", history: [] },
+  { sensorId: "662", location: "Kotzebue", installDate: "7/9/24", installDateRaw: "7/9/24", history: [] },
+  { sensorId: "663", location: "Wasilla", installDate: "8/6/24", installDateRaw: "8/6/24", history: [] },
+  { sensorId: "664", location: "Badger", installDate: "11/6/25", installDateRaw: "11/6/25", history: []},
+  { sensorId: "665", location: "JNU FD Audit Pod", installDate: "4/29/24", installDateRaw: "4/29/24", history: [] },
+  { sensorId: "666", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "667", location: "Cordova", installDate: "1/23/25", installDateRaw: "1/23/25", history: []},
+  { sensorId: "668", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "669", location: "JNU FD Permanent Pod", installDate: "Feb-26", installDateRaw: "Feb-26", history: [] },
+  { sensorId: "670", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "671", location: "Anne Wien Elementary (FBX)", installDate: "12/9/25", installDateRaw: "12/9/25", history: [] },
+  { sensorId: "672", location: "Salcha", installDate: "5/30/25", installDateRaw: "5/30/25", history: [] },
+  { sensorId: "673", location: "Gerstle River", installDate: "10/6/2025", installDateRaw: "10/6/2025", history: [] },
+  { sensorId: "674", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "758", location: "Louden Tribe's QuantAQ Sensor #1 (not ADEC's)", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "X_1656", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "X_1657", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "X_1658", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "X_1754", location: "", installDate: "12/4/2025", installDateRaw: "12/4/2025", history: [] },
+  { sensorId: "X_1755", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "X_1756", location: "Huslia", installDate: "4/6/2026", installDateRaw: "4/6/2026", history: [] },
+  { sensorId: "X_1757", location: "", installDate: "12/4/2025", installDateRaw: "12/4/2025", history: [] },
+  { sensorId: "X_1758", location: "Eagle", installDate: "4/2/2026", installDateRaw: "4/2/2026", history: [] },
+  { sensorId: "X_1759", location: "", installDate: "12/4/2025", installDateRaw: "12/4/2025", history: [] },
+  { sensorId: "X_1760", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "X_1761", location: "", installDate: "12/4/2025", installDateRaw: "12/4/2025", history: [] },
+  { sensorId: "X_1762", location: "ANC Garden X Perma Pod", installDate: "2/3/2026", installDateRaw: "2/3/2026", history: [] },
+  { sensorId: "X_1763", location: "", installDate: "12/4/2025", installDateRaw: "12/4/2025", history: [] },
+  { sensorId: "X_1764", location: "", installDate: "", installDateRaw: "", history: [] },
+  { sensorId: "X_1765", location: "ANC Garden X Audit Pod", installDate: "2/3/2026", installDateRaw: "2/3/2026", history: [] },
+  { sensorId: "X_1766", location: "", installDate: "12/4/2025", installDateRaw: "12/4/2025", history: [] },
+];
+</script>
+</body>
+</html>
