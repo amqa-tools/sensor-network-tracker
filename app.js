@@ -184,6 +184,26 @@ async function loadAllData() {
     // Service tickets
     serviceTickets = ticketsData;
     audits = auditsData;
+
+    // Clean up stale service statuses on sensors based on current ticket stage
+    cleanupSensorServiceStatuses();
+}
+
+function cleanupSensorServiceStatuses() {
+    const allServiceStatuses = ['Shipped to Quant', 'Service at Quant', 'Shipped from Quant'];
+    const sensorStatusMap = { 'Shipped to Quant': 'Shipped to Quant', 'At Quant': 'Service at Quant', 'Shipped from Quant': 'Shipped from Quant' };
+    sensors.forEach(s => {
+        const activeTickets = serviceTickets.filter(t => t.sensorId === s.id && t.status !== 'Closed');
+        if (activeTickets.length === 0) return;
+        const ticket = activeTickets[0];
+        const currentServiceStatus = sensorStatusMap[ticket.status] || null;
+        const currentStatuses = getStatusArray(s);
+        const stale = currentStatuses.filter(st => allServiceStatuses.includes(st) && st !== currentServiceStatus);
+        if (stale.length > 0) {
+            s.status = currentStatuses.filter(st => !allServiceStatuses.includes(st) || st === currentServiceStatus);
+            persistSensor(s);
+        }
+    });
 }
 
 // ===== PERSISTENCE LAYER =====
@@ -1152,7 +1172,20 @@ function getStatusArray(s) {
 }
 
 function renderStatusBadges(s, clickable) {
-    const statuses = getStatusArray(s);
+    let statuses = getStatusArray(s);
+
+    // If there's an active service ticket, only show the service status matching the current ticket stage
+    // (strip stale ones like "Shipped to Quant" when ticket has moved past that)
+    const activeTickets = getActiveTicketsForSensor(s.id);
+    if (activeTickets.length > 0) {
+        const allServiceStatuses = ['Shipped to Quant', 'Service at Quant', 'Shipped from Quant'];
+        const ticket = activeTickets[0];
+        const sensorStatusMap = { 'Shipped to Quant': 'Shipped to Quant', 'At Quant': 'Service at Quant', 'Shipped from Quant': 'Shipped from Quant' };
+        const currentServiceStatus = sensorStatusMap[ticket.status] || null;
+        // Remove all service statuses that don't match the current ticket stage
+        statuses = statuses.filter(st => !allServiceStatuses.includes(st) || st === currentServiceStatus);
+    }
+
     if (statuses.length === 0) {
         if (clickable) return `<span class="editable-field" onclick="openStatusChangeModal('${s.id}')">No status set</span>`;
         return '—';
@@ -1160,7 +1193,7 @@ function renderStatusBadges(s, clickable) {
     let html = statuses.map(st => {
         const cls = clickable ? 'badge-clickable' : '';
         if (st === 'Quant Ticket in Progress' && clickable) {
-            const activeTicket = getActiveTicketsForSensor(s.id)[0];
+            const activeTicket = activeTickets[0];
             const ticketClick = activeTicket ? `onclick="openTicketDetail('${activeTicket.id}')"` : `onclick="openStatusChangeModal('${s.id}')"`;
             return `<span class="badge ${getStatusBadgeClass(st)} ${cls}" ${ticketClick}>${st}</span>`;
         }
@@ -1168,13 +1201,14 @@ function renderStatusBadges(s, clickable) {
         return `<span class="badge ${getStatusBadgeClass(st)} ${cls}" ${onclick}>${st}</span>`;
     }).join(' ');
 
-    // Show active service ticket statuses as additional badges on the sensor
-    const activeTickets = getActiveTicketsForSensor(s.id);
+    // Show active ticket stage as a badge only if it's not already represented in the sensor statuses
     if (activeTickets.length > 0) {
+        const sensorStatusMap = { 'Shipped to Quant': 'Shipped to Quant', 'At Quant': 'Service at Quant', 'Shipped from Quant': 'Shipped from Quant' };
         activeTickets.forEach(ticket => {
             const ticketStatus = ticket.status;
-            // Only show ticket-specific statuses that add info beyond what the sensor status already shows
-            if (ticketStatus && ticketStatus !== 'Closed') {
+            const mappedStatus = sensorStatusMap[ticketStatus];
+            // Only show ticket badge if the ticket stage isn't already shown as a sensor status
+            if (ticketStatus && ticketStatus !== 'Closed' && !mappedStatus && !statuses.includes(ticketStatus)) {
                 const cls = clickable ? 'badge-clickable' : '';
                 const onclick = clickable ? `onclick="openTicketDetail('${ticket.id}')"` : '';
                 html += ` <span class="badge badge-ticket-status ${cls}" ${onclick} title="Service ticket: ${escapeHtml(ticketStatus)}">${escapeHtml(ticketStatus)}</span>`;
