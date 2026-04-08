@@ -159,8 +159,7 @@
                     <button class="btn btn-primary" onclick="openAddSensorModal()">+ Add Sensor</button>
                     <button class="btn" onclick="openGlobalCollocationModal()">Create Collocation</button>
                     <button class="btn" onclick="openAddNoteModal('', '')">Add Note</button>
-                    <button class="btn" onclick="exportSensors()">Export</button>
-                    <label class="import-link">Import Data <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importSensors(event)"></label>
+                    <a class="import-link" onclick="exportSensors()" style="cursor:pointer">Export as Spreadsheet</a>
                 </div>
                 <div class="filter-bar">
                     <input type="text" id="sensor-search" placeholder="Search sensors..." oninput="renderSensors()" aria-label="Search sensors">
