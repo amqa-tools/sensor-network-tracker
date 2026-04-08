@@ -3747,19 +3747,47 @@ function editTimelineItem(id, isNote) {
     if (isNote) {
         const idx = notes.findIndex(n => n.id === id);
         if (idx < 0) return;
-        const newText = prompt('Edit note text:', notes[idx].text);
-        if (newText === null || newText.trim() === notes[idx].text) return;
-        notes[idx].text = newText.trim();
-        supa.from('notes').update({ text: notes[idx].text }).eq('id', id).catch(err => console.error('Edit note error:', err));
+        const currentText = notes[idx].text || '';
+        showConfirm('Edit Note',
+            `<textarea id="edit-timeline-text" rows="6" style="width:100%;font-family:var(--font-sans);font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5">${escapeHtml(currentText)}</textarea>`,
+            () => {
+                const textarea = document.getElementById('edit-timeline-text');
+                if (!textarea) return;
+                const newText = textarea.value.trim();
+                if (newText === currentText) return;
+                notes[idx].text = newText;
+                supa.from('notes').update({ text: newText }).eq('id', id).catch(err => console.error('Edit note error:', err));
+                refreshCurrentView();
+            },
+            { confirmText: 'Done' }
+        );
+        // Focus the textarea after the modal opens
+        setTimeout(() => {
+            const ta = document.getElementById('edit-timeline-text');
+            if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+        }, 100);
     } else {
         const idx = comms.findIndex(c => c.id === id);
         if (idx < 0) return;
-        const newText = prompt('Edit communication text:', comms[idx].text);
-        if (newText === null || newText.trim() === comms[idx].text) return;
-        comms[idx].text = newText.trim();
-        supa.from('comms').update({ text: comms[idx].text }).eq('id', id).catch(err => console.error('Edit comm error:', err));
+        const currentText = comms[idx].text || '';
+        showConfirm('Edit Communication',
+            `<textarea id="edit-timeline-text" rows="6" style="width:100%;font-family:var(--font-sans);font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5">${escapeHtml(currentText)}</textarea>`,
+            () => {
+                const textarea = document.getElementById('edit-timeline-text');
+                if (!textarea) return;
+                const newText = textarea.value.trim();
+                if (newText === currentText) return;
+                comms[idx].text = newText;
+                supa.from('comms').update({ text: newText }).eq('id', id).catch(err => console.error('Edit comm error:', err));
+                refreshCurrentView();
+            },
+            { confirmText: 'Done' }
+        );
+        setTimeout(() => {
+            const ta = document.getElementById('edit-timeline-text');
+            if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+        }, 100);
     }
-    refreshCurrentView();
 }
 
 async function deleteTimelineItem(id, isNote) {
