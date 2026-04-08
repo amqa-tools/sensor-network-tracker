@@ -6867,6 +6867,7 @@ function openAuditDetail(auditId) {
             ${idx > 0 ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
             <span class="action-spacer"></span>
             ${audit.status === 'Complete' || audit.status === 'Analysis Pending' || audit.status === 'Audit Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
+            ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn" onclick="delete analysisDataCache['${audit.id}']; beginAnalysis('${audit.id}')">Re-upload Data</button>` : ''}
             <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
         </div>
         <div class="ticket-detail-grid">
@@ -9004,24 +9005,7 @@ function openCollocationDetail(collocId) {
 
     const sensorList = (colloc.sensorIds || []).map(id => `<a href="#" onclick="closeModal('modal-collocation-detail'); showSensorDetail('${id}'); return false;" style="color:var(--navy-500)">${id}</a>`).join(', ');
 
-    // Analysis results table
-    let analysisHtml = '';
     const hasResults = Object.keys(colloc.analysisResults || {}).length > 0;
-    if (hasResults) {
-        const PARAMS = [
-            { key: 'pm25', label: 'PM₂.₅' }, { key: 'pm10', label: 'PM₁₀' },
-            { key: 'co', label: 'CO' }, { key: 'no', label: 'NO' },
-            { key: 'no2', label: 'NO₂' }, { key: 'o3', label: 'O₃' },
-        ];
-        analysisHtml = `<div style="margin-top:12px"><table style="width:100%;font-size:12px;border-collapse:collapse">
-            <tr style="background:var(--slate-50)"><th style="padding:4px 8px;text-align:left">Parameter</th><th>R²</th><th>Slope</th><th>Intercept</th><th>Result</th></tr>
-            ${PARAMS.filter(p => colloc.analysisResults[p.key]).map(p => {
-                const r = colloc.analysisResults[p.key];
-                const passColor = r.pass ? 'var(--green)' : '#e53e3e';
-                return `<tr><td style="padding:4px 8px">${p.label}</td><td style="text-align:center">${(r.r2||0).toFixed(3)}</td><td style="text-align:center">${(r.slope||0).toFixed(3)}</td><td style="text-align:center">${(r.intercept||0).toFixed(3)}</td><td style="text-align:center;color:${passColor};font-weight:600">${r.pass ? 'PASS' : 'FAIL'}</td></tr>`;
-            }).join('')}
-        </table></div>`;
-    }
 
     document.getElementById('collocation-detail-title').textContent = `Collocation: ${communityName}`;
     document.getElementById('collocation-detail-body').innerHTML = `
@@ -9042,8 +9026,8 @@ function openCollocationDetail(collocId) {
             <div class="ticket-field full-width"><label>Sensors</label><p>${sensorList || '—'}</p></div>
             <div class="ticket-field"><label>Conducted By</label>${!isComplete ? `<input class="ticket-edit-input" value="${escapeHtml(colloc.conductedBy)}" onblur="saveCollocationField('${colloc.id}','conductedBy',this.value)">` : `<p>${escapeHtml(colloc.conductedBy) || '—'}</p>`}</div>
             <div class="ticket-field full-width"><label>Notes</label>${!isComplete ? `<textarea class="ticket-edit-input" rows="3" onblur="saveCollocationField('${colloc.id}','notes',this.value)">${escapeHtml(colloc.notes)}</textarea>` : `<p>${escapeHtml(colloc.notes) || '—'}</p>`}</div>
+            ${hasResults ? `<div class="ticket-field full-width"><label>Analysis</label><p style="color:var(--green)">Analysis uploaded ${formatDate(colloc.analysisUploadDate)} by ${escapeHtml(colloc.analysisUploadedBy)}</p></div>` : ''}
         </div>
-        ${analysisHtml}
         <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
             <button class="btn btn-sm btn-danger" onclick="deleteCollocation('${colloc.id}')" style="font-size:11px;opacity:0.7">Delete Collocation</button>
         </div>`;
@@ -9666,7 +9650,7 @@ function renderCollocationAnalysisResults(collocId, parsed) {
         </div>
     `;
 
-    _renderCollocTimeSeries(parsed, results);
+    _renderCollocTimeSeries(parsed, results, colloc);
     _renderCollocRegression(parsed, results);
 }
 
@@ -9684,7 +9668,7 @@ function _collocNiceDtick(lo, hi) {
 
 function _collocPodColor(idx) { return COLLOC_POD_COLORS[idx % COLLOC_POD_COLORS.length]; }
 
-function _renderCollocTimeSeries(parsed, results) {
+function _renderCollocTimeSeries(parsed, results, colloc) {
     const container = document.getElementById('colloc-ts-tabset');
     const hasBam = parsed.allRows.some(r => !isNaN(r.bam.pm25) || !isNaN(r.bam.pm10));
     const hasGas = parsed.podIds.some(id => !parsed.isPmOnly[id]);
@@ -9708,7 +9692,7 @@ function _renderCollocTimeSeries(parsed, results) {
         const plotId = `colloc-ts-plot-${p.key}`;
         panelsHtml += `<div id="colloc-ts-tab-${p.key}" class="colloc-tab-pane${active}">
             <div class="colloc-plot-title"><h3>${p.labelHtml} Hourly Collocation Results</h3></div>
-            <div class="colloc-plot-subtitle">Collocation Dates: ${parsed.allRows[0] ? formatDate(parsed.allRows[0].timestamp.toISOString()) : ''} &ndash; ${parsed.allRows[parsed.allRows.length - 1] ? formatDate(parsed.allRows[parsed.allRows.length - 1].timestamp.toISOString()) : ''}</div>
+            <div class="colloc-plot-subtitle">Collocation Dates: ${colloc.startDate ? formatDate(colloc.startDate) : ''} &ndash; ${colloc.endDate && colloc.endDate !== 'TBD' ? formatDate(colloc.endDate) : 'TBD'}</div>
             <div id="${plotId}" style="width:100%;height:420px"></div>
         </div>`;
     });
@@ -9797,56 +9781,51 @@ function _renderCollocRegression(parsed, results) {
         tabIdx++;
     }
 
-    // Tab: Pods vs Permanent Pod (PM)
+    // Tab: Quants PM — pods vs permanent pod for PM (or inter-pod if no perma)
+    const podShortList = parsed.podIds.map(id => shortSensorId(id)).join(', ');
+    const permaShort = parsed.permaPodId ? shortSensorId(parsed.permaPodId) : '';
     if (hasPerma) {
-        const active = tabIdx === 0 ? ' active' : '';
-        tabsHtml += `<li><button class="colloc-nav-link${active}" onclick="_switchCollocTab('colloc-reg', 'perma-pm', this)">Pods vs ${shortSensorId(parsed.permaPodId)} PM</button></li>`;
-        panelsHtml += `<div id="colloc-reg-tab-perma-pm" class="colloc-tab-pane${active}">`;
+        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'quants-pm', this)">Quants PM</button></li>`;
+        panelsHtml += `<div id="colloc-reg-tab-quants-pm" class="colloc-tab-pane">`;
         for (const key of ['pm25', 'pm10']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
-            panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Pods vs ${shortSensorId(parsed.permaPodId)} (Permanent)</div>`;
-            panelsHtml += `<div id="colloc-reg-perma-pm-${key}" style="width:100%;height:360px"></div>`;
+            panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Pods ${podShortList} vs ${permaShort}</div>`;
+            panelsHtml += `<div id="colloc-reg-quants-pm-${key}" style="width:100%;height:360px"></div>`;
         }
         panelsHtml += '</div>';
-        tabIdx++;
 
-        // Tab: Pods vs Permanent Pod (Gas) — only if non-PM pods exist
+        // Quants Gaseous — pods vs permanent pod for gas
         if (hasGas) {
-            const active2 = tabIdx === 0 ? ' active' : '';
-            tabsHtml += `<li><button class="colloc-nav-link${active2}" onclick="_switchCollocTab('colloc-reg', 'perma-gas', this)">Pods vs ${shortSensorId(parsed.permaPodId)} Gas</button></li>`;
-            panelsHtml += `<div id="colloc-reg-tab-perma-gas" class="colloc-tab-pane${active2}">`;
+            tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'quants-gas', this)">Quants Gaseous</button></li>`;
+            panelsHtml += `<div id="colloc-reg-tab-quants-gas" class="colloc-tab-pane">`;
             for (const key of ['co', 'no', 'no2', 'o3']) {
                 const p = COLLOC_PARAMS.find(x => x.key === key);
-                panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Pods vs ${shortSensorId(parsed.permaPodId)} (Permanent)</div>`;
-                panelsHtml += `<div id="colloc-reg-perma-gas-${key}" style="width:100%;height:360px"></div>`;
+                panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Pods ${podShortList} vs ${permaShort}</div>`;
+                panelsHtml += `<div id="colloc-reg-quants-gas-${key}" style="width:100%;height:360px"></div>`;
             }
             panelsHtml += '</div>';
-            tabIdx++;
         }
-    }
-
-    // Tab: Quants PM (inter-pod PM comparisons)
-    if (parsed.podIds.length >= 2) {
-        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'inter-pm', this)">Quants PM</button></li>`;
-        panelsHtml += `<div id="colloc-reg-tab-inter-pm" class="colloc-tab-pane">`;
+    } else if (parsed.podIds.length >= 2) {
+        // No permanent pod — do inter-pod comparisons
+        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'quants-pm', this)">Quants PM</button></li>`;
+        panelsHtml += `<div id="colloc-reg-tab-quants-pm" class="colloc-tab-pane">`;
         for (const key of ['pm25', 'pm10']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
             panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Inter-Pod Comparisons</div>`;
-            panelsHtml += `<div id="colloc-reg-inter-pm-${key}" style="width:100%;height:360px"></div>`;
+            panelsHtml += `<div id="colloc-reg-quants-pm-${key}" style="width:100%;height:360px"></div>`;
         }
         panelsHtml += '</div>';
-    }
 
-    // Tab: Quants Gaseous (inter-pod gas comparisons)
-    if (hasGas && parsed.podIds.filter(id => !parsed.isPmOnly[id]).length >= 2) {
-        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'inter-gas', this)">Quants Gaseous</button></li>`;
+        if (hasGas) {
+            tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'quants-gas', this)">Quants Gaseous</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-inter-gas" class="colloc-tab-pane">`;
         for (const key of ['co', 'no', 'no2', 'o3']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
             panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Inter-Pod Comparisons</div>`;
-            panelsHtml += `<div id="colloc-reg-inter-gas-${key}" style="width:100%;height:360px"></div>`;
+            panelsHtml += `<div id="colloc-reg-quants-gas-${key}" style="width:100%;height:360px"></div>`;
         }
         panelsHtml += '</div>';
+        }
     }
 
     // Tab: Data Sheet
@@ -9943,58 +9922,50 @@ function _renderCollocRegression(parsed, results) {
         }
     }
 
-    // Render Perma Pod regression plots (PM)
+    // Render Quants PM and Quants Gaseous
     if (hasPerma) {
+        // Each pod compared against permanent pod
         for (const key of ['pm25', 'pm10']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
-            buildRegRow(`colloc-reg-perma-pm-${key}`, key, p.label, parsed.podIds, shortSensorId(parsed.permaPodId),
+            buildRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, parsed.podIds, shortSensorId(parsed.permaPodId),
                 `${shortSensorId(parsed.permaPodId)} ${p.label}`,
                 (r, k) => r.perma[k],
                 (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
         }
-        // Gas
         if (hasGas) {
+            const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
             for (const key of ['co', 'no', 'no2', 'o3']) {
                 const p = COLLOC_PARAMS.find(x => x.key === key);
-                const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
-                buildRegRow(`colloc-reg-perma-gas-${key}`, key, p.label, gasPods, shortSensorId(parsed.permaPodId),
+                buildRegRow(`colloc-reg-quants-gas-${key}`, key, p.label, gasPods, shortSensorId(parsed.permaPodId),
                     `${shortSensorId(parsed.permaPodId)} ${p.label}`,
                     (r, k) => r.perma[k],
                     (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
             }
         }
-    }
-
-    // Render inter-pod PM regressions
-    if (parsed.podIds.length >= 2) {
-        // Build all pairwise pod combinations
-        const allPodIds = parsed.permaPod ? [parsed.permaPodId, ...parsed.podIds] : [...parsed.podIds];
+    } else if (parsed.podIds.length >= 2) {
+        // No permanent pod — inter-pod pairwise comparisons
         const pmPairs = [];
-        for (let i = 0; i < allPodIds.length; i++) {
-            for (let j = i + 1; j < allPodIds.length; j++) {
-                pmPairs.push({ ref: allPodIds[i], pod: allPodIds[j] });
+        for (let i = 0; i < parsed.podIds.length; i++) {
+            for (let j = i + 1; j < parsed.podIds.length; j++) {
+                pmPairs.push({ ref: parsed.podIds[i], pod: parsed.podIds[j] });
             }
         }
-
         for (const key of ['pm25', 'pm10']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
-            buildInterPodRegRow(`colloc-reg-inter-pm-${key}`, key, p.label, pmPairs, trimmed, parsed);
+            buildInterPodRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, pmPairs, trimmed, parsed);
         }
-    }
-
-    // Render inter-pod gaseous regressions
-    const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
-    const allGasPods = parsed.permaPod ? [parsed.permaPodId, ...gasPods] : [...gasPods];
-    if (allGasPods.length >= 2) {
-        const gasPairs = [];
-        for (let i = 0; i < allGasPods.length; i++) {
-            for (let j = i + 1; j < allGasPods.length; j++) {
-                gasPairs.push({ ref: allGasPods[i], pod: allGasPods[j] });
+        if (hasGas) {
+            const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
+            const gasPairs = [];
+            for (let i = 0; i < gasPods.length; i++) {
+                for (let j = i + 1; j < gasPods.length; j++) {
+                    gasPairs.push({ ref: gasPods[i], pod: gasPods[j] });
+                }
             }
-        }
-        for (const key of ['co', 'no', 'no2', 'o3']) {
-            const p = COLLOC_PARAMS.find(x => x.key === key);
-            buildInterPodRegRow(`colloc-reg-inter-gas-${key}`, key, p.label, gasPairs, trimmed, parsed);
+            for (const key of ['co', 'no', 'no2', 'o3']) {
+                const p = COLLOC_PARAMS.find(x => x.key === key);
+                buildInterPodRegRow(`colloc-reg-quants-gas-${key}`, key, p.label, gasPairs, trimmed, parsed);
+            }
         }
     }
 
