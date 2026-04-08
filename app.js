@@ -340,6 +340,22 @@ function createNote(type, text, tags, additionalInfo) {
     return note;
 }
 
+async function deleteAutoNotes(noteType, sensorIds) {
+    // Remove auto-generated notes of the given type tagged to any of the given sensors
+    const toRemove = notes.filter(n =>
+        n.type === noteType &&
+        sensorIds.some(sid => (n.taggedSensors || []).includes(sid))
+    );
+    toRemove.forEach(n => {
+        const idx = notes.indexOf(n);
+        if (idx >= 0) notes.splice(idx, 1);
+        supa.from('note_tags').delete().eq('note_id', n.id).then(() =>
+            supa.from('notes').delete().eq('id', n.id)
+        ).catch(err => console.error('Delete auto note error:', err));
+    });
+    if (toRemove.length > 0) console.log(`Deleted ${toRemove.length} auto-generated ${noteType} notes`);
+}
+
 function escapeHtml(str) {
     if (!str) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -6502,6 +6518,9 @@ async function deleteServiceTicket(ticketId) {
         const idx = serviceTickets.indexOf(ticket);
         if (idx >= 0) serviceTickets.splice(idx, 1);
 
+        // Delete auto-generated service notes
+        await deleteAutoNotes('Service', [ticket.sensorId]);
+
         // Remove from database
         try {
             await supa.from('service_tickets').delete().eq('id', ticketId);
@@ -6966,6 +6985,9 @@ async function deleteAudit(auditId) {
         // Remove from in-memory array
         const idx = audits.indexOf(audit);
         if (idx >= 0) audits.splice(idx, 1);
+
+        // Delete auto-generated audit notes
+        await deleteAutoNotes('Audit', [audit.auditPodId, audit.communityPodId]);
 
         // Remove from database
         try {
@@ -9054,9 +9076,12 @@ async function deleteCollocation(collocId) {
     if (!colloc) return;
     const communityName = getCommunityName(colloc.locationId);
 
-    showConfirm('Delete Collocation', `Delete this collocation at ${communityName} permanently?<br><br>This cannot be undone.`, async () => {
+    showConfirm('Delete Collocation', `Delete this collocation at ${communityName} permanently?<br><br>This will delete all collocation data, analysis results, and associated notes. This cannot be undone.`, async () => {
         const idx = collocations.indexOf(colloc);
         if (idx >= 0) collocations.splice(idx, 1);
+
+        // Delete auto-generated collocation notes
+        await deleteAutoNotes('Collocation', colloc.sensorIds);
 
         // Remove Collocation status from sensors
         colloc.sensorIds.forEach(sId => {
