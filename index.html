@@ -157,10 +157,10 @@
                 <div class="view-header">
                     <h1>All Sensors</h1>
                     <button class="btn btn-primary" onclick="openAddSensorModal()">+ Add Sensor</button>
+                    <button class="btn" onclick="openGlobalCollocationModal()">Create Collocation</button>
+                    <button class="btn" onclick="openAddNoteModal('', '')">Add Note</button>
                     <button class="btn" onclick="exportSensors()">Export</button>
                     <label class="import-link">Import Data <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importSensors(event)"></label>
-                    <button class="btn btn-primary" id="bulk-action-btn" style="display:none" onclick="openBulkActionModal()">Bulk Action (<span id="bulk-count">0</span>)</button>
-                    <button class="btn" id="bulk-clear-btn" style="display:none" onclick="clearSensorSelection()">Clear Selection</button>
                 </div>
                 <div class="filter-bar">
                     <input type="text" id="sensor-search" placeholder="Search sensors..." oninput="renderSensors()" aria-label="Search sensors">
@@ -1187,6 +1187,54 @@
                 <div class="modal-footer">
                     <button type="button" class="btn" onclick="closeModal('modal-collocation')">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Collocation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Global Collocation Modal -->
+    <div id="modal-global-collocation" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create Collocation</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-global-collocation')">&times;</button>
+            </div>
+            <form onsubmit="saveGlobalCollocation(event)">
+                <div class="form-group">
+                    <label>Location</label>
+                    <select id="global-colloc-location" required></select>
+                </div>
+                <div style="display:flex;gap:12px">
+                    <div class="form-group" style="flex:1">
+                        <label>Start Date</label>
+                        <input type="date" id="global-colloc-start" required>
+                    </div>
+                    <div class="form-group" style="flex:1">
+                        <label>End Date</label>
+                        <input type="date" id="global-colloc-end" required>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--slate-400);margin-top:4px;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400"><input type="checkbox" id="global-colloc-end-tbd" onchange="document.getElementById('global-colloc-end').disabled=this.checked;if(this.checked)document.getElementById('global-colloc-end').value='';document.getElementById('global-colloc-end').required=!this.checked" style="width:14px;height:14px;margin:0"> TBD</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Tag Sensors</label>
+                    <div class="tag-chip-container" id="global-colloc-sensors">
+                        <div class="tag-chips">
+                            <input type="text" class="tag-chip-input" placeholder="Type to search sensors...">
+                        </div>
+                        <div class="tag-chip-dropdown mention-dropdown"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Conducted By (optional)</label>
+                    <input type="text" id="global-colloc-conducted-by" placeholder="e.g. Ayla Crosby">
+                </div>
+                <div class="form-group">
+                    <label>Notes (optional)</label>
+                    <textarea id="global-colloc-notes" rows="3" placeholder="Any additional details about this collocation..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('modal-global-collocation')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Collocation</button>
                 </div>
             </form>
         </div>

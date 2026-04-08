@@ -5755,6 +5755,87 @@ function saveCollocation(e) {
     if (currentSensor === sensorId) showSensorView(sensorId);
 }
 
+function openGlobalCollocationModal() {
+    // Populate location dropdown — regulatory sites first, then alphabetical
+    const regulatorySites = ['anc-garden', 'fbx-ncore', 'jnu-floyd-dryden'];
+    const regulatory = COMMUNITIES.filter(c => regulatorySites.includes(c.id) || (getCommunityTags(c.id) || []).includes('Regulatory Site'));
+    const others = COMMUNITIES.filter(c => !regulatory.includes(c)).sort((a, b) => a.name.localeCompare(b.name));
+
+    const select = document.getElementById('global-colloc-location');
+    select.innerHTML = '<option value="">— Select Location —</option>' +
+        (regulatory.length > 0 ? `<optgroup label="Regulatory Sites">${regulatory.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</optgroup>` : '') +
+        `<optgroup label="Communities">${others.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</optgroup>`;
+
+    document.getElementById('global-colloc-start').value = '';
+    document.getElementById('global-colloc-end').value = '';
+    document.getElementById('global-colloc-end').disabled = false;
+    document.getElementById('global-colloc-end').required = true;
+    document.getElementById('global-colloc-end-tbd').checked = false;
+    document.getElementById('global-colloc-conducted-by').value = getCurrentUserName();
+    document.getElementById('global-colloc-notes').value = '';
+
+    // Clear sensor chips and init
+    document.querySelectorAll('#global-colloc-sensors .tag-chip').forEach(c => c.remove());
+    setupTagChipInput('global-colloc-sensors', () => sensors, s => s.id);
+
+    openModal('modal-global-collocation');
+}
+
+function saveGlobalCollocation(e) {
+    e.preventDefault();
+    const communityId = document.getElementById('global-colloc-location').value;
+    if (!communityId) return;
+    const communityName = getCommunityName(communityId);
+    const startDate = document.getElementById('global-colloc-start').value;
+    const endTbd = document.getElementById('global-colloc-end-tbd').checked;
+    const endDate = endTbd ? 'TBD' : document.getElementById('global-colloc-end').value;
+    if (!startDate) return;
+    if (!endTbd && !endDate) return;
+    if (!endTbd && new Date(endDate) < new Date(startDate)) { showAlert('Validation Error', 'End date must be after start date.'); return; }
+
+    const taggedSensors = getChipValues('global-colloc-sensors');
+    const conductedBy = document.getElementById('global-colloc-conducted-by').value.trim();
+    const extraNotes = document.getElementById('global-colloc-notes').value.trim();
+
+    if (taggedSensors.length === 0) { showAlert('Validation Error', 'Tag at least one sensor for this collocation.'); return; }
+
+    const endDisplay = endTbd ? 'TBD' : formatDate(endDate);
+    const noteText = `Collocation at ${communityName}: ${formatDate(startDate)} \u2013 ${endDisplay}.${conductedBy ? ' Conducted by ' + conductedBy + '.' : ''}${extraNotes ? ' ' + extraNotes : ''}`;
+
+    const beforeCollocationDates = {};
+    taggedSensors.forEach(sId => {
+        const s = sensors.find(x => x.id === sId);
+        if (s) beforeCollocationDates[sId] = s.collocationDates || '';
+    });
+
+    const structuredInfo = JSON.stringify({
+        userNotes: extraNotes || '',
+        location: communityName,
+        startDate: startDate,
+        endDate: endDate,
+        conductedBy: conductedBy,
+        beforeCollocationDates: beforeCollocationDates,
+    });
+
+    createNote('Collocation', noteText, {
+        sensors: taggedSensors,
+        communities: [communityId],
+    }, structuredInfo);
+
+    // Update each sensor's collocationDates for backward compat
+    taggedSensors.forEach(sId => {
+        const s = sensors.find(x => x.id === sId);
+        if (s) {
+            s.collocationDates = `${communityName}, ${formatDate(startDate)} \u2013 ${endDisplay}`;
+            persistSensor(s);
+        }
+    });
+
+    closeModal('modal-global-collocation');
+    showSuccessToast(`Collocation logged for ${taggedSensors.length} sensor${taggedSensors.length !== 1 ? 's' : ''}`);
+    refreshCurrentView();
+}
+
 // ===== PINNED SIDEBAR ITEMS =====
 let pinnedItems = loadData('pinnedItems', []);
 
