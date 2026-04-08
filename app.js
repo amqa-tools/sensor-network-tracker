@@ -9612,51 +9612,71 @@ function rebuildCollocCacheFromSaved(colloc) {
     return parsed;
 }
 
+// Store current collocation analysis context for lazy rendering
+let _collocRenderCtx = null;
+
 function renderCollocationAnalysisResults(collocId, parsed) {
     const colloc = collocations.find(c => c.id === collocId);
     if (!colloc) return;
-    const results = parsed.regressionResults || {};
-    const communityName = getCommunityName(colloc.locationId);
 
-    // Destroy any Chart.js instances
-    analysisChartInstances.forEach(c => { try { c.destroy(); } catch(e) {} });
-    analysisChartInstances = [];
+    try {
+        const results = parsed.regressionResults || {};
+        const communityName = getCommunityName(colloc.locationId);
 
-    const trimCount = parsed.trimIndex;
-    const totalCount = parsed.allRows.length;
-    const analysisCount = parsed.trimmedRows.length;
-    const bamLabel = parsed.bamLabel;
-    const podShorts = parsed.podIds.map(id => shortSensorId(id)).join(', ');
-    const permaShort = parsed.permaPodId ? shortSensorId(parsed.permaPodId) : '';
-    const titleParts = [bamLabel];
-    if (permaShort) titleParts.push(permaShort + ' (Permanent Pod)');
-    titleParts.push(...parsed.podIds.map(id => shortSensorId(id)));
+        analysisChartInstances.forEach(c => { try { c.destroy(); } catch(e) {} });
+        analysisChartInstances = [];
 
-    const body = document.getElementById('audit-analysis-body');
-    body.innerHTML = `
-        <div class="colloc-report-view">
-            <div class="colloc-title-block">
-                <div class="colloc-title-label">${escapeHtml(communityName)} Collocation Analysis</div>
-                <div class="colloc-title-main">${titleParts.map(t => escapeHtml(t)).join(' &bull; ')}</div>
-                <div class="colloc-title-dates">${colloc.startDate ? formatDate(colloc.startDate) : ''} &ndash; ${colloc.endDate && colloc.endDate !== 'TBD' ? formatDate(colloc.endDate) : 'TBD'}</div>
-                <div style="font-size:12px;color:#888;margin-top:4px">First 24 hours excluded (${trimCount} of ${totalCount} hourly rows trimmed) &mdash; analysis on ${analysisCount} rows</div>
+        const trimCount = parsed.trimIndex;
+        const totalCount = parsed.allRows.length;
+        const analysisCount = parsed.trimmedRows.length;
+        const bamLabel = parsed.bamLabel;
+        const permaShort = parsed.permaPodId ? shortSensorId(parsed.permaPodId) : '';
+        const titleParts = [bamLabel];
+        if (permaShort) titleParts.push(permaShort + ' (Permanent Pod)');
+        titleParts.push(...parsed.podIds.map(id => shortSensorId(id)));
+
+        // Store context for lazy rendering
+        _collocRenderCtx = { collocId, parsed, results, colloc };
+
+        const body = document.getElementById('audit-analysis-body');
+        body.innerHTML = `
+            <div class="colloc-report-view">
+                <div class="colloc-title-block">
+                    <div class="colloc-title-label">${escapeHtml(communityName)} Collocation Analysis</div>
+                    <div class="colloc-title-main">${titleParts.map(t => escapeHtml(t)).join(' &bull; ')}</div>
+                    <div class="colloc-title-dates">${colloc.startDate ? formatDate(colloc.startDate) : ''} &ndash; ${colloc.endDate && colloc.endDate !== 'TBD' ? formatDate(colloc.endDate) : 'TBD'}</div>
+                    <div style="font-size:12px;color:#888;margin-top:4px">First 24 hours excluded (${trimCount} of ${totalCount} hourly rows trimmed) &mdash; analysis on ${analysisCount} rows</div>
+                </div>
+
+                <div class="colloc-section-header"><h2>Time Series Collocation Results</h2></div>
+                <div id="colloc-ts-tabset"></div>
+
+                <div class="colloc-section-header"><h2>Multi-Sensor Regression Analysis</h2></div>
+                <div id="colloc-reg-tabset"></div>
+
+                <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center">
+                    <button class="btn btn-primary" onclick="generateCollocationReport('${collocId}')">Save as HTML</button>
+                    <button class="btn" onclick="delete collocAnalysisCache['${collocId}']; beginCollocationAnalysis('${collocId}')">Re-upload Data</button>
+                </div>
             </div>
+        `;
 
-            <div class="colloc-section-header"><h2>Time Series Collocation Results</h2></div>
-            <div id="colloc-ts-tabset"></div>
+        // Build tab HTML first (no charts yet), then render only visible charts
+        _buildCollocTSTabs(parsed, colloc);
+        _buildCollocRegTabs(parsed, results);
 
-            <div class="colloc-section-header"><h2>Multi-Sensor Regression Analysis</h2></div>
-            <div id="colloc-reg-tabset"></div>
+        // Render only the first visible chart after a brief delay (let DOM settle)
+        setTimeout(() => {
+            try {
+                _renderCollocTSChart(parsed, COLLOC_PARAMS[0].key, colloc);
+                _renderFirstVisibleRegTab(parsed, results);
+            } catch (err) { console.error('Chart render error:', err); }
+        }, 100);
 
-            <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center">
-                <button class="btn btn-primary" onclick="generateCollocationReport('${collocId}')">Save as HTML</button>
-                <button class="btn" onclick="delete collocAnalysisCache['${collocId}']; beginCollocationAnalysis('${collocId}')">Re-upload Data</button>
-            </div>
-        </div>
-    `;
-
-    _renderCollocTimeSeries(parsed, results, colloc);
-    _renderCollocRegression(parsed, results);
+    } catch (err) {
+        console.error('Analysis render error:', err);
+        document.getElementById('audit-analysis-body').innerHTML = `<div style="padding:20px;color:#c53030">Error rendering analysis: ${escapeHtml(err.message)}<br><br><button class="btn" onclick="delete collocAnalysisCache['${collocId}']; beginCollocationAnalysis('${collocId}')">Re-upload Data</button></div>`;
+    }
 }
 
 // ===== COLLOCATION PLOTLY RENDERING =====
@@ -9673,95 +9693,109 @@ function _collocNiceDtick(lo, hi) {
 
 function _collocPodColor(idx) { return COLLOC_POD_COLORS[idx % COLLOC_POD_COLORS.length]; }
 
-function _renderCollocTimeSeries(parsed, results, colloc) {
-    const container = document.getElementById('colloc-ts-tabset');
-    const hasBam = parsed.allRows.some(r => !isNaN(r.bam.pm25) || !isNaN(r.bam.pm10));
-    const hasGas = parsed.podIds.some(id => !parsed.isPmOnly[id]);
-    const params = hasGas ? COLLOC_PARAMS : COLLOC_PARAMS.filter(p => p.key === 'pm25' || p.key === 'pm10');
-    const paramLabels = { pm25: 'PM₂.₅ (µg/m³)', pm10: 'PM₁₀ (µg/m³)', co: 'CO (ppb)', no: 'NO (ppb)', no2: 'NO₂ (ppb)', o3: 'O₃ (ppb)' };
-
-    // Format dates as ISO strings for Plotly's date axis
-    const dates = parsed.allRows.map(r => {
+function _getCollocDates(parsed) {
+    return parsed.allRows.map(r => {
         const p = new Intl.DateTimeFormat('en-US', { timeZone: AK_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(r.timestamp);
         const get = type => (p.find(x => x.type === type) || {}).value || '00';
         return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
     });
+}
+
+function _buildCollocTSTabs(parsed, colloc) {
+    const container = document.getElementById('colloc-ts-tabset');
+    const hasGas = parsed.podIds.some(id => !parsed.isPmOnly[id]);
+    const params = hasGas ? COLLOC_PARAMS : COLLOC_PARAMS.filter(p => p.key === 'pm25' || p.key === 'pm10');
 
     let tabsHtml = '<ul class="colloc-nav-tabs">';
     let panelsHtml = '';
 
     params.forEach((p, i) => {
         const active = i === 0 ? ' active' : '';
-        tabsHtml += `<li><button class="colloc-nav-link${active}" onclick="_switchCollocTab('colloc-ts', '${p.key}', this)">${p.labelHtml}</button></li>`;
-
-        const plotId = `colloc-ts-plot-${p.key}`;
+        tabsHtml += `<li><button class="colloc-nav-link${active}" onclick="_switchCollocTabLazy('colloc-ts', '${p.key}', this, 'ts')">${p.labelHtml}</button></li>`;
         panelsHtml += `<div id="colloc-ts-tab-${p.key}" class="colloc-tab-pane${active}">
             <div class="colloc-plot-title"><h3>${p.labelHtml} Hourly Collocation Results</h3></div>
             <div class="colloc-plot-subtitle">Collocation Dates: ${colloc.startDate ? formatDate(colloc.startDate) : ''} &ndash; ${colloc.endDate && colloc.endDate !== 'TBD' ? formatDate(colloc.endDate) : 'TBD'}</div>
-            <div id="${plotId}" style="width:100%;height:420px"></div>
+            <div id="colloc-ts-plot-${p.key}" style="width:100%;height:420px"></div>
         </div>`;
     });
     tabsHtml += '</ul>';
     container.innerHTML = tabsHtml + '<div class="colloc-tab-content">' + panelsHtml + '</div>';
+}
 
-    // Render Plotly charts
-    params.forEach(p => {
-        const plotId = `colloc-ts-plot-${p.key}`;
-        const el = document.getElementById(plotId);
-        if (!el) return;
-        const traces = [];
+function _renderCollocTSChart(parsed, paramKey) {
+    const plotId = `colloc-ts-plot-${paramKey}`;
+    const el = document.getElementById(plotId);
+    if (!el || el.dataset.rendered) return;
+    el.dataset.rendered = '1';
 
-        // BAM (PM only)
-        if (hasBam && (p.key === 'pm25' || p.key === 'pm10')) {
-            traces.push({
-                x: dates, y: parsed.allRows.map(r => isNaN(r.bam[p.key]) ? null : r.bam[p.key]),
-                name: parsed.bamLabel, type: 'scatter', mode: 'lines',
-                line: { color: COLLOC_COLORS.BAM, width: 2.5 }, connectgaps: false,
-            });
-        }
+    const hasBam = parsed.allRows.some(r => !isNaN(r.bam.pm25) || !isNaN(r.bam.pm10));
+    const paramLabels = { pm25: 'PM₂.₅ (µg/m³)', pm10: 'PM₁₀ (µg/m³)', co: 'CO (ppb)', no: 'NO (ppb)', no2: 'NO₂ (ppb)', o3: 'O₃ (ppb)' };
+    const dates = _getCollocDates(parsed);
+    const traces = [];
 
-        // Permanent pod
-        if (parsed.permaPod) {
-            const vals = parsed.allRows.map(r => isNaN(r.perma[p.key]) ? null : r.perma[p.key]);
-            if (vals.some(v => v !== null)) {
-                traces.push({
-                    x: dates, y: vals,
-                    name: shortSensorId(parsed.permaPodId) + ' (Perma)', type: 'scatter', mode: 'lines',
-                    line: { color: COLLOC_COLORS.PERMA, width: 2 }, connectgaps: false,
-                });
-            }
-        }
+    if (hasBam && (paramKey === 'pm25' || paramKey === 'pm10')) {
+        traces.push({ x: dates, y: parsed.allRows.map(r => isNaN(r.bam[paramKey]) ? null : r.bam[paramKey]), name: parsed.bamLabel, type: 'scatter', mode: 'lines', line: { color: COLLOC_COLORS.BAM, width: 2.5 }, connectgaps: false });
+    }
+    if (parsed.permaPod) {
+        const vals = parsed.allRows.map(r => isNaN(r.perma[paramKey]) ? null : r.perma[paramKey]);
+        if (vals.some(v => v !== null)) traces.push({ x: dates, y: vals, name: shortSensorId(parsed.permaPodId) + ' (Perma)', type: 'scatter', mode: 'lines', line: { color: COLLOC_COLORS.PERMA, width: 2 }, connectgaps: false });
+    }
+    parsed.podIds.forEach((podId, idx) => {
+        if (parsed.isPmOnly[podId] && paramKey !== 'pm25' && paramKey !== 'pm10') return;
+        const vals = parsed.allRows.map(r => isNaN(r.pods[podId]?.[paramKey]) ? null : r.pods[podId][paramKey]);
+        if (!vals.some(v => v !== null)) return;
+        traces.push({ x: dates, y: vals, name: shortSensorId(podId), type: 'scatter', mode: 'lines', line: { color: _collocPodColor(idx), width: 1.5 }, connectgaps: false });
+    });
 
-        // Community pods
-        parsed.podIds.forEach((podId, idx) => {
-            if (parsed.isPmOnly[podId] && p.key !== 'pm25' && p.key !== 'pm10') return;
-            const vals = parsed.allRows.map(r => isNaN(r.pods[podId]?.[p.key]) ? null : r.pods[podId][p.key]);
-            if (!vals.some(v => v !== null)) return;
-            traces.push({
-                x: dates, y: vals,
-                name: shortSensorId(podId), type: 'scatter', mode: 'lines',
-                line: { color: _collocPodColor(idx), width: 1.5 }, connectgaps: false,
-            });
-        });
+    const allY = traces.flatMap(t => t.y.filter(v => v !== null));
+    const yMin = allY.length > 0 ? Math.min(...allY) : 0;
+    const yMax = allY.length > 0 ? Math.max(...allY) : 1;
+    const dt = _collocNiceDtick(yMin, yMax);
 
-        const allY = traces.flatMap(t => t.y.filter(v => v !== null));
-        const yMin = allY.length > 0 ? Math.min(...allY) : 0;
-        const yMax = allY.length > 0 ? Math.max(...allY) : 1;
-        const dt = _collocNiceDtick(yMin, yMax);
-
+    try {
         Plotly.newPlot(plotId, traces, {
             margin: { t: 8, b: 45, l: 80, r: 15 },
             xaxis: { title: 'Date', type: 'date', gridcolor: '#ddd' },
-            yaxis: { title: { text: paramLabels[p.key], standoff: 10 }, gridcolor: '#ddd', range: [Math.floor(yMin / dt) * dt, Math.ceil(yMax / dt) * dt], dtick: dt, tickfont: { size: 11 } },
+            yaxis: { title: { text: paramLabels[paramKey], standoff: 10 }, gridcolor: '#ddd', range: [Math.floor(yMin / dt) * dt, Math.ceil(yMax / dt) * dt], dtick: dt, tickfont: { size: 11 } },
             legend: { orientation: 'h', y: 1.12, x: 0.5, xanchor: 'center', font: { size: 12 } },
             plot_bgcolor: '#fff', paper_bgcolor: 'rgba(0,0,0,0)',
             font: { family: 'Segoe UI, system-ui, sans-serif', size: 12 },
             hovermode: 'x unified',
         }, { responsive: true });
-    });
+    } catch (err) { console.error('TS chart error for', paramKey, err); }
 }
 
-function _renderCollocRegression(parsed, results) {
+function _switchCollocTabLazy(group, name, btn, chartType) {
+    const tabset = btn.closest('#' + group + '-tabset') || btn.closest('[id$="-tabset"]');
+    if (!tabset) return;
+    tabset.querySelectorAll('.colloc-tab-pane').forEach(el => el.classList.remove('active'));
+    tabset.querySelectorAll('.colloc-nav-link').forEach(el => el.classList.remove('active'));
+    const pane = tabset.querySelector('#' + group + '-tab-' + name);
+    if (pane) pane.classList.add('active');
+    btn.classList.add('active');
+
+    // Lazy render chart after tab is visible
+    if (!_collocRenderCtx) return;
+    const { parsed, results, colloc } = _collocRenderCtx;
+    setTimeout(() => {
+        try {
+            if (chartType === 'ts') {
+                _renderCollocTSChart(parsed, name);
+            } else if (chartType === 'reg') {
+                _renderCollocRegChart(parsed, results, name);
+            }
+            window.dispatchEvent(new Event('resize'));
+        } catch (err) { console.error('Lazy chart render error:', err); }
+    }, 50);
+}
+
+function _renderFirstVisibleRegTab(parsed, results) {
+    const hasBam = Object.keys(results.bamVsPods || {}).length > 0;
+    const firstTab = hasBam ? 'bam' : (parsed.permaPod ? 'quants-pm' : 'quants-pm');
+    _renderCollocRegChart(parsed, results, firstTab);
+}
+
+function _buildCollocRegTabs(parsed, results) {
     const container = document.getElementById('colloc-reg-tabset');
     const hasBam = Object.keys(results.bamVsPods || {}).length > 0;
     const hasPerma = Object.keys(results.permaVsPods || {}).length > 0;
@@ -9775,7 +9809,7 @@ function _renderCollocRegression(parsed, results) {
     // Tab: Pods vs BAM
     if (hasBam) {
         const active = tabIdx === 0 ? ' active' : '';
-        tabsHtml += `<li><button class="colloc-nav-link${active}" onclick="_switchCollocTab('colloc-reg', 'bam', this)">Pods vs ${parsed.bamLabel}</button></li>`;
+        tabsHtml += `<li><button class="colloc-nav-link${active}" onclick="_switchCollocTabLazy('colloc-reg', 'bam', this, 'reg')">Pods vs ${parsed.bamLabel}</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-bam" class="colloc-tab-pane${active}">`;
         for (const key of ['pm25', 'pm10']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
@@ -9790,7 +9824,7 @@ function _renderCollocRegression(parsed, results) {
     const podShortList = parsed.podIds.map(id => shortSensorId(id)).join(', ');
     const permaShort = parsed.permaPodId ? shortSensorId(parsed.permaPodId) : '';
     if (hasPerma) {
-        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'quants-pm', this)">Quants PM</button></li>`;
+        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-pm', this, 'reg')">Quants PM</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-quants-pm" class="colloc-tab-pane">`;
         for (const key of ['pm25', 'pm10']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
@@ -9801,7 +9835,7 @@ function _renderCollocRegression(parsed, results) {
 
         // Quants Gaseous — pods vs permanent pod for gas
         if (hasGas) {
-            tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'quants-gas', this)">Quants Gaseous</button></li>`;
+            tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-gas', this, 'reg')">Quants Gaseous</button></li>`;
             panelsHtml += `<div id="colloc-reg-tab-quants-gas" class="colloc-tab-pane">`;
             for (const key of ['co', 'no', 'no2', 'o3']) {
                 const p = COLLOC_PARAMS.find(x => x.key === key);
@@ -9812,7 +9846,7 @@ function _renderCollocRegression(parsed, results) {
         }
     } else if (parsed.podIds.length >= 2) {
         // No permanent pod — do inter-pod comparisons
-        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'quants-pm', this)">Quants PM</button></li>`;
+        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-pm', this, 'reg')">Quants PM</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-quants-pm" class="colloc-tab-pane">`;
         for (const key of ['pm25', 'pm10']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
@@ -9822,7 +9856,7 @@ function _renderCollocRegression(parsed, results) {
         panelsHtml += '</div>';
 
         if (hasGas) {
-            tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'quants-gas', this)">Quants Gaseous</button></li>`;
+            tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-gas', this, 'reg')">Quants Gaseous</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-inter-gas" class="colloc-tab-pane">`;
         for (const key of ['co', 'no', 'no2', 'o3']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
@@ -9834,13 +9868,22 @@ function _renderCollocRegression(parsed, results) {
     }
 
     // Tab: Data Sheet
-    tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'data', this)">Data Sheet</button></li>`;
+    tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'data', this, 'reg')">Data Sheet</button></li>`;
     panelsHtml += `<div id="colloc-reg-tab-data" class="colloc-tab-pane"><div id="colloc-data-sheet"></div></div>`;
 
     tabsHtml += '</ul>';
     container.innerHTML = tabsHtml + '<div class="colloc-tab-content">' + panelsHtml + '</div>';
 
-    // Build regression subplot grids using Plotly
+    // Render data sheet immediately (it's just a table, not Plotly)
+    _renderCollocDataSheet(parsed);
+}
+
+function _renderCollocRegChart(parsed, results, tabName) {
+    const trimmed = parsed.trimmedRows;
+    const hasBam = Object.keys(results.bamVsPods || {}).length > 0;
+    const hasPerma = Object.keys(results.permaVsPods || {}).length > 0;
+    const hasGas = parsed.podIds.some(id => !parsed.isPmOnly[id]);
+
     function buildRegRow(divId, paramKey, paramLabel, podIds, refKey, refLabel, getRefVal, getPodVal) {
         const el = document.getElementById(divId);
         if (!el) return;
@@ -9915,67 +9958,62 @@ function _renderCollocRegression(parsed, results) {
         Plotly.newPlot(divId, traces, layout, { responsive: true });
     }
 
-    // Render BAM regression plots
-    if (hasBam) {
+    // Only render charts for the requested tab
+    if (tabName === 'bam' && hasBam) {
         for (const key of ['pm25', 'pm10']) {
+            if (document.getElementById(`colloc-reg-bam-${key}`)?.dataset.rendered) continue;
             const p = COLLOC_PARAMS.find(x => x.key === key);
             const allPods = parsed.permaPod ? [parsed.permaPodId, ...parsed.podIds] : [...parsed.podIds];
             buildRegRow(`colloc-reg-bam-${key}`, key, p.label, allPods, parsed.bamLabel,
                 `${parsed.bamLabel} ${p.label}`,
                 (r, k) => r.bam[k],
                 (r, podId, k) => podId === parsed.permaPodId ? r.perma[k] : (r.pods[podId]?.[k] ?? NaN));
+            const el = document.getElementById(`colloc-reg-bam-${key}`); if (el) el.dataset.rendered = '1';
         }
-    }
-
-    // Render Quants PM and Quants Gaseous
-    if (hasPerma) {
-        // Each pod compared against permanent pod
-        for (const key of ['pm25', 'pm10']) {
-            const p = COLLOC_PARAMS.find(x => x.key === key);
-            buildRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, parsed.podIds, shortSensorId(parsed.permaPodId),
-                `${shortSensorId(parsed.permaPodId)} ${p.label}`,
-                (r, k) => r.perma[k],
-                (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
+    } else if (tabName === 'quants-pm') {
+        if (hasPerma) {
+            for (const key of ['pm25', 'pm10']) {
+                if (document.getElementById(`colloc-reg-quants-pm-${key}`)?.dataset.rendered) continue;
+                const p = COLLOC_PARAMS.find(x => x.key === key);
+                buildRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, parsed.podIds, shortSensorId(parsed.permaPodId),
+                    `${shortSensorId(parsed.permaPodId)} ${p.label}`,
+                    (r, k) => r.perma[k], (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
+                const el = document.getElementById(`colloc-reg-quants-pm-${key}`); if (el) el.dataset.rendered = '1';
+            }
+        } else {
+            const pmPairs = [];
+            for (let i = 0; i < parsed.podIds.length; i++) for (let j = i + 1; j < parsed.podIds.length; j++) pmPairs.push({ ref: parsed.podIds[i], pod: parsed.podIds[j] });
+            for (const key of ['pm25', 'pm10']) {
+                if (document.getElementById(`colloc-reg-quants-pm-${key}`)?.dataset.rendered) continue;
+                const p = COLLOC_PARAMS.find(x => x.key === key);
+                buildInterPodRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, pmPairs, trimmed, parsed);
+                const el = document.getElementById(`colloc-reg-quants-pm-${key}`); if (el) el.dataset.rendered = '1';
+            }
         }
-        if (hasGas) {
+    } else if (tabName === 'quants-gas' && hasGas) {
+        if (hasPerma) {
             const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
             for (const key of ['co', 'no', 'no2', 'o3']) {
+                if (document.getElementById(`colloc-reg-quants-gas-${key}`)?.dataset.rendered) continue;
                 const p = COLLOC_PARAMS.find(x => x.key === key);
                 buildRegRow(`colloc-reg-quants-gas-${key}`, key, p.label, gasPods, shortSensorId(parsed.permaPodId),
                     `${shortSensorId(parsed.permaPodId)} ${p.label}`,
-                    (r, k) => r.perma[k],
-                    (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
+                    (r, k) => r.perma[k], (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
+                const el = document.getElementById(`colloc-reg-quants-gas-${key}`); if (el) el.dataset.rendered = '1';
             }
-        }
-    } else if (parsed.podIds.length >= 2) {
-        // No permanent pod — inter-pod pairwise comparisons
-        const pmPairs = [];
-        for (let i = 0; i < parsed.podIds.length; i++) {
-            for (let j = i + 1; j < parsed.podIds.length; j++) {
-                pmPairs.push({ ref: parsed.podIds[i], pod: parsed.podIds[j] });
-            }
-        }
-        for (const key of ['pm25', 'pm10']) {
-            const p = COLLOC_PARAMS.find(x => x.key === key);
-            buildInterPodRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, pmPairs, trimmed, parsed);
-        }
-        if (hasGas) {
+        } else {
             const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
             const gasPairs = [];
-            for (let i = 0; i < gasPods.length; i++) {
-                for (let j = i + 1; j < gasPods.length; j++) {
-                    gasPairs.push({ ref: gasPods[i], pod: gasPods[j] });
-                }
-            }
+            for (let i = 0; i < gasPods.length; i++) for (let j = i + 1; j < gasPods.length; j++) gasPairs.push({ ref: gasPods[i], pod: gasPods[j] });
             for (const key of ['co', 'no', 'no2', 'o3']) {
+                if (document.getElementById(`colloc-reg-quants-gas-${key}`)?.dataset.rendered) continue;
                 const p = COLLOC_PARAMS.find(x => x.key === key);
                 buildInterPodRegRow(`colloc-reg-quants-gas-${key}`, key, p.label, gasPairs, trimmed, parsed);
+                const el = document.getElementById(`colloc-reg-quants-gas-${key}`); if (el) el.dataset.rendered = '1';
             }
         }
     }
-
-    // Render data sheet
-    _renderCollocDataSheet(parsed);
+    // Data sheet tab doesn't need Plotly rendering
 }
 
 function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed) {
