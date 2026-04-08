@@ -54,8 +54,9 @@ function showAlert(title, message, onDismiss) {
 
 function acceptConfirmModal() {
     const modal = document.getElementById('modal-confirm');
-    modal.classList.remove('open');
+    // Run callback BEFORE closing modal so form inputs are still accessible
     if (_confirmCallback) { const cb = _confirmCallback; _confirmCallback = null; _confirmDismissCallback = null; cb(); }
+    modal.classList.remove('open');
 }
 
 function dismissConfirmModal() {
@@ -3440,33 +3441,37 @@ function openAddNoteModal(contextId, contextType) {
         c => c.name
     );
 
-    // Show status change option only when on a sensor page
-    const statusGroup = document.getElementById('note-status-change-group');
-    const statusCheckbox = document.getElementById('note-change-status');
-    const statusList = document.getElementById('note-status-list');
+    // Reset all action checkboxes
+    document.querySelectorAll('#note-actions-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+    document.getElementById('note-status-change-group').style.display = 'none';
+    document.getElementById('note-audit-link-group').style.display = 'none';
+
+    // Show status change action only when on a sensor page
+    const statusLabel = document.getElementById('note-action-status-label');
     if (contextType === 'sensor') {
-        statusGroup.style.display = '';
-        statusCheckbox.checked = false;
-        statusList.style.display = 'none';
+        statusLabel.style.display = '';
         const s = sensors.find(x => x.id === contextId);
         renderStatusToggleList('note-status-list', s ? getStatusArray(s) : []);
     } else {
-        statusGroup.style.display = 'none';
+        statusLabel.style.display = 'none';
     }
-
-    // Reset audit link
-    document.getElementById('note-audit-link-group').style.display = 'none';
 
     openModal('modal-add-note');
 }
 
-function onNoteTypeChange() {
-    const type = document.getElementById('note-type-input').value;
+function onNoteActionsChange() {
+    const auditChecked = document.getElementById('note-action-audit').checked;
+    const statusChecked = document.getElementById('note-action-status').checked;
+
+    // Show/hide status toggle list
+    const statusGroup = document.getElementById('note-status-change-group');
+    statusGroup.style.display = statusChecked ? '' : 'none';
+
+    // Show/hide audit link options
     const linkGroup = document.getElementById('note-audit-link-group');
-    if (type === 'Audit') {
+    if (auditChecked) {
         const contextId = document.getElementById('note-context-id').value;
         const contextType = document.getElementById('note-context-type').value;
-        // Find relevant audits for this sensor or community
         let relevantAudits;
         if (contextType === 'sensor') {
             relevantAudits = audits.filter(a => a.auditPodId === contextId || a.communityPodId === contextId);
@@ -3491,11 +3496,24 @@ function onNoteTypeChange() {
     }
 }
 
+function getNoteActionsType() {
+    const actions = [];
+    if (document.getElementById('note-action-install').checked) actions.push('Sensor Install');
+    if (document.getElementById('note-action-removal').checked) actions.push('Sensor Removal');
+    if (document.getElementById('note-action-troubleshooting').checked) actions.push('Troubleshooting');
+    if (document.getElementById('note-action-audit').checked) actions.push('Audit');
+    if (document.getElementById('note-action-site-work').checked) actions.push('Site Work');
+    if (document.getElementById('note-action-status').checked) actions.push('Status Change');
+    if (actions.length === 0) return 'General';
+    if (actions.length === 1) return actions[0];
+    return actions.join(' + ');
+}
+
 function saveNote(e) {
     e.preventDefault();
 
     const text = document.getElementById('note-text-input').value.trim();
-    const type = document.getElementById('note-type-input').value;
+    const type = getNoteActionsType();
     const noteDate = document.getElementById('note-date-input').value || nowDatetime();
 
     const sensorTags = getChipValues('tag-sensors-container');
@@ -3533,7 +3551,7 @@ function saveNote(e) {
     // Apply status change if checked — merge into the same note
     const contextType = document.getElementById('note-context-type').value;
     const contextId = document.getElementById('note-context-id').value;
-    if (contextType === 'sensor' && document.getElementById('note-change-status').checked) {
+    if (contextType === 'sensor' && document.getElementById('note-action-status').checked) {
         const newStatuses = getSelectedStatuses('note-status-list');
         const s = sensors.find(x => x.id === contextId);
         if (s && newStatuses.length > 0) {
@@ -3544,7 +3562,7 @@ function saveNote(e) {
             if (!setupMode) {
                 const statusText = `${s.id} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
                 note.text = note.text + '\n' + statusText;
-                note.type = 'Status Change';
+                // note.type already set by getNoteActionsType() which includes 'Status Change'
                 // Ensure sensor and community are tagged
                 if (!note.taggedSensors.includes(s.id)) note.taggedSensors.push(s.id);
                 if (s.community && !note.taggedCommunities.includes(s.community)) note.taggedCommunities.push(s.community);
@@ -4407,7 +4425,17 @@ function renderStatusToggleList(containerId, selectedStatuses) {
 }
 
 function toggleStatusOption(el) {
+    const status = el.dataset.status;
+    const isBecomingActive = !el.classList.contains('active');
     el.classList.toggle('active');
+
+    // Online and Offline are mutually exclusive
+    if (isBecomingActive && (status === 'Online' || status === 'Offline')) {
+        const opposite = status === 'Online' ? 'Offline' : 'Online';
+        const container = el.parentElement;
+        const oppositeEl = container.querySelector(`.status-toggle-option[data-status="${opposite}"]`);
+        if (oppositeEl) oppositeEl.classList.remove('active');
+    }
 }
 
 function saveSetupSensorStatus(sensorId) {

@@ -675,21 +675,22 @@
                 <input type="hidden" id="note-context-id">
                 <input type="hidden" id="note-context-type">
                 <div class="form-group">
-                    <label>Note Type</label>
-                    <select id="note-type-input" onchange="onNoteTypeChange()">
-                        <option value="General">General</option>
-                        <option value="Audit">Audit / Collocation</option>
-                        <option value="Site Work">Site Work</option>
-                        <option value="Issue">Issue</option>
-                    </select>
+                    <label>Actions <span style="font-weight:400;color:var(--slate-400)">(optional)</span></label>
+                    <div id="note-actions-list" style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+                        <label class="note-action-option"><input type="checkbox" id="note-action-install" onchange="onNoteActionsChange()"> Sensor Install</label>
+                        <label class="note-action-option"><input type="checkbox" id="note-action-removal" onchange="onNoteActionsChange()"> Sensor Removal</label>
+                        <label class="note-action-option"><input type="checkbox" id="note-action-troubleshooting" onchange="onNoteActionsChange()"> Troubleshooting</label>
+                        <label class="note-action-option"><input type="checkbox" id="note-action-audit" onchange="onNoteActionsChange()"> Audit / Collocation</label>
+                        <label class="note-action-option"><input type="checkbox" id="note-action-site-work" onchange="onNoteActionsChange()"> Site Work</label>
+                        <label class="note-action-option" id="note-action-status-label" style="display:none"><input type="checkbox" id="note-action-status" onchange="onNoteActionsChange()"> Sensor Status Change</label>
+                    </div>
                 </div>
                 <div id="note-audit-link-group" style="display:none;margin-bottom:8px">
                     <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px">Link to audit</label>
                     <div id="note-audit-link-options" style="margin-top:4px"></div>
                 </div>
-                <div class="form-group" id="note-status-change-group" style="display:none">
-                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--slate-600);text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" id="note-change-status" onchange="document.getElementById('note-status-list').style.display = this.checked ? '' : 'none'" style="width:16px;height:16px"> Also change sensor status</label>
-                    <div id="note-status-list" class="status-toggle-list" style="display:none;margin-top:6px"></div>
+                <div id="note-status-change-group" style="display:none">
+                    <div id="note-status-list" class="status-toggle-list" style="margin-top:6px"></div>
                 </div>
                 <div class="form-group">
                     <label>Date</label>

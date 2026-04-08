@@ -3071,6 +3071,24 @@ tr:hover .contact-delete-btn {
     letter-spacing: 0.04em;
 }
 
+.note-action-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--slate-600);
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: pointer;
+    padding: 4px 0;
+}
+.note-action-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--navy-500);
+}
+
 .form-group input,
 .form-group select,
 .form-group textarea {
