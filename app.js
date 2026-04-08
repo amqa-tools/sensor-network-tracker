@@ -8868,7 +8868,7 @@ function persistCollocationUpdate(id, updates) {
 function updateSidebarCollocationCount() {
     const el = document.getElementById('sidebar-colloc-count');
     if (!el) return;
-    const count = collocations.filter(c => c.status === 'In Progress' || c.status === 'Complete').length;
+    const count = collocations.filter(c => c.status !== 'Collocation Complete').length;
     el.textContent = count > 0 ? `(${count})` : '';
 }
 
@@ -9891,9 +9891,12 @@ function _renderCollocDataSheet(parsed) {
     }
 
     let rowsHtml = '';
-    for (const row of parsed.allRows) {
+    for (let i = 0; i < parsed.allRows.length; i++) {
+        const row = parsed.allRows[i];
+        const isTrimmed = i < parsed.trimIndex;
         const dateStr = row.timestamp.toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: AK_TZ });
-        let cells = `<td style="text-align:left;font-weight:500">${dateStr}</td>`;
+        const rowStyle = isTrimmed ? ' style="background:#fff8e8;opacity:0.5"' : '';
+        let cells = `<td style="text-align:left;font-weight:500">${dateStr}${isTrimmed ? ' *' : ''}</td>`;
         if (hasBam) {
             for (const k of ['pm25', 'pm10']) {
                 const v = row.bam[k];
@@ -9914,14 +9917,15 @@ function _renderCollocDataSheet(parsed) {
                 cells += `<td${isNaN(v) ? ' class="red"' : ''}>${isNaN(v) ? '' : v.toFixed(3)}</td>`;
             }
         }
-        rowsHtml += `<tr>${cells}</tr>`;
+        rowsHtml += `<tr${rowStyle}>${cells}</tr>`;
     }
 
     container.innerHTML = `
         <div style="margin:8px 0 4px;font-size:13px;color:#555;line-height:1.6">
+            <span style="display:inline-block;width:14px;height:14px;background:#fff8e8;border:1px solid #d4a84b;vertical-align:middle;margin-right:4px;border-radius:2px"></span>
+            Yellow-shaded rows (*) are the first 24 hours — excluded from regression analysis.<br>
             <span style="display:inline-block;width:14px;height:14px;background:#ffe0e0;border:2px solid #e53e3e;vertical-align:middle;margin-right:4px;border-radius:2px"></span>
-            Red-highlighted cells indicate missing or flagged data from the original spreadsheet.<br>
-            <strong>Note:</strong> All red-highlighted cells are excluded from the time series plots and regression analysis above.
+            Red-highlighted cells indicate missing or flagged data, also excluded from analysis.
         </div>
         <div style="overflow:auto;max-height:70vh;border:1px solid #ccc;border-radius:6px;margin-top:10px">
             <table style="border-collapse:collapse;font-size:11px;white-space:nowrap">
