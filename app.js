@@ -9168,6 +9168,7 @@ function beginCollocationAnalysis(collocId) {
             <strong>Data Preparation Instructions:</strong>
             <ol>
                 <li>Export hourly data from AirVision for the BAM, permanent pod, and all community pods</li>
+                <li>When selecting regulatory site data, use <strong>PM2.5 and PM10 local conditions</strong></li>
                 <li>Clean up: remove any invalidated data</li>
                 <li>Trim to the collocation period dates</li>
                 <li><strong>Do not remove the first 24 hours</strong> — the app will automatically exclude them from regression</li>
