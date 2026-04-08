@@ -1844,12 +1844,6 @@ function saveStatusChange(e) {
     renderSensors();
     if (currentSensor === sensorId) showSensorView(sensorId);
     if (currentCommunity) showCommunityView(currentCommunity);
-
-    // Prompt to update install date if "Online" was just added
-    if (!setupMode && newStatuses.includes('Online') && !oldStatuses.includes('Online')) {
-        const today = nowDatetime().split('T')[0];
-        promptInstallDateUpdate(sensorId, today, `${sensorId} status was changed to Online.`);
-    }
 }
 
 // ===== INSTALL DATE PROMPT =====
@@ -1979,10 +1973,13 @@ function moveSensor(e) {
     if (currentSensor === sensorId) showSensorView(sensorId);
     if (currentCommunity) showCommunityView(currentCommunity);
 
-    // Prompt to update install date after move
+    // Prompt to update install date after move (skip lab locations)
     if (!setupMode) {
-        const suggestedDate = moveDate.split('T')[0] || nowDatetime().split('T')[0];
-        promptInstallDateUpdate(sensorId, suggestedDate, `${s.id} was moved to ${toName}.`);
+        const isLabLocation = toCommunityId.includes('lab') || toName.toLowerCase().includes('lab');
+        if (!isLabLocation) {
+            const suggestedDate = moveDate.split('T')[0] || nowDatetime().split('T')[0];
+            promptInstallDateUpdate(sensorId, suggestedDate, `${s.id} was moved to ${toName}.`);
+        }
     }
 }
 
