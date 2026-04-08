@@ -196,6 +196,9 @@ async function loadAllData() {
     // Remove Collocation status from sensors with no active collocation
     cleanupStaleCollocationStatuses();
 
+    // Clean up orphaned Collocation notes (notes tagged to sensors with no matching active collocation)
+    cleanupOrphanedCollocationNotes();
+
     // Merge duplicate status change notes with general notes created at same time
     mergeStatusChangeNotes();
 
@@ -236,6 +239,29 @@ function cleanupStaleCollocationStatuses() {
             persistSensor(s);
         }
     });
+}
+
+function cleanupOrphanedCollocationNotes() {
+    // Remove Collocation-type notes that reference sensors not in any active collocation
+    const collocSensorIds = new Set();
+    collocations.forEach(c => (c.sensorIds || []).forEach(id => collocSensorIds.add(id)));
+
+    const orphaned = notes.filter(n =>
+        n.type === 'Collocation' &&
+        (n.taggedSensors || []).length > 0 &&
+        !(n.taggedSensors || []).some(sid => collocSensorIds.has(sid))
+    );
+
+    if (orphaned.length > 0) {
+        console.log(`Cleaning up ${orphaned.length} orphaned Collocation notes`);
+        orphaned.forEach(n => {
+            const idx = notes.indexOf(n);
+            if (idx >= 0) notes.splice(idx, 1);
+            supa.from('note_tags').delete().eq('note_id', n.id).then(() =>
+                supa.from('notes').delete().eq('id', n.id)
+            ).catch(err => console.error('Delete orphaned collocation note error:', err));
+        });
+    }
 }
 
 function mergeStatusChangeNotes() {
