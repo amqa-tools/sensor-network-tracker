@@ -88,7 +88,7 @@ const db = {
     },
 
     async setAppSetting(key, value) {
-        const { error } = await supa.from('app_settings').upsert({ key, value, updated_at: nowDatetime() });
+        const { error } = await supa.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() });
         if (error) throw error;
     },
 
@@ -165,7 +165,7 @@ const db = {
             date_purchased: sensor.datePurchased || '',
             collocation_dates: sensor.collocationDates || '',
             date_installed: sensor.dateInstalled || '',
-            updated_at: nowDatetime(),
+            updated_at: new Date().toISOString(),
         });
         if (error) throw error;
     },
@@ -412,7 +412,7 @@ const db = {
     },
 
     async updateAudit(id, updates) {
-        const row = { updated_at: nowDatetime() };
+        const row = { updated_at: new Date().toISOString() };
         const map = { status: 'status', scheduledStart: 'scheduled_start', scheduledEnd: 'scheduled_end',
             actualStart: 'actual_start', actualEnd: 'actual_end', conductedBy: 'conducted_by',
             notes: 'notes', analysisResults: 'analysis_results',
@@ -522,7 +522,7 @@ const db = {
     },
 
     async updateServiceTicket(id, updates) {
-        const row = { updated_at: nowDatetime() };
+        const row = { updated_at: new Date().toISOString() };
         for (const [k, v] of Object.entries(updates)) {
             const map = { rmaNumber: 'rma_number', fedexTrackingTo: 'fedex_tracking_to', fedexTrackingFrom: 'fedex_tracking_from', issueDescription: 'issue_description', progressNotes: 'quant_notes', workCompleted: 'work_completed', closedAt: 'closed_at', status: 'status' };
             if (k === 'progressNotes') { row['quant_notes'] = JSON.stringify(v); continue; }

@@ -374,7 +374,7 @@ function createNote(type, text, tags, additionalInfo) {
         text,
         additionalInfo: additionalInfo || '',
         createdBy: getCurrentUserName(), createdById: currentUserId,
-        createdAt: nowDatetime(),
+        createdAt: new Date().toISOString(),
         taggedSensors: tags?.sensors || [],
         taggedCommunities: tags?.communities || [],
         taggedContacts: tags?.contacts || [],
@@ -3613,7 +3613,7 @@ function saveNote(e) {
         type: type,
         text: text,
         createdBy: getCurrentUserName(), createdById: currentUserId,
-        createdAt: nowDatetime(),
+        createdAt: new Date().toISOString(),
         taggedSensors: sensorTags,
         taggedCommunities: communityTags,
         taggedContacts: contactTags,
@@ -6632,7 +6632,7 @@ async function saveNewTicket(event) {
     const ticket = { sensorId, ticketType, status: rmaNumber ? 'RMA Assigned' : 'Ticket Opened',
         rmaNumber, fedexTrackingTo: '', fedexTrackingFrom: '', issueDescription: description,
         progressNotes: [], workCompleted: '', createdBy: getCurrentUserName(), createdById: currentUserId,
-        createdAt: nowDatetime(), closedAt: null };
+        createdAt: new Date().toISOString(), closedAt: null };
     try {
         const saved = await db.insertServiceTicket(ticket);
         serviceTickets.unshift(saved);
@@ -7081,6 +7081,8 @@ async function deleteAudit(auditId) {
 function beginAnalysis(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
+    // Close audit detail modal first so analysis modal is visible
+    closeModal('modal-audit-detail');
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
 
     const hasResults = Object.keys(audit.analysisResults || {}).length > 0;
@@ -7413,7 +7415,7 @@ function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collected
         }
     });
     audit.analysisName = analysisName;
-    audit.analysisUploadDate = nowDatetime();
+    audit.analysisUploadDate = new Date().toISOString();
     audit.analysisUploadedBy = getCurrentUserName();
 
     // Store any collected notes
@@ -9194,6 +9196,9 @@ function beginCollocationAnalysis(collocId) {
     const communityName = getCommunityName(colloc.locationId);
     const hasResults = Object.keys(colloc.analysisResults || {}).length > 0;
 
+    // Close the collocation detail modal first so the analysis modal is visible
+    closeModal('modal-collocation-detail');
+
     if (hasResults && collocAnalysisCache[collocId]) {
         document.getElementById('analysis-modal-title').textContent = colloc.analysisName || `Collocation Analysis: ${communityName}`;
         renderCollocationAnalysisResults(collocId, collocAnalysisCache[collocId]);
@@ -9540,7 +9545,7 @@ function finalizeCollocationAnalysis(collocId, colloc, parsed, analysisName, bam
     }
 
     colloc.analysisName = analysisName;
-    colloc.analysisUploadDate = nowDatetime();
+    colloc.analysisUploadDate = new Date().toISOString();
     colloc.analysisUploadedBy = getCurrentUserName();
     colloc.bamSource = bamSource;
     colloc.permanentPodId = permaPodId;
