@@ -1841,9 +1841,7 @@ function saveStatusChange(e) {
     if (!setupMode) { notes.push(note); persistNote(note); }
     closeModal('modal-status-change');
     buildSensorSidebar();
-    renderSensors();
-    if (currentSensor === sensorId) showSensorView(sensorId);
-    if (currentCommunity) showCommunityView(currentCommunity);
+    refreshCurrentView();
 }
 
 // ===== INSTALL DATE PROMPT =====
@@ -1969,9 +1967,7 @@ function moveSensor(e) {
 
     if (!setupMode) { notes.push(note); persistNote(note); }
     closeModal('modal-move-sensor');
-    renderSensors();
-    if (currentSensor === sensorId) showSensorView(sensorId);
-    if (currentCommunity) showCommunityView(currentCommunity);
+    refreshCurrentView();
 
     // Prompt to update install date after move (skip lab locations)
     if (!setupMode) {
@@ -3588,9 +3584,7 @@ function saveNote(e) {
     notes.push(note); persistNote(note);
 
     closeModal('modal-add-note'); showSuccessToast('Note added');
-
-    if (currentCommunity) showCommunityView(currentCommunity);
-    if (currentSensor) showSensorView(currentSensor);
+    refreshCurrentView();
 }
 
 // ===== COMMUNICATIONS =====
@@ -3633,8 +3627,7 @@ function saveComm(e) {
         if (saved?.id) comm.id = saved.id;
     }).catch(handleSaveError);
     closeModal('modal-comm'); showSuccessToast('Communication logged');
-
-    if (currentCommunity) showCommunityView(currentCommunity);
+    refreshCurrentView();
 }
 
 // ===== TIMELINE RENDERER =====
