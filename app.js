@@ -8166,6 +8166,26 @@ function renderSensorTickets(sensorId) {
 
     section.innerHTML = tickets.map(t => {
         const dateStr = t.createdAt ? formatDate(t.createdAt) : '';
+        const isOpen = t.status !== 'Closed';
+
+        // For open tickets, show related notes (Service type or mentioning this ticket's sensor around the ticket dates)
+        let notesHtml = '';
+        if (isOpen) {
+            const ticketNotes = notes.filter(n =>
+                n.taggedSensors && n.taggedSensors.includes(sensorId) &&
+                (n.type === 'Service' || (n.text && n.text.includes('service ticket')))
+            ).sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || ''));
+
+            if (ticketNotes.length > 0) {
+                notesHtml = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100)">
+                    ${ticketNotes.map(n => `<div style="font-size:12px;margin-bottom:6px">
+                        <span style="color:var(--slate-400)">${formatDate(n.date)}</span>
+                        <span style="color:var(--slate-600);margin-left:4px">${escapeHtml((n.text || '').substring(0, 150))}${(n.text || '').length > 150 ? '...' : ''}</span>
+                    </div>`).join('')}
+                </div>`;
+            }
+        }
+
         return `<div class="audit-list-card" onclick="openTicketDetail('${t.id}')">
             <div class="audit-list-card-header">
                 <span style="font-weight:600;color:var(--slate-700)">${formatTicketType(t.ticketType)}</span>
@@ -8173,6 +8193,7 @@ function renderSensorTickets(sensorId) {
             </div>
             <div class="audit-list-card-meta">${dateStr}${t.createdBy ? ' by ' + escapeHtml(t.createdBy) : ''}</div>
             ${t.issueDescription ? `<div style="font-size:12px;color:var(--slate-500);margin-top:4px">${escapeHtml(t.issueDescription.substring(0, 100))}${t.issueDescription.length > 100 ? '...' : ''}</div>` : ''}
+            ${notesHtml}
         </div>`;
     }).join('');
 }
