@@ -6267,7 +6267,20 @@ function openTicketDetail(ticketId) {
             <div class="ticket-field"><label>Return Tracking Info (to QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingTo)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingTo',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingTo) || '—'}</p>`}</div>
             <div class="ticket-field"><label>Return Tracking Info (from QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingFrom)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingFrom',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingFrom) || '—'}</p>`}</div>
             <div class="ticket-field"><label>Closed</label><p>${ticket.closedAt ? formatDate(ticket.closedAt) : '—'}</p></div>
-            <div class="ticket-field full-width"><label>QuantAQ Notes</label>${isOpen ? `<textarea class="ticket-edit-input" rows="3" placeholder="Notes from QuantAQ..." onblur="saveTicketField('${ticket.id}','quantNotes',this.value)">${escapeHtml(ticket.quantNotes)}</textarea>` : `<p>${escapeHtml(ticket.quantNotes) || '—'}</p>`}</div>
+            <div class="ticket-field full-width"><label>Progress Notes</label>
+                <div id="progress-notes-${ticket.id}">
+                    ${(ticket.progressNotes || []).length > 0
+                        ? ticket.progressNotes.slice().reverse().map((n, i) => `<div style="font-size:13px;padding:6px 0;${i < ticket.progressNotes.length - 1 ? 'border-bottom:1px solid var(--slate-100);' : ''}">
+                            <span style="color:var(--slate-400);font-size:11px">${n.at ? formatDate(n.at) : ''}${n.by ? ' — ' + escapeHtml(n.by) : ''}</span>
+                            <div style="color:var(--slate-700);margin-top:2px">${escapeHtml(n.text)}</div>
+                        </div>`).join('')
+                        : '<p style="color:var(--slate-400);font-size:13px">No progress notes yet.</p>'}
+                </div>
+                ${isOpen ? `<div style="margin-top:8px;display:flex;gap:8px">
+                    <input type="text" id="progress-note-input-${ticket.id}" class="ticket-edit-input" placeholder="Add a progress note..." style="flex:1" onkeydown="if(event.key==='Enter'){addProgressNote('${ticket.id}');event.preventDefault();}">
+                    <button class="btn btn-sm btn-primary" onclick="addProgressNote('${ticket.id}')">Add</button>
+                </div>` : ''}
+            </div>
             <div class="ticket-field full-width"><label>Work Completed</label>${isOpen ? `<textarea class="ticket-edit-input" rows="3" placeholder="Describe work done..." onblur="saveTicketField('${ticket.id}','workCompleted',this.value)">${escapeHtml(ticket.workCompleted)}</textarea>` : `<p>${escapeHtml(ticket.workCompleted) || '—'}</p>`}</div>
         </div>
         <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
@@ -6281,6 +6294,30 @@ function saveTicketField(ticketId, field, value) {
     if (!ticket || ticket[field] === value) return;
     ticket[field] = value;
     persistServiceTicketUpdate(ticketId, { [field]: value });
+}
+
+function addProgressNote(ticketId) {
+    const input = document.getElementById('progress-note-input-' + ticketId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    const ticket = serviceTickets.find(t => t.id === ticketId);
+    if (!ticket) return;
+
+    if (!ticket.progressNotes) ticket.progressNotes = [];
+    ticket.progressNotes.push({
+        text: text,
+        by: getCurrentUserName(),
+        at: nowDatetime(),
+    });
+
+    persistServiceTicketUpdate(ticketId, { progressNotes: ticket.progressNotes });
+    input.value = '';
+    // Re-render the ticket detail to show the new note
+    openTicketDetail(ticketId);
+    // Also refresh sensor ticket preview if visible
+    if (currentSensor) renderSensorTickets(currentSensor);
 }
 
 function advanceTicketStatus(ticketId) {
@@ -6408,7 +6445,7 @@ async function saveNewTicket(event) {
 
     const ticket = { sensorId, ticketType, status: rmaNumber ? 'RMA Assigned' : 'Ticket Opened',
         rmaNumber, fedexTrackingTo: '', fedexTrackingFrom: '', issueDescription: description,
-        quantNotes: '', workCompleted: '', createdBy: getCurrentUserName(), createdById: currentUserId,
+        progressNotes: [], workCompleted: '', createdBy: getCurrentUserName(), createdById: currentUserId,
         createdAt: nowDatetime(), closedAt: null };
     try {
         const saved = await db.insertServiceTicket(ticket);
@@ -8168,22 +8205,15 @@ function renderSensorTickets(sensorId) {
         const dateStr = t.createdAt ? formatDate(t.createdAt) : '';
         const isOpen = t.status !== 'Closed';
 
-        // For open tickets, show related notes (Service type or mentioning this ticket's sensor around the ticket dates)
+        // For open tickets, show progress notes newest-first
         let notesHtml = '';
-        if (isOpen) {
-            const ticketNotes = notes.filter(n =>
-                n.taggedSensors && n.taggedSensors.includes(sensorId) &&
-                (n.type === 'Service' || (n.text && n.text.includes('service ticket')))
-            ).sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || ''));
-
-            if (ticketNotes.length > 0) {
-                notesHtml = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100)">
-                    ${ticketNotes.map(n => `<div style="font-size:12px;margin-bottom:6px">
-                        <span style="color:var(--slate-400)">${formatDate(n.date)}</span>
-                        <span style="color:var(--slate-600);margin-left:4px">${escapeHtml((n.text || '').substring(0, 150))}${(n.text || '').length > 150 ? '...' : ''}</span>
-                    </div>`).join('')}
-                </div>`;
-            }
+        if (isOpen && t.progressNotes && t.progressNotes.length > 0) {
+            notesHtml = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100)">
+                ${t.progressNotes.slice().reverse().map(n => `<div style="font-size:12px;margin-bottom:6px">
+                    <span style="color:var(--slate-400)">${n.at ? formatDate(n.at) : ''}${n.by ? ' — ' + escapeHtml(n.by) : ''}</span>
+                    <div style="color:var(--slate-600);margin-top:1px">${escapeHtml(n.text)}</div>
+                </div>`).join('')}
+            </div>`;
         }
 
         return `<div class="audit-list-card" onclick="openTicketDetail('${t.id}')">

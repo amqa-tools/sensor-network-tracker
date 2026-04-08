@@ -13,6 +13,18 @@ function nowDatetime() {
         String(now.getMinutes()).padStart(2, '0');
 }
 
+// Migrate old quant_notes string to progress notes array
+function parseProgressNotes(raw) {
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+    } catch (_) {}
+    // Old format: plain string — migrate to a single note entry
+    if (raw.trim()) return [{ text: raw.trim(), by: '', at: '' }];
+    return [];
+}
+
 // ===== AUTH =====
 const db = {
     // --- Auth ---
@@ -419,7 +431,7 @@ const db = {
             id: t.id, sensorId: t.sensor_id, ticketType: t.ticket_type, status: t.status,
             rmaNumber: t.rma_number || '', fedexTrackingTo: t.fedex_tracking_to || '',
             fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
-            quantNotes: t.quant_notes || '', workCompleted: t.work_completed || '',
+            progressNotes: parseProgressNotes(t.quant_notes), workCompleted: t.work_completed || '',
             createdBy: t.profiles?.name || (t.created_by ? '[Deleted User]' : ''), createdById: t.created_by,
             createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at,
         }));
@@ -430,7 +442,7 @@ const db = {
             sensor_id: ticket.sensorId, ticket_type: ticket.ticketType,
             status: ticket.status || 'Ticket Opened', rma_number: ticket.rmaNumber || '',
             fedex_tracking_to: ticket.fedexTrackingTo || '', fedex_tracking_from: ticket.fedexTrackingFrom || '',
-            issue_description: ticket.issueDescription || '', quant_notes: ticket.quantNotes || '',
+            issue_description: ticket.issueDescription || '', quant_notes: JSON.stringify(ticket.progressNotes || []),
             work_completed: ticket.workCompleted || '', created_by: ticket.createdById || null,
         }).select('*, profiles(name)');
         if (error) throw error;
@@ -439,7 +451,7 @@ const db = {
             id: t.id, sensorId: t.sensor_id, ticketType: t.ticket_type, status: t.status,
             rmaNumber: t.rma_number || '', fedexTrackingTo: t.fedex_tracking_to || '',
             fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
-            quantNotes: t.quant_notes || '', workCompleted: t.work_completed || '',
+            progressNotes: parseProgressNotes(t.quant_notes), workCompleted: t.work_completed || '',
             createdBy: t.profiles?.name || '', createdById: t.created_by,
             createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at,
         };
@@ -448,7 +460,8 @@ const db = {
     async updateServiceTicket(id, updates) {
         const row = { updated_at: nowDatetime() };
         for (const [k, v] of Object.entries(updates)) {
-            const map = { rmaNumber: 'rma_number', fedexTrackingTo: 'fedex_tracking_to', fedexTrackingFrom: 'fedex_tracking_from', issueDescription: 'issue_description', quantNotes: 'quant_notes', workCompleted: 'work_completed', closedAt: 'closed_at', status: 'status' };
+            const map = { rmaNumber: 'rma_number', fedexTrackingTo: 'fedex_tracking_to', fedexTrackingFrom: 'fedex_tracking_from', issueDescription: 'issue_description', progressNotes: 'quant_notes', workCompleted: 'work_completed', closedAt: 'closed_at', status: 'status' };
+            if (k === 'progressNotes') { row['quant_notes'] = JSON.stringify(v); continue; }
             if (map[k]) row[map[k]] = v;
         }
         const { error } = await supa.from('service_tickets').update(row).eq('id', id);
