@@ -550,6 +550,10 @@
                     <label>Date of Move</label>
                     <input type="datetime-local" id="move-date">
                 </div>
+                <div class="form-group" id="move-status-group" style="display:none">
+                    <label class="note-action-option"><input type="checkbox" id="move-change-status" onchange="document.getElementById('move-status-list').style.display = this.checked ? '' : 'none'"> Also change sensor status</label>
+                    <div id="move-status-list" class="status-toggle-list" style="display:none;margin-top:6px"></div>
+                </div>
                 <div class="form-group" id="move-notes-group">
                     <label>Additional Details (optional)</label>
                     <textarea id="move-additional-info" rows="4" class="mention-textarea" placeholder="e.g. Removed by AC for recommended servicing. Type @ to tag a contact."></textarea>

@@ -54,9 +54,8 @@ function showAlert(title, message, onDismiss) {
 
 function acceptConfirmModal() {
     const modal = document.getElementById('modal-confirm');
-    // Run callback BEFORE closing modal so form inputs are still accessible
-    if (_confirmCallback) { const cb = _confirmCallback; _confirmCallback = null; _confirmDismissCallback = null; cb(); }
     modal.classList.remove('open');
+    if (_confirmCallback) { const cb = _confirmCallback; _confirmCallback = null; _confirmDismissCallback = null; cb(); }
 }
 
 function dismissConfirmModal() {
@@ -1909,6 +1908,13 @@ function openMoveSensorModal(sensorId) {
     // Hide date and notes fields in setup mode
     document.getElementById('move-date-group').style.display = setupMode ? 'none' : '';
     document.getElementById('move-notes-group').style.display = setupMode ? 'none' : '';
+    // Status change option
+    const statusGroup = document.getElementById('move-status-group');
+    const statusCheckbox = document.getElementById('move-change-status');
+    statusGroup.style.display = setupMode ? 'none' : '';
+    statusCheckbox.checked = false;
+    document.getElementById('move-status-list').style.display = 'none';
+    renderStatusToggleList('move-status-list', getStatusArray(s));
     openModal('modal-move-sensor');
 }
 
@@ -1928,9 +1934,21 @@ function moveSensor(e) {
     const beforeDateInstalled = s.dateInstalled || '';
 
     s.community = toCommunityId;
+
+    // Apply optional status change
+    let statusChangeText = '';
+    if (document.getElementById('move-change-status').checked) {
+        const newStatuses = getSelectedStatuses('move-status-list');
+        if (newStatuses.length > 0) {
+            const oldStatuses = getStatusArray(s);
+            s.status = newStatuses;
+            statusChangeText = `\n${sensorId} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
+        }
+    }
+
     persistSensor(s);
 
-    let noteText = `${sensorId} removed from ${fromName} and brought to ${toName}.`;
+    let noteText = `${sensorId} removed from ${fromName} and brought to ${toName}.${statusChangeText}`;
 
     const mentionedContacts = parseMentionedContacts(additionalInfo);
     const taggedCommunities = [fromId, toCommunityId].filter(Boolean);
@@ -3811,50 +3829,68 @@ async function saveTimelineFollowUp(noteId) {
 }
 
 function editTimelineItem(id, isNote) {
-    if (isNote) {
-        const idx = notes.findIndex(n => n.id === id);
-        if (idx < 0) return;
-        const currentText = notes[idx].text || '';
-        showConfirm('Edit Note',
-            `<textarea id="edit-timeline-text" rows="6" style="width:100%;font-family:var(--font-sans);font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5">${escapeHtml(currentText)}</textarea>`,
-            () => {
-                const textarea = document.getElementById('edit-timeline-text');
-                if (!textarea) return;
-                const newText = textarea.value.trim();
-                if (newText === currentText) return;
-                notes[idx].text = newText;
-                supa.from('notes').update({ text: newText }).eq('id', id).catch(err => console.error('Edit note error:', err));
-                refreshCurrentView();
-            },
-            { confirmText: 'Done' }
-        );
-        // Focus the textarea after the modal opens
-        setTimeout(() => {
-            const ta = document.getElementById('edit-timeline-text');
-            if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
-        }, 100);
-    } else {
-        const idx = comms.findIndex(c => c.id === id);
-        if (idx < 0) return;
-        const currentText = comms[idx].text || '';
-        showConfirm('Edit Communication',
-            `<textarea id="edit-timeline-text" rows="6" style="width:100%;font-family:var(--font-sans);font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5">${escapeHtml(currentText)}</textarea>`,
-            () => {
-                const textarea = document.getElementById('edit-timeline-text');
-                if (!textarea) return;
-                const newText = textarea.value.trim();
-                if (newText === currentText) return;
-                comms[idx].text = newText;
-                supa.from('comms').update({ text: newText }).eq('id', id).catch(err => console.error('Edit comm error:', err));
-                refreshCurrentView();
-            },
-            { confirmText: 'Done' }
-        );
-        setTimeout(() => {
-            const ta = document.getElementById('edit-timeline-text');
-            if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
-        }, 100);
+    const item = isNote ? notes.find(n => n.id === id) : comms.find(c => c.id === id);
+    if (!item) return;
+
+    const label = isNote ? 'Edit Note' : 'Edit Communication';
+    const body = document.getElementById('modal-confirm-body');
+    const modal = document.getElementById('modal-confirm');
+
+    document.getElementById('modal-confirm-title').textContent = label;
+    body.innerHTML = `<textarea id="edit-timeline-text" rows="6" style="width:100%;font-family:var(--font-sans);font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5"></textarea>`;
+
+    // Set value directly (not via innerHTML) to avoid HTML entity issues
+    const textarea = document.getElementById('edit-timeline-text');
+    textarea.value = item.text || '';
+
+    const okBtn = document.getElementById('modal-confirm-ok');
+    const cancelBtn = document.getElementById('modal-confirm-cancel');
+    okBtn.textContent = 'Done';
+    okBtn.className = 'btn btn-primary';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.display = '';
+
+    // Wire up the save directly — bypass _confirmCallback entirely
+    _confirmCallback = null;
+    _confirmDismissCallback = null;
+
+    const saveHandler = function() {
+        okBtn.removeEventListener('click', saveHandler);
+        const newText = document.getElementById('edit-timeline-text')?.value?.trim();
+        // Restore default modal handlers
+        okBtn.onclick = acceptConfirmModal;
+        cancelBtn.onclick = dismissConfirmModal;
+        document.querySelector('#modal-confirm .modal-close').onclick = dismissConfirmModal;
+        modal.classList.remove('open');
+
+        if (!newText || newText === (item.text || '').trim()) return;
+
+        item.text = newText;
+        const table = isNote ? 'notes' : 'comms';
+        supa.from(table).update({ text: newText }).eq('id', id)
+            .then(({ error }) => { if (error) console.error('Edit save error:', error); })
+            .catch(err => console.error('Edit save error:', err));
+
+        refreshCurrentView();
+    };
+
+    // Remove the default onclick and use our handler
+    okBtn.onclick = null;
+    okBtn.addEventListener('click', saveHandler, { once: true });
+
+    // Cancel/close: restore default handlers and close
+    function cleanup() {
+        okBtn.removeEventListener('click', saveHandler);
+        okBtn.onclick = acceptConfirmModal;
+        cancelBtn.onclick = dismissConfirmModal;
+        document.querySelector('#modal-confirm .modal-close').onclick = dismissConfirmModal;
+        modal.classList.remove('open');
     }
+    cancelBtn.onclick = cleanup;
+    document.querySelector('#modal-confirm .modal-close').onclick = cleanup;
+
+    modal.classList.add('open');
+    setTimeout(() => textarea.focus(), 50);
 }
 
 async function deleteTimelineItem(id, isNote) {
