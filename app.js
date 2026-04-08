@@ -9603,7 +9603,12 @@ function _renderCollocTimeSeries(parsed, results) {
     const params = hasGas ? COLLOC_PARAMS : COLLOC_PARAMS.filter(p => p.key === 'pm25' || p.key === 'pm10');
     const paramLabels = { pm25: 'PM₂.₅ (µg/m³)', pm10: 'PM₁₀ (µg/m³)', co: 'CO (ppb)', no: 'NO (ppb)', no2: 'NO₂ (ppb)', o3: 'O₃ (ppb)' };
 
-    const dates = parsed.allRows.map(r => r.timestamp.toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: AK_TZ }));
+    // Format dates as ISO strings for Plotly's date axis
+    const dates = parsed.allRows.map(r => {
+        const p = new Intl.DateTimeFormat('en-US', { timeZone: AK_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(r.timestamp);
+        const get = type => (p.find(x => x.type === type) || {}).value || '00';
+        return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
+    });
 
     let tabsHtml = '<ul class="colloc-nav-tabs">';
     let panelsHtml = '';
