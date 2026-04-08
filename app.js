@@ -8953,7 +8953,8 @@ function openCollocationDetail(collocId) {
         <div class="ticket-detail-actions" style="border-top:none">
             ${!isComplete && nextStatus ? `<button class="btn btn-primary" onclick="advanceCollocationStatus('${colloc.id}')">Advance to: ${nextStatus}</button>` : ''}
             ${statusIndex > 0 && !isComplete ? `<a class="undo-link" onclick="revertCollocationStatus('${colloc.id}')">Undo</a>` : ''}
-            ${showAnalysis ? `<button class="btn" onclick="beginCollocationAnalysis('${colloc.id}')">${hasResults ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
+            ${showAnalysis ? `<button class="btn" onclick="beginCollocationAnalysis('${colloc.id}')">${hasResults ? 'View Analysis' : 'Upload Data'}</button>` : ''}
+            ${hasResults ? `<button class="btn" onclick="delete collocAnalysisCache['${colloc.id}']; beginCollocationAnalysis('${colloc.id}')">Re-upload Data</button>` : ''}
             <span class="action-spacer"></span>
             <button class="btn" onclick="closeModal('modal-collocation-detail')">Done</button>
         </div>
