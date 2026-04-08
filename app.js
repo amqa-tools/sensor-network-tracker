@@ -5822,11 +5822,15 @@ function saveGlobalCollocation(e) {
         communities: [communityId],
     }, structuredInfo);
 
-    // Update each sensor's collocationDates for backward compat
+    // Update each sensor's collocationDates and add Collocation status
     taggedSensors.forEach(sId => {
         const s = sensors.find(x => x.id === sId);
         if (s) {
             s.collocationDates = `${communityName}, ${formatDate(startDate)} \u2013 ${endDisplay}`;
+            const statuses = getStatusArray(s);
+            if (!statuses.includes('Collocation')) {
+                s.status = [...statuses, 'Collocation'];
+            }
             persistSensor(s);
         }
     });
