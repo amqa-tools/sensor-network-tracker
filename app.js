@@ -9737,6 +9737,30 @@ function _renderCollocRegression(parsed, results) {
         }
     }
 
+    // Tab: Quants PM (inter-pod PM comparisons)
+    if (parsed.podIds.length >= 2) {
+        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'inter-pm', this)">Quants PM</button></li>`;
+        panelsHtml += `<div id="colloc-reg-tab-inter-pm" class="colloc-tab-pane">`;
+        for (const key of ['pm25', 'pm10']) {
+            const p = COLLOC_PARAMS.find(x => x.key === key);
+            panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Inter-Pod Comparisons</div>`;
+            panelsHtml += `<div id="colloc-reg-inter-pm-${key}" style="width:100%;height:360px"></div>`;
+        }
+        panelsHtml += '</div>';
+    }
+
+    // Tab: Quants Gaseous (inter-pod gas comparisons)
+    if (hasGas && parsed.podIds.filter(id => !parsed.isPmOnly[id]).length >= 2) {
+        tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'inter-gas', this)">Quants Gaseous</button></li>`;
+        panelsHtml += `<div id="colloc-reg-tab-inter-gas" class="colloc-tab-pane">`;
+        for (const key of ['co', 'no', 'no2', 'o3']) {
+            const p = COLLOC_PARAMS.find(x => x.key === key);
+            panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Inter-Pod Comparisons</div>`;
+            panelsHtml += `<div id="colloc-reg-inter-gas-${key}" style="width:100%;height:360px"></div>`;
+        }
+        panelsHtml += '</div>';
+    }
+
     // Tab: Data Sheet
     tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTab('colloc-reg', 'data', this)">Data Sheet</button></li>`;
     panelsHtml += `<div id="colloc-reg-tab-data" class="colloc-tab-pane"><div id="colloc-data-sheet"></div></div>`;
@@ -9853,8 +9877,120 @@ function _renderCollocRegression(parsed, results) {
         }
     }
 
+    // Render inter-pod PM regressions
+    if (parsed.podIds.length >= 2) {
+        // Build all pairwise pod combinations
+        const allPodIds = parsed.permaPod ? [parsed.permaPodId, ...parsed.podIds] : [...parsed.podIds];
+        const pmPairs = [];
+        for (let i = 0; i < allPodIds.length; i++) {
+            for (let j = i + 1; j < allPodIds.length; j++) {
+                pmPairs.push({ ref: allPodIds[i], pod: allPodIds[j] });
+            }
+        }
+
+        for (const key of ['pm25', 'pm10']) {
+            const p = COLLOC_PARAMS.find(x => x.key === key);
+            buildInterPodRegRow(`colloc-reg-inter-pm-${key}`, key, p.label, pmPairs, trimmed, parsed);
+        }
+    }
+
+    // Render inter-pod gaseous regressions
+    const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
+    const allGasPods = parsed.permaPod ? [parsed.permaPodId, ...gasPods] : [...gasPods];
+    if (allGasPods.length >= 2) {
+        const gasPairs = [];
+        for (let i = 0; i < allGasPods.length; i++) {
+            for (let j = i + 1; j < allGasPods.length; j++) {
+                gasPairs.push({ ref: allGasPods[i], pod: allGasPods[j] });
+            }
+        }
+        for (const key of ['co', 'no', 'no2', 'o3']) {
+            const p = COLLOC_PARAMS.find(x => x.key === key);
+            buildInterPodRegRow(`colloc-reg-inter-gas-${key}`, key, p.label, gasPairs, trimmed, parsed);
+        }
+    }
+
     // Render data sheet
     _renderCollocDataSheet(parsed);
+}
+
+function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed) {
+    const el = document.getElementById(divId);
+    if (!el) return;
+
+    // Filter to pairs with actual data
+    const activePairs = pairs.filter(pair => {
+        let hasData = false;
+        trimmed.forEach(r => {
+            const x = _getCollocVal(r, pair.ref, paramKey, parsed);
+            const y = _getCollocVal(r, pair.pod, paramKey, parsed);
+            if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) hasData = true;
+        });
+        return hasData;
+    });
+    if (activePairs.length === 0) { el.innerHTML = '<div style="text-align:center;color:#888;padding:40px">No valid data pairs</div>'; return; }
+
+    const nPlots = activePairs.length;
+    const xGap = 0.08;
+    const colW = (1 - xGap * (nPlots - 1)) / nPlots;
+    const traces = [];
+    const annotations = [];
+    const layout = {
+        margin: { t: 38, b: 55, l: 70, r: 15 },
+        plot_bgcolor: '#fff', paper_bgcolor: 'rgba(0,0,0,0)',
+        font: { family: 'Segoe UI, system-ui, sans-serif', size: 11 },
+        showlegend: false, annotations,
+    };
+
+    const pairColors = ['#D55E00', '#009E73', '#CC79A7', '#0072B2', '#E69F00', '#56B4E9'];
+
+    activePairs.forEach((pair, idx) => {
+        const xArr = [], yArr = [];
+        trimmed.forEach(r => {
+            const x = _getCollocVal(r, pair.ref, paramKey, parsed);
+            const y = _getCollocVal(r, pair.pod, paramKey, parsed);
+            if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) { xArr.push(x); yArr.push(y); }
+        });
+        if (xArr.length < 3) return;
+        const reg = runLinearRegression(xArr, yArr);
+        if (!reg) return;
+
+        const xax = idx === 0 ? 'x' : 'x' + (idx + 1);
+        const yax = idx === 0 ? 'y' : 'y' + (idx + 1);
+        const suffix = idx === 0 ? '' : '' + (idx + 1);
+        const x0 = idx * (colW + xGap), x1 = x0 + colW;
+        const xLo = Math.min(...xArr), xHi = Math.max(...xArr);
+        const xDt = _collocNiceDtick(xLo, xHi);
+        const yLo = Math.min(...yArr), yHi = Math.max(...yArr);
+        const yDt = _collocNiceDtick(yLo, yHi);
+
+        const xDef = { domain: [x0, x1], title: `${shortSensorId(pair.ref)} ${paramLabel}`, gridcolor: '#eee', zeroline: false, range: [Math.floor(xLo / xDt) * xDt, Math.ceil(xHi / xDt) * xDt], dtick: xDt, tickfont: { size: 10 } };
+        const yDef = { domain: [0, 1], title: idx === 0 ? paramLabel : '', gridcolor: '#eee', zeroline: false, range: [Math.floor(yLo / yDt) * yDt, Math.ceil(yHi / yDt) * yDt], dtick: yDt, tickfont: { size: 10 } };
+        if (idx > 0) { xDef.anchor = yax; yDef.anchor = xax; }
+        layout['xaxis' + suffix] = xDef;
+        layout['yaxis' + suffix] = yDef;
+
+        const color = pairColors[idx % pairColors.length];
+        traces.push({ x: xArr, y: yArr, type: 'scatter', mode: 'markers', marker: { color, size: 4, opacity: 0.4 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'x+y' });
+        traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
+
+        annotations.push({ text: `<b>${shortSensorId(pair.pod)} vs ${shortSensorId(pair.ref)}</b>`, xref: xax + ' domain', yref: yax + ' domain', x: 0.5, y: 1.08, showarrow: false, font: { size: 12, color: '#0a1628' } });
+
+        const slopeColor = (reg.slope >= 0.65 && reg.slope <= 1.35) ? '#2ca02c' : '#d62728';
+        const intColor = (reg.intercept >= -5 && reg.intercept <= 5) ? '#2ca02c' : '#d62728';
+        const r2Color = (reg.r2 >= 0.7) ? '#2ca02c' : '#d62728';
+        const sign = reg.intercept >= 0 ? ' + ' : ' \u2212 ';
+        const eqText = `y = <span style="color:${slopeColor}">${reg.slope.toFixed(3)}</span>x${sign}<span style="color:${intColor}">${Math.abs(reg.intercept).toFixed(2)}</span>`;
+        const r2text = `<span style="color:${r2Color}">R\u00b2 = ${reg.r2.toFixed(4)}</span>  (n=${reg.n})`;
+        annotations.push({ text: eqText + '<br>' + r2text, xref: xax + ' domain', yref: yax + ' domain', x: 0.03, y: 0.97, showarrow: false, font: { size: 10.5, color: '#444' }, align: 'left', bgcolor: 'rgba(255,255,255,0.92)', borderpad: 3 });
+    });
+
+    Plotly.newPlot(divId, traces, layout, { responsive: true });
+}
+
+function _getCollocVal(row, sensorId, paramKey, parsed) {
+    if (sensorId === parsed.permaPodId) return row.perma[paramKey] ?? NaN;
+    return row.pods[sensorId]?.[paramKey] ?? NaN;
 }
 
 function _switchCollocTab(group, name, btn) {
