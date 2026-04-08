@@ -9660,7 +9660,7 @@ function renderCollocationAnalysisResults(collocId, parsed) {
             <div id="colloc-reg-tabset"></div>
 
             <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center">
-                <button class="btn btn-primary" onclick="generateCollocationReport('${collocId}')">Generate Report</button>
+                <button class="btn btn-primary" onclick="generateCollocationReport('${collocId}')">Save as HTML</button>
                 <button class="btn" onclick="delete collocAnalysisCache['${collocId}']; beginCollocationAnalysis('${collocId}')">Re-upload Data</button>
             </div>
         </div>
@@ -10170,7 +10170,383 @@ function renderCollocationSavedView(collocId) {
 }
 
 function generateCollocationReport(collocId) {
-    showAlert('Generate Report', 'Use your browser\'s Print function (Ctrl+P / Cmd+P) to save this analysis as a PDF while the analysis view is open.');
+    const colloc = collocations.find(c => c.id === collocId);
+    if (!colloc) return;
+    const parsed = collocAnalysisCache[collocId];
+    if (!parsed) { showAlert('Error', 'No analysis data available. Try re-uploading.'); return; }
+
+    const communityName = getCommunityName(colloc.locationId);
+    const bamLabel = parsed.bamLabel;
+    const trimmed = parsed.trimmedRows;
+    const results = parsed.regressionResults || {};
+
+    // Build filename: NCore_Collocation_Analysis_443_651_652_Mar13_Apr1_2026.html
+    const podNums = parsed.podIds.map(id => id.replace(/\D/g, '').replace(/^0+/, ''));
+    const startD = colloc.startDate ? new Date(colloc.startDate + 'T12:00:00') : null;
+    const endD = colloc.endDate && colloc.endDate !== 'TBD' ? new Date(colloc.endDate + 'T12:00:00') : null;
+    const fmtShort = d => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: AK_TZ }).replace(/ /g, '') : '';
+    const fmtYear = d => d ? d.toLocaleDateString('en-US', { year: 'numeric', timeZone: AK_TZ }) : '';
+    const siteName = (colloc.bamSource || communityName).replace(/\s+/g, '');
+    const filename = `${siteName}_Collocation_Analysis_${podNums.join('_')}_${fmtShort(startD)}_${fmtShort(endD)}_${fmtYear(endD || startD)}.html`;
+
+    // Build title parts
+    const titleParts = [bamLabel];
+    if (parsed.permaPodId) titleParts.push(shortSensorId(parsed.permaPodId) + ' (Permanent Pod)');
+    titleParts.push(...parsed.podIds.map(id => shortSensorId(id)));
+    const dateRange = `${startD ? formatDate(colloc.startDate) : ''} &ndash; ${endD ? formatDate(colloc.endDate) : 'TBD'}`;
+
+    // Format dates for Plotly as ISO strings in Alaska time
+    const dates = parsed.allRows.map(r => {
+        const p = new Intl.DateTimeFormat('en-US', { timeZone: AK_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(r.timestamp);
+        const get = type => (p.find(x => x.type === type) || {}).value || '00';
+        return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
+    });
+
+    // Serialize all the data needed for the report
+    const paramLabels = { pm25: 'PM₂.₅ (µg/m³)', pm10: 'PM₁₀ (µg/m³)', co: 'CO (ppb)', no: 'NO (ppb)', no2: 'NO₂ (ppb)', o3: 'O₃ (ppb)' };
+    const paramHtml = { pm25: 'PM<sub>2.5</sub>', pm10: 'PM<sub>10</sub>', co: 'CO', no: 'NO', no2: 'NO<sub>2</sub>', o3: 'O<sub>3</sub>' };
+    const hasGas = parsed.podIds.some(id => !parsed.isPmOnly[id]);
+    const tsParams = hasGas ? ['pm25', 'pm10', 'co', 'no', 'no2', 'o3'] : ['pm25', 'pm10'];
+
+    // Build DATA object for the report JS
+    const reportData = {
+        dates, bamLabel,
+        permaPodId: parsed.permaPodId, permaShort: parsed.permaPodId ? shortSensorId(parsed.permaPodId) : '',
+        podIds: parsed.podIds, podShorts: parsed.podIds.map(id => shortSensorId(id)),
+        isPmOnly: parsed.isPmOnly,
+        bam: { pm25: parsed.allRows.map(r => isNaN(r.bam.pm25) ? null : r.bam.pm25), pm10: parsed.allRows.map(r => isNaN(r.bam.pm10) ? null : r.bam.pm10) },
+        perma: {},
+        pods: {},
+    };
+    if (parsed.permaPod) {
+        tsParams.forEach(k => { reportData.perma[k] = parsed.allRows.map(r => isNaN(r.perma[k]) ? null : r.perma[k]); });
+    }
+    parsed.podIds.forEach(id => {
+        reportData.pods[id] = {};
+        const keys = parsed.isPmOnly[id] ? ['pm25', 'pm10'] : tsParams;
+        keys.forEach(k => { reportData.pods[id][k] = parsed.allRows.map(r => isNaN(r.pods[id]?.[k]) ? null : r.pods[id][k]); });
+    });
+
+    // Build regression data
+    const regData = { bamVsPods: {}, bamVsPerma: {}, permaVsPods: {}, interPod: {} };
+    // BAM vs pods
+    parsed.podIds.forEach(podId => {
+        regData.bamVsPods[podId] = {};
+        ['pm25', 'pm10'].forEach(k => {
+            const xArr = [], yArr = [];
+            trimmed.forEach(r => {
+                const x = r.bam[k], y = r.pods[podId]?.[k];
+                if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) { xArr.push(x); yArr.push(y); }
+            });
+            const reg = runLinearRegression(xArr, yArr);
+            if (reg) regData.bamVsPods[podId][k] = { x: xArr, y: yArr, ...reg };
+        });
+    });
+    // BAM vs perma
+    if (parsed.permaPod) {
+        ['pm25', 'pm10'].forEach(k => {
+            const xArr = [], yArr = [];
+            trimmed.forEach(r => {
+                const x = r.bam[k], y = r.perma[k];
+                if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) { xArr.push(x); yArr.push(y); }
+            });
+            const reg = runLinearRegression(xArr, yArr);
+            if (reg) regData.bamVsPerma[k] = { x: xArr, y: yArr, ...reg };
+        });
+    }
+    // Perma vs pods
+    if (parsed.permaPod) {
+        parsed.podIds.forEach(podId => {
+            regData.permaVsPods[podId] = {};
+            const keys = parsed.isPmOnly[podId] ? ['pm25', 'pm10'] : tsParams;
+            keys.forEach(k => {
+                const xArr = [], yArr = [];
+                trimmed.forEach(r => {
+                    const x = r.perma[k], y = r.pods[podId]?.[k];
+                    if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) { xArr.push(x); yArr.push(y); }
+                });
+                const reg = runLinearRegression(xArr, yArr);
+                if (reg) regData.permaVsPods[podId][k] = { x: xArr, y: yArr, ...reg };
+            });
+        });
+    }
+    // Inter-pod pairs
+    const allPodIds = parsed.permaPod ? [parsed.permaPodId, ...parsed.podIds] : [...parsed.podIds];
+    for (let i = 0; i < allPodIds.length; i++) {
+        for (let j = i + 1; j < allPodIds.length; j++) {
+            const pairKey = `${allPodIds[j]}_vs_${allPodIds[i]}`;
+            regData.interPod[pairKey] = {};
+            const bothHaveGas = !parsed.isPmOnly[allPodIds[i]] && !parsed.isPmOnly[allPodIds[j]] && allPodIds[i] !== parsed.permaPodId || allPodIds[j] !== parsed.permaPodId;
+            const keys = (parsed.isPmOnly[allPodIds[i]] || parsed.isPmOnly[allPodIds[j]]) ? ['pm25', 'pm10'] : tsParams;
+            keys.forEach(k => {
+                const xArr = [], yArr = [];
+                const getVal = (r, id) => id === parsed.permaPodId ? (r.perma[k] ?? NaN) : (r.pods[id]?.[k] ?? NaN);
+                trimmed.forEach(r => {
+                    const x = getVal(r, allPodIds[i]), y = getVal(r, allPodIds[j]);
+                    if (!isNaN(x) && !isNaN(y) && isFinite(x) && isFinite(y)) { xArr.push(x); yArr.push(y); }
+                });
+                const reg = runLinearRegression(xArr, yArr);
+                if (reg) regData.interPod[pairKey][k] = { x: xArr, y: yArr, ...reg, refId: allPodIds[i], podId: allPodIds[j] };
+            });
+        }
+    }
+
+    // Build data table HTML
+    const params = ['pm25', 'pm10', 'co', 'no', 'no2', 'o3'];
+    const paramNames = { pm25: 'PM2.5', pm10: 'PM10', co: 'CO', no: 'NO', no2: 'NO2', o3: 'O3' };
+    let tableHeader = '<th>Date</th><th>BAM PM2.5</th><th>BAM PM10</th>';
+    if (parsed.permaPod) tsParams.forEach(k => { tableHeader += `<th>${reportData.permaShort} ${paramNames[k]}</th>`; });
+    parsed.podIds.forEach(id => {
+        const keys = parsed.isPmOnly[id] ? ['pm25', 'pm10'] : tsParams;
+        keys.forEach(k => { tableHeader += `<th>${shortSensorId(id)} ${paramNames[k]}</th>`; });
+    });
+    let tableRows = '';
+    parsed.allRows.forEach((r, i) => {
+        const isTrimmed = i < parsed.trimIndex;
+        const style = isTrimmed ? ' style="background:#fff8e8;opacity:0.5"' : '';
+        let cells = `<td>${dates[i]}${isTrimmed ? ' *' : ''}</td>`;
+        cells += `<td${isNaN(r.bam.pm25) ? ' class="red"' : ''}>${isNaN(r.bam.pm25) ? '' : r.bam.pm25.toFixed(1)}</td>`;
+        cells += `<td${isNaN(r.bam.pm10) ? ' class="red"' : ''}>${isNaN(r.bam.pm10) ? '' : r.bam.pm10.toFixed(1)}</td>`;
+        if (parsed.permaPod) tsParams.forEach(k => {
+            const v = r.perma[k]; cells += `<td${isNaN(v) ? ' class="red"' : ''}>${isNaN(v) ? '' : v.toFixed(3)}</td>`;
+        });
+        parsed.podIds.forEach(id => {
+            const keys = parsed.isPmOnly[id] ? ['pm25', 'pm10'] : tsParams;
+            keys.forEach(k => {
+                const v = r.pods[id]?.[k]; cells += `<td${isNaN(v) ? ' class="red"' : ''}>${isNaN(v) ? '' : v.toFixed(3)}</td>`;
+            });
+        });
+        tableRows += `<tr${style}>${cells}</tr>\n`;
+    });
+
+    const reportHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(communityName)} Collocation Analysis</title>
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"><\/script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f5f5f0; color: #1a1a2e; padding: 30px 35px 60px; }
+  .title-block { text-align: center; margin-bottom: 35px; }
+  .title-block .label { font-size: 14px; font-weight: 400; color: #888; margin-bottom: 2px; letter-spacing: 0.5px; }
+  .title-block .main { font-size: 24px; font-weight: 700; color: #0a1628; margin: 4px 0; }
+  .title-block .dates { font-size: 14px; font-weight: 400; color: #888; }
+  .section-header { text-align: center; margin: 50px 0 8px; padding-bottom: 8px; border-bottom: 2px solid #0a1628; }
+  .section-header h2 { font-size: 21px; color: #0a1628; }
+  .plot-title { text-align: center; margin: 20px 0 2px; }
+  .plot-title h3 { font-size: 15px; font-weight: 600; color: #0a1628; }
+  .plot-subtitle { text-align: center; font-size: 11.5px; color: #888; margin-bottom: 6px; }
+  .ts-plot { width: 100%; height: 420px; margin-bottom: 10px; }
+  .reg-grid { width: 100%; height: 360px; margin-bottom: 10px; }
+  .reg-param-title { text-align: center; font-size: 14px; font-weight: 600; color: #0a1628; margin: 18px 0 4px; }
+  .panel-tabset { margin-top: 12px; }
+  .nav-tabs { display: flex; list-style: none; border-bottom: 2px solid #ddd; padding: 0; margin: 0; gap: 2px; }
+  .nav-tabs .nav-item { margin: 0; }
+  .nav-tabs .nav-link { display: block; padding: 9px 22px; font-size: 13px; font-weight: 600; color: #667; text-decoration: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; background: transparent; font-family: inherit; transition: all 0.15s; }
+  .nav-tabs .nav-link:hover { color: #0a1628; background: #eee; }
+  .nav-tabs .nav-link.active { color: #0a1628; background: #fff; border-color: #ddd; border-bottom: 2px solid #fff; margin-bottom: -2px; }
+  .tab-content > .tab-pane { display: none; }
+  .tab-content > .tab-pane.active { display: block; }
+  .data-table-wrap { overflow: auto; max-height: 70vh; border: 1px solid #ccc; border-radius: 6px; margin-top: 10px; }
+  .data-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+  .data-table th { background: #0a1628; color: #c8a84e; padding: 7px 9px; position: sticky; top: 0; z-index: 10; font-weight: 600; border-right: 1px solid #1a2a40; }
+  .data-table td { padding: 3px 9px; border-bottom: 1px solid #eee; border-right: 1px solid #f0f0f0; text-align: right; }
+  .data-table td:first-child { text-align: left; font-weight: 500; }
+  .data-table tr:hover td { background: #f0f0e8; }
+  .data-table td.red { background: #ffe0e0; border: 2px solid #e53e3e; }
+  .data-legend { margin: 8px 0 4px; font-size: 13px; color: #555; line-height: 1.6; }
+  .data-legend .swatch { display: inline-block; width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="title-block">
+  <div class="label">${escapeHtml(communityName)} Collocation Analysis</div>
+  <div class="main">${titleParts.map(t => escapeHtml(t)).join(' &bull; ')}</div>
+  <div class="dates">${dateRange}</div>
+</div>
+<div class="section-header"><h2>Time Series Collocation Results</h2></div>
+<div class="panel-tabset" id="ts-tabset">
+  <ul class="nav nav-tabs" role="tablist">
+    ${tsParams.map((k, i) => `<li class="nav-item"><button class="nav-link${i === 0 ? ' active' : ''}" onclick="switchTab('ts','${k}',this)">${paramHtml[k]}</button></li>`).join('\n    ')}
+  </ul>
+  <div class="tab-content">
+    ${tsParams.map((k, i) => `<div id="ts-tab-${k}" class="tab-pane${i === 0 ? ' active' : ''}">
+      <div class="plot-title"><h3>${paramHtml[k]} Hourly Collocation Results</h3></div>
+      <div class="plot-subtitle">Collocation Dates: ${dateRange}</div>
+      <div id="ts-${k}-plot" class="ts-plot"></div>
+    </div>`).join('\n    ')}
+  </div>
+</div>
+<div class="section-header"><h2>Multi-Sensor Regression Analysis</h2></div>
+<div class="panel-tabset" id="reg-tabset">
+  <ul class="nav nav-tabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active" onclick="switchTab('reg','bam',this)">Pods vs ${escapeHtml(bamLabel)}</button></li>
+    ${parsed.permaPod ? `<li class="nav-item"><button class="nav-link" onclick="switchTab('reg','perma',this)">Pods vs ${escapeHtml(reportData.permaShort)}</button></li>` : ''}
+    <li class="nav-item"><button class="nav-link" onclick="switchTab('reg','inter-pm',this)">Quants PM</button></li>
+    ${hasGas ? `<li class="nav-item"><button class="nav-link" onclick="switchTab('reg','inter-gas',this)">Quants Gaseous</button></li>` : ''}
+    <li class="nav-item"><button class="nav-link" onclick="switchTab('reg','data',this)">Data Sheet</button></li>
+  </ul>
+  <div class="tab-content">
+    <div id="reg-tab-bam" class="tab-pane active">
+      ${['pm25', 'pm10'].map(k => `<div class="reg-param-title">${paramHtml[k]} &mdash; All Sensors vs ${escapeHtml(bamLabel)}</div><div id="reg-bam-${k}" class="reg-grid"></div>`).join('\n      ')}
+    </div>
+    ${parsed.permaPod ? `<div id="reg-tab-perma" class="tab-pane">
+      ${tsParams.map(k => `<div class="reg-param-title">${paramHtml[k]} &mdash; Pods vs ${escapeHtml(reportData.permaShort)}</div><div id="reg-perma-${k}" class="reg-grid"></div>`).join('\n      ')}
+    </div>` : ''}
+    <div id="reg-tab-inter-pm" class="tab-pane">
+      ${['pm25', 'pm10'].map(k => `<div class="reg-param-title">${paramHtml[k]} &mdash; Inter-Pod Comparisons</div><div id="reg-inter-pm-${k}" class="reg-grid"></div>`).join('\n      ')}
+    </div>
+    ${hasGas ? `<div id="reg-tab-inter-gas" class="tab-pane">
+      ${['co', 'no', 'no2', 'o3'].map(k => `<div class="reg-param-title">${paramHtml[k]} &mdash; Inter-Pod Comparisons</div><div id="reg-inter-gas-${k}" class="reg-grid"></div>`).join('\n      ')}
+    </div>` : ''}
+    <div id="reg-tab-data" class="tab-pane">
+      <div class="data-legend">
+        <span class="swatch" style="background:#fff8e8;border:1px solid #d4a84b"></span> Yellow rows (*) = first 24 hours, excluded from analysis.<br>
+        <span class="swatch" style="background:#ffe0e0;border:2px solid #e53e3e"></span> Red cells = missing/flagged data, excluded from analysis.
+      </div>
+      <div class="data-table-wrap"><table class="data-table"><thead><tr>${tableHeader}</tr></thead><tbody>${tableRows}</tbody></table></div>
+    </div>
+  </div>
+</div>
+<script>
+var DATA = ${JSON.stringify(reportData)};
+var REG = ${JSON.stringify(regData)};
+var PARAMS = ${JSON.stringify(tsParams)};
+var paramLabels = ${JSON.stringify(paramLabels)};
+
+function switchTab(group, name, btn) {
+  var tabset = document.getElementById(group + '-tabset');
+  tabset.querySelectorAll('.tab-pane').forEach(function(el) { el.classList.remove('active'); });
+  tabset.querySelectorAll('.nav-link').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById(group + '-tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 80);
+}
+
+function niceDtick(lo, hi) {
+  var range = hi - lo; if (range <= 0) return 1;
+  var c = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  for (var i = 0; i < c.length; i++) { if (range / c[i] <= 8) return c[i]; }
+  return Math.pow(10, Math.floor(Math.log10(range)));
+}
+
+var podColors = ['#d97706', '#15803d', '#7c3aed', '#0891b2', '#be185d', '#4338ca', '#b45309', '#059669'];
+var pairColors = ['#D55E00', '#009E73', '#CC79A7', '#0072B2', '#E69F00', '#56B4E9'];
+
+// Time series
+PARAMS.forEach(function(pk, pi) {
+  var traces = [];
+  if (pk === 'pm25' || pk === 'pm10') {
+    traces.push({ x: DATA.dates, y: DATA.bam[pk], name: DATA.bamLabel, type: 'scatter', mode: 'lines', line: {color: '#e53e3e', width: 2.5}, connectgaps: false });
+  }
+  if (DATA.permaPodId && DATA.perma[pk]) {
+    traces.push({ x: DATA.dates, y: DATA.perma[pk], name: DATA.permaShort + ' (Perma)', type: 'scatter', mode: 'lines', line: {color: '#2563eb', width: 2}, connectgaps: false });
+  }
+  DATA.podIds.forEach(function(id, idx) {
+    if (DATA.pods[id] && DATA.pods[id][pk]) {
+      traces.push({ x: DATA.dates, y: DATA.pods[id][pk], name: DATA.podShorts[idx], type: 'scatter', mode: 'lines', line: {color: podColors[idx % podColors.length], width: 1.5}, connectgaps: false });
+    }
+  });
+  var allY = []; traces.forEach(function(t) { t.y.forEach(function(v) { if (v !== null) allY.push(v); }); });
+  var yMin = Math.min.apply(null, allY), yMax = Math.max.apply(null, allY);
+  var dt = niceDtick(yMin, yMax);
+  Plotly.newPlot('ts-' + pk + '-plot', traces, {
+    margin: {t: 8, b: 45, l: 80, r: 15}, xaxis: {title: 'Date', type: 'date', gridcolor: '#ddd'},
+    yaxis: {title: {text: paramLabels[pk], standoff: 10}, gridcolor: '#ddd', range: [Math.floor(yMin/dt)*dt, Math.ceil(yMax/dt)*dt], dtick: dt, tickfont: {size: 11}},
+    legend: {orientation: 'h', y: 1.12, x: 0.5, xanchor: 'center', font: {size: 12}},
+    plot_bgcolor: '#fff', paper_bgcolor: 'rgba(0,0,0,0)', font: {family: 'Segoe UI, system-ui, sans-serif', size: 12}, hovermode: 'x unified'
+  }, {responsive: true});
+});
+
+// Regression helper
+function buildRegRow(divId, paramKey, sensorList, refLabel, getRegData) {
+  var el = document.getElementById(divId); if (!el) return;
+  var active = sensorList.filter(function(sid) { var rd = getRegData(sid, paramKey); return rd && rd.x && rd.x.length > 2; });
+  if (active.length === 0) return;
+  var n = active.length, xGap = 0.08, colW = (1 - xGap*(n-1))/n;
+  var traces = [], annotations = [];
+  var layout = { margin: {t:38,b:55,l:70,r:15}, plot_bgcolor:'#fff', paper_bgcolor:'rgba(0,0,0,0)', font:{family:'Segoe UI,system-ui,sans-serif',size:11}, showlegend:false, annotations:annotations };
+  active.forEach(function(sid, idx) {
+    var rd = getRegData(sid, paramKey); if (!rd) return;
+    var xax = idx===0?'x':'x'+(idx+1), yax = idx===0?'y':'y'+(idx+1), suffix = idx===0?'':''+(idx+1);
+    var x0 = idx*(colW+xGap), x1 = x0+colW;
+    var xLo=Math.min.apply(null,rd.x), xHi=Math.max.apply(null,rd.x), xDt=niceDtick(xLo,xHi);
+    var yLo=Math.min.apply(null,rd.y), yHi=Math.max.apply(null,rd.y), yDt=niceDtick(yLo,yHi);
+    layout['xaxis'+suffix] = {domain:[x0,x1], title:refLabel, gridcolor:'#eee', zeroline:false, range:[Math.floor(xLo/xDt)*xDt,Math.ceil(xHi/xDt)*xDt], dtick:xDt, tickfont:{size:10}};
+    layout['yaxis'+suffix] = {domain:[0,1], title:idx===0?paramLabels[paramKey]:'', gridcolor:'#eee', zeroline:false, range:[Math.floor(yLo/yDt)*yDt,Math.ceil(yHi/yDt)*yDt], dtick:yDt, tickfont:{size:10}};
+    if (idx>0) { layout['xaxis'+suffix].anchor=yax; layout['yaxis'+suffix].anchor=xax; }
+    traces.push({x:rd.x,y:rd.y,type:'scatter',mode:'markers',marker:{color:podColors[DATA.podIds.indexOf(sid)%podColors.length]||'#666',size:4,opacity:0.4},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'x+y'});
+    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:'#0a1628',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
+    var sLabel = typeof sid === 'string' && sid.includes('_vs_') ? sid.replace(/_vs_/,' vs ') : (DATA.podShorts[DATA.podIds.indexOf(sid)] || sid);
+    annotations.push({text:'<b>'+sLabel+' vs '+refLabel.split(' ')[0]+'</b>',xref:xax+' domain',yref:yax+' domain',x:0.5,y:1.08,showarrow:false,font:{size:12,color:'#0a1628'}});
+    var sc=(rd.slope>=0.65&&rd.slope<=1.35)?'#2ca02c':'#d62728';
+    var ic=(rd.intercept>=-5&&rd.intercept<=5)?'#2ca02c':'#d62728';
+    var rc=(rd.r2>=0.7)?'#2ca02c':'#d62728';
+    var sign=rd.intercept>=0?' + ':' \\u2212 ';
+    annotations.push({text:'y = <span style="color:'+sc+'">'+rd.slope.toFixed(3)+'</span>x'+sign+'<span style="color:'+ic+'">'+Math.abs(rd.intercept).toFixed(2)+'</span><br><span style="color:'+rc+'">R\\u00b2 = '+rd.r2.toFixed(4)+'</span>  (n='+rd.n+')',xref:xax+' domain',yref:yax+' domain',x:0.03,y:0.97,showarrow:false,font:{size:10.5,color:'#444'},align:'left',bgcolor:'rgba(255,255,255,0.92)',borderpad:3});
+  });
+  Plotly.newPlot(divId, traces, layout, {responsive:true});
+}
+
+// BAM regression
+var bamPods = ${JSON.stringify(parsed.permaPod ? [parsed.permaPodId, ...parsed.podIds] : [...parsed.podIds])};
+['pm25','pm10'].forEach(function(k) {
+  buildRegRow('reg-bam-'+k, k, bamPods, '${escapeHtml(bamLabel)} '+paramLabels[k].split(' ')[0], function(sid,pk) { return sid==='${parsed.permaPodId}'?REG.bamVsPerma[pk]:REG.bamVsPods[sid]&&REG.bamVsPods[sid][pk]; });
+});
+
+// Perma pod regression
+${parsed.permaPod ? `PARAMS.forEach(function(k) {
+  buildRegRow('reg-perma-'+k, k, ${JSON.stringify(parsed.podIds)}, '${escapeHtml(reportData.permaShort)} '+paramLabels[k].split(' ')[0], function(sid,pk) { return REG.permaVsPods[sid]&&REG.permaVsPods[sid][pk]; });
+});` : ''}
+
+// Inter-pod regression helper
+function buildInterRegRow(divId, paramKey, pairs) {
+  var el = document.getElementById(divId); if (!el) return;
+  var active = pairs.filter(function(pk) { var rd = REG.interPod[pk]; return rd && rd[paramKey] && rd[paramKey].x.length > 2; });
+  if (active.length === 0) return;
+  var n = active.length, xGap = 0.08, colW = (1 - xGap*(n-1))/n;
+  var traces = [], annotations = [];
+  var layout = { margin:{t:38,b:55,l:70,r:15}, plot_bgcolor:'#fff', paper_bgcolor:'rgba(0,0,0,0)', font:{family:'Segoe UI,system-ui,sans-serif',size:11}, showlegend:false, annotations:annotations };
+  active.forEach(function(pk, idx) {
+    var rd = REG.interPod[pk][paramKey]; if (!rd) return;
+    var xax=idx===0?'x':'x'+(idx+1), yax=idx===0?'y':'y'+(idx+1), suffix=idx===0?'':''+(idx+1);
+    var x0=idx*(colW+xGap);
+    var xLo=Math.min.apply(null,rd.x),xHi=Math.max.apply(null,rd.x),xDt=niceDtick(xLo,xHi);
+    var yLo=Math.min.apply(null,rd.y),yHi=Math.max.apply(null,rd.y),yDt=niceDtick(yLo,yHi);
+    layout['xaxis'+suffix]={domain:[x0,x0+colW],title:pk.split('_vs_')[1],gridcolor:'#eee',zeroline:false,range:[Math.floor(xLo/xDt)*xDt,Math.ceil(xHi/xDt)*xDt],dtick:xDt,tickfont:{size:10}};
+    layout['yaxis'+suffix]={domain:[0,1],title:idx===0?paramLabels[paramKey]:'',gridcolor:'#eee',zeroline:false,range:[Math.floor(yLo/yDt)*yDt,Math.ceil(yHi/yDt)*yDt],dtick:yDt,tickfont:{size:10}};
+    if(idx>0){layout['xaxis'+suffix].anchor=yax;layout['yaxis'+suffix].anchor=xax;}
+    traces.push({x:rd.x,y:rd.y,type:'scatter',mode:'markers',marker:{color:pairColors[idx%pairColors.length],size:4,opacity:0.4},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'x+y'});
+    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:'#0a1628',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
+    annotations.push({text:'<b>'+pk.replace(/_vs_/,' vs ')+'</b>',xref:xax+' domain',yref:yax+' domain',x:0.5,y:1.08,showarrow:false,font:{size:12,color:'#0a1628'}});
+    var sc=(rd.slope>=0.65&&rd.slope<=1.35)?'#2ca02c':'#d62728';
+    var ic=(rd.intercept>=-5&&rd.intercept<=5)?'#2ca02c':'#d62728';
+    var rc=(rd.r2>=0.7)?'#2ca02c':'#d62728';
+    var sign=rd.intercept>=0?' + ':' \\u2212 ';
+    annotations.push({text:'y = <span style="color:'+sc+'">'+rd.slope.toFixed(3)+'</span>x'+sign+'<span style="color:'+ic+'">'+Math.abs(rd.intercept).toFixed(2)+'</span><br><span style="color:'+rc+'">R\\u00b2 = '+rd.r2.toFixed(4)+'</span>  (n='+rd.n+')',xref:xax+' domain',yref:yax+' domain',x:0.03,y:0.97,showarrow:false,font:{size:10.5,color:'#444'},align:'left',bgcolor:'rgba(255,255,255,0.92)',borderpad:3});
+  });
+  Plotly.newPlot(divId, traces, layout, {responsive:true});
+}
+
+var interPairs = Object.keys(REG.interPod);
+var pmPairs = interPairs; // all pairs have PM
+var gasPairs = interPairs.filter(function(pk) { return REG.interPod[pk].co || REG.interPod[pk].no; });
+['pm25','pm10'].forEach(function(k) { buildInterRegRow('reg-inter-pm-'+k, k, pmPairs); });
+['co','no','no2','o3'].forEach(function(k) { buildInterRegRow('reg-inter-gas-'+k, k, gasPairs); });
+<\/script>
+</body>
+</html>`;
+
+    const blob = new Blob([reportHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    showSuccessToast('Report saved as ' + filename);
 }
 
 // ===== MOBILE SIDEBAR =====
