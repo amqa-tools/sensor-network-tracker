@@ -6,11 +6,12 @@ const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function nowDatetime() {
     const now = new Date();
-    return now.getFullYear() + '-' +
-        String(now.getMonth() + 1).padStart(2, '0') + '-' +
-        String(now.getDate()).padStart(2, '0') + 'T' +
-        String(now.getHours()).padStart(2, '0') + ':' +
-        String(now.getMinutes()).padStart(2, '0');
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Anchorage', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(now);
+    const get = type => (parts.find(p => p.type === type) || {}).value || '00';
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
 // Migrate old quant_notes string to progress notes array

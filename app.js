@@ -4175,14 +4175,21 @@ function formatDate(dateStr) {
     const isUTC = dateStr.endsWith('Z') || dateStr.includes('+');
     let d;
     if (isUTC) {
+        // Supabase timestamptz — parse as-is, display in Alaska
         d = new Date(dateStr);
     } else if (hasTime) {
+        // Local datetime like "2026-04-08T14:30" — these are ALREADY in Alaska time
+        // Parse as-is and display the raw values directly (no timezone conversion)
         const [datePart, timePart] = dateStr.split('T');
         const [y, m, day] = datePart.split('-').map(Number);
         const [hr, min] = (timePart || '00:00').split(':').map(Number);
-        d = new Date(y, m - 1, day, hr, min);
+        const dateDisplay = new Date(y, m - 1, day).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        const h = hr % 12 || 12;
+        const ampm = hr >= 12 ? 'PM' : 'AM';
+        const minStr = String(min).padStart(2, '0');
+        return `${dateDisplay} at ${h}:${minStr} ${ampm}`;
     } else {
-        d = new Date(dateStr + 'T00:00:00');
+        d = new Date(dateStr + 'T12:00:00');
     }
     const datePart = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: AK_TZ });
     if (hasTime) {
