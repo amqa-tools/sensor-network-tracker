@@ -193,6 +193,9 @@ async function loadAllData() {
     // Clean up stale service statuses on sensors based on current ticket stage
     cleanupSensorServiceStatuses();
 
+    // Remove Collocation status from sensors with no active collocation
+    cleanupStaleCollocationStatuses();
+
     // Merge duplicate status change notes with general notes created at same time
     mergeStatusChangeNotes();
 
@@ -212,6 +215,24 @@ function cleanupSensorServiceStatuses() {
         const stale = currentStatuses.filter(st => allServiceStatuses.includes(st) && st !== currentServiceStatus);
         if (stale.length > 0) {
             s.status = currentStatuses.filter(st => !allServiceStatuses.includes(st) || st === currentServiceStatus);
+            persistSensor(s);
+        }
+    });
+}
+
+function cleanupStaleCollocationStatuses() {
+    // Remove "Collocation" status from sensors that have no active (non-complete) collocation
+    const activeCollocSensors = new Set();
+    collocations.forEach(c => {
+        if (c.status !== 'Collocation Complete') {
+            (c.sensorIds || []).forEach(id => activeCollocSensors.add(id));
+        }
+    });
+    sensors.forEach(s => {
+        const statuses = getStatusArray(s);
+        if (statuses.includes('Collocation') && !activeCollocSensors.has(s.id)) {
+            s.status = statuses.filter(st => st !== 'Collocation');
+            if (s.status.length === 0) s.status = ['Online'];
             persistSensor(s);
         }
     });
@@ -9530,10 +9551,19 @@ function finalizeCollocationAnalysis(collocId, colloc, parsed, analysisName, bam
     parsed.regressionResults = results;
     collocAnalysisCache[collocId] = parsed;
 
-    // Auto-advance status
+    // Auto-advance status and remove Collocation tag from sensors
     if (colloc.status === 'Complete' || colloc.status === 'Analysis Pending') {
         colloc.status = 'Collocation Complete';
         persistCollocationUpdate(collocId, { status: 'Collocation Complete' });
+        colloc.sensorIds.forEach(sId => {
+            const s = sensors.find(x => x.id === sId);
+            if (s) {
+                const statuses = getStatusArray(s).filter(st => st !== 'Collocation');
+                s.status = statuses.length > 0 ? statuses : ['Online'];
+                persistSensor(s);
+            }
+        });
+        buildSensorSidebar();
         updateSidebarCollocationCount();
     }
 
