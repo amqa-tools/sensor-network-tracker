@@ -383,7 +383,7 @@ function renderDashboardAlerts() {
     // Update last check time
     const lastCheckEl = document.getElementById('dashboard-last-check');
     if (lastCheckEl && quantaqLastCheck) {
-        lastCheckEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        lastCheckEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
     }
 
     const active = quantaqAlerts.filter(a => a.status === 'active' && !a.acknowledgedBy);
@@ -525,7 +525,7 @@ function renderQuantAQAlertsView() {
     const resolved = quantaqAlerts.filter(a => a.status === 'resolved' && a.isNew);
 
     const lastCheckStr = quantaqLastCheck
-        ? new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        ? new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ })
         : 'Never';
 
     let html = `
@@ -597,7 +597,7 @@ function renderPendingAlertList(alerts) {
             : a.issueType === 'Gaseous Sensor Issue' ? 'quantaq-badge-gas'
             : a.issueType === 'PM Sensor Issue' ? 'quantaq-badge-pm'
             : 'quantaq-badge-sd';
-        const detectedStr = new Date(a.detectedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        const detectedStr = new Date(a.detectedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
 
         let countdownHtml = '';
         if (a.graceExpiresAt) {
@@ -674,11 +674,11 @@ function renderQuantAQAlertList(alerts, isNew) {
             : a.issueType === 'Gaseous Sensor Issue' ? 'quantaq-badge-gas'
             : 'quantaq-badge-sd';
 
-        const detectedStr = new Date(a.detectedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        const detectedStr = new Date(a.detectedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
         const duration = quantaqTimeSince(a.detectedAt);
 
         const notesHtml = a.notes.length > 0
-            ? a.notes.map(n => `<div class="quantaq-note"><strong>${escapeHtml(n.by)}</strong> <span style="color:var(--slate-400)">${new Date(n.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span><br>${escapeHtml(n.text)}</div>`).join('')
+            ? a.notes.map(n => `<div class="quantaq-note"><strong>${escapeHtml(n.by)}</strong> <span style="color:var(--slate-400)">${new Date(n.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ })}</span><br>${escapeHtml(n.text)}</div>`).join('')
             : '';
 
         const communityStr = a.communityName ? ` — ${escapeHtml(a.communityName)}` : '';
@@ -715,7 +715,7 @@ function renderQuantAQAlertList(alerts, isNew) {
             </div>
             <div class="quantaq-alert-body">
                 <p class="quantaq-alert-detail">${escapeHtml(a.detail)}</p>
-                <p class="quantaq-alert-meta">Detected: ${detectedStr}${duration ? ` (${duration})` : ''}${isResolved ? ` · Resolved: ${new Date(a.resolvedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</p>
+                <p class="quantaq-alert-meta">Detected: ${detectedStr}${duration ? ` (${duration})` : ''}${isResolved ? ` · Resolved: ${new Date(a.resolvedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ })}` : ''}</p>
                 ${followUpHtml}
                 <div id="quantaq-note-panel-${a.id}" class="quantaq-note-panel" style="display:none">
                     <textarea id="quantaq-note-input-${a.id}" rows="2" placeholder="Add a follow-up note..." style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical;margin-top:8px"></textarea>
@@ -786,7 +786,7 @@ async function confirmDismissQuantAQAlert(alertId) {
     if (!alert) return;
 
     const userName = currentUser || 'Unknown';
-    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
     const input = document.getElementById('quantaq-dismiss-input-' + alertId);
     const noteText = input?.value?.trim() || '';
 
@@ -830,7 +830,7 @@ async function confirmUndismissQuantAQAlert(alertId) {
     if (!alert) return;
 
     const userName = currentUser || 'Unknown';
-    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
     const input = document.getElementById('quantaq-restore-input-' + alertId);
     const noteText = input?.value?.trim() || '';
 
@@ -948,7 +948,7 @@ async function saveQuantAQFollowUp(alertId, sensorSn) {
 
     if (eventNote) {
         // Append the follow-up to the existing note
-        const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
         const userName = currentUser || 'Unknown';
         eventNote.text += `\n— ${userName} (${timestamp}): ${text}`;
 

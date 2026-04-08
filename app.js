@@ -1011,7 +1011,7 @@ function renderDashboard() {
     // Last check time
     const lastCheckEl = document.getElementById('dashboard-last-check');
     if (lastCheckEl && typeof quantaqLastCheck !== 'undefined' && quantaqLastCheck) {
-        lastCheckEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        lastCheckEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
     } else if (lastCheckEl) {
         lastCheckEl.textContent = 'No QuantAQ check has been run yet';
     }
@@ -3791,7 +3791,7 @@ async function saveTimelineFollowUp(noteId) {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
 
-    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
     const userName = currentUser || 'Unknown';
     note.text += `\n— ${userName} (${timestamp}): ${text}`;
 
@@ -4081,13 +4081,17 @@ function highlightMentions(text) {
     return text.replace(/@([\w\s]+?)(?=\.|,|$|@)/g, '<strong style="color:var(--navy-600)">@$1</strong>');
 }
 
+const AK_TZ = 'America/Anchorage';
+
 function nowDatetime() {
     const now = new Date();
-    return now.getFullYear() + '-' +
-        String(now.getMonth() + 1).padStart(2, '0') + '-' +
-        String(now.getDate()).padStart(2, '0') + 'T' +
-        String(now.getHours()).padStart(2, '0') + ':' +
-        String(now.getMinutes()).padStart(2, '0');
+    // Format in Alaska time
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: AK_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(now);
+    const get = type => (parts.find(p => p.type === type) || {}).value || '00';
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
 function formatDate(dateStr) {
@@ -4098,10 +4102,8 @@ function formatDate(dateStr) {
     const isUTC = dateStr.endsWith('Z') || dateStr.includes('+');
     let d;
     if (isUTC) {
-        // Already has timezone — parse as-is
         d = new Date(dateStr);
     } else if (hasTime) {
-        // Local datetime like "2026-03-19T14:30" — parse as local, not UTC
         const [datePart, timePart] = dateStr.split('T');
         const [y, m, day] = datePart.split('-').map(Number);
         const [hr, min] = (timePart || '00:00').split(':').map(Number);
@@ -4109,9 +4111,9 @@ function formatDate(dateStr) {
     } else {
         d = new Date(dateStr + 'T00:00:00');
     }
-    const datePart = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    const datePart = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: AK_TZ });
     if (hasTime) {
-        const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
         return `${datePart} at ${timePart}`;
     }
     return datePart;
@@ -6521,7 +6523,7 @@ function renderAuditsView() {
 
 function renderAuditCard(audit) {
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
-    const dateRange = audit.scheduledStart ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString()} - ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString()}` : '—';
+    const dateRange = audit.scheduledStart ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} - ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}` : '—';
     const progress = AUDIT_STATUSES.map((st, i) => {
         const idx = AUDIT_STATUSES.indexOf(audit.status);
         const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
@@ -7814,7 +7816,7 @@ function createScatterChart(canvasId, regression, param, parsed) {
                             const raw = items[0].raw;
                             if (raw?.t) {
                                 const d = new Date(raw.t);
-                                return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                                return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: AK_TZ });
                             }
                             return '';
                         },
@@ -8004,7 +8006,7 @@ function renderRawDataPanel(parsed) {
     for (let i = 0; i < maxRows; i++) {
         const r = parsed.allRows[i];
         const isTrimmed = i < parsed.trimIndex;
-        const dateStr = r.timestamp.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+        const dateStr = r.timestamp.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: AK_TZ });
         tableHtml += `<tr class="${isTrimmed ? 'trimmed-row' : ''}">
             <td>${dateStr}${isTrimmed ? ' *' : ''}</td>
             ${paramKeys.map(k => {
@@ -8193,7 +8195,7 @@ function renderSensorAudits(sensorId) {
 
 function renderAuditListCard(audit, context, sensorRole) {
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
-    const dateRange = audit.scheduledStart ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString()} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString()}` : '\u2014';
+    const dateRange = audit.scheduledStart ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}` : '\u2014';
     const hasResults = Object.keys(audit.analysisResults || {}).length > 0;
 
     let paramBadges = '';
@@ -8237,7 +8239,7 @@ function generateAuditReport(auditId) {
     const shortB = `${communityName} Pod ${shortSensorId(audit.communityPodId)}`;
 
     const dateRange = audit.scheduledStart
-        ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+        ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })}`
         : '\u2014';
 
     // DQO table rows — using labelHtml for subscripts
@@ -8287,7 +8289,7 @@ function generateAuditReport(auditId) {
                 <tbody>
                     ${cached.allRows.map((r, i) => {
                         const isTrimmed = i < cached.trimIndex;
-                        const dateStr = r.timestamp.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                        const dateStr = r.timestamp.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: AK_TZ });
                         return `<tr style="${isTrimmed ? 'color:#6b7280;background:#fffbf0' : (i % 2 === 0 ? '' : 'background:#fafbfc')}">
                             <td style="padding:3px 6px;border-bottom:1px solid #e2e8f0">${dateStr}${isTrimmed ? ' *' : ''}</td>
                             ${paramKeys.map(k => {
@@ -8527,7 +8529,7 @@ function generateAuditReport(auditId) {
             <div class="report-header-info">
                 <div style="font-weight:600">ADEC Division of Air Quality</div>
                 <div>Air Monitoring and Quality Assurance</div>
-                <div style="margin-top:4px">${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+                <div style="margin-top:4px">${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })}</div>
             </div>
             <img class="report-header-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC Logo" onerror="this.style.display='none'">
         </div>
@@ -8665,8 +8667,8 @@ async function uploadAuditPhotos(auditId, communityId, files) {
     if (audit && audit.scheduledStart && audit.scheduledEnd) {
         const startD = new Date(audit.scheduledStart + 'T00:00:00');
         const endD = new Date(audit.scheduledEnd + 'T00:00:00');
-        const startStr = startD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        const endStr = endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const startStr = startD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: AK_TZ });
+        const endStr = endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: AK_TZ });
         displayName = `Audit Setup ${startStr} - ${endStr}`;
     }
     for (const file of files) {
