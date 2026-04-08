@@ -4338,6 +4338,34 @@ th:hover .field-reorder-btns {
 .audit-status-badge.cs-complete { background: rgba(34, 197, 94, 0.1); color: #15803d; }
 .audit-status-badge.cs-analysis { background: rgba(167, 139, 250, 0.1); color: #6d28d9; }
 .audit-status-badge.cs-verified { background: rgba(37, 99, 176, 0.1); color: var(--navy-600); }
+
+/* Collocation Analysis Report Styles */
+.colloc-report-view { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #1a1a2e; }
+.colloc-title-block { text-align: center; margin-bottom: 35px; }
+.colloc-title-label { font-size: 14px; font-weight: 400; color: #888; margin-bottom: 2px; letter-spacing: 0.5px; }
+.colloc-title-main { font-size: 20px; font-weight: 700; color: #0a1628; margin: 4px 0; }
+.colloc-title-dates { font-size: 14px; font-weight: 400; color: #888; }
+.colloc-section-header { text-align: center; margin: 50px 0 8px; padding-bottom: 8px; border-bottom: 2px solid #0a1628; }
+.colloc-section-header h2 { font-size: 21px; color: #0a1628; }
+.colloc-plot-title { text-align: center; margin: 20px 0 2px; }
+.colloc-plot-title h3 { font-size: 15px; font-weight: 600; color: #0a1628; }
+.colloc-plot-subtitle { text-align: center; font-size: 11.5px; color: #888; margin-bottom: 6px; }
+.colloc-reg-param-title { text-align: center; font-size: 14px; font-weight: 600; color: #0a1628; margin: 18px 0 4px; }
+.colloc-nav-tabs { display: flex; list-style: none; border-bottom: 2px solid #ddd; padding: 0; margin: 0; gap: 2px; }
+.colloc-nav-tabs li { margin: 0; }
+.colloc-nav-link { display: block; padding: 9px 22px; font-size: 13px; font-weight: 600; color: #667; text-decoration: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; background: transparent; font-family: inherit; transition: all 0.15s; }
+.colloc-nav-link:hover { color: #0a1628; background: #eee; }
+.colloc-nav-link.active { color: #0a1628; background: #fff; border-color: #ddd; border-bottom: 2px solid #fff; margin-bottom: -2px; }
+.colloc-tab-content > .colloc-tab-pane { display: none; }
+.colloc-tab-content > .colloc-tab-pane.active { display: block; }
+.colloc-report-view .data-table-wrap { overflow: auto; max-height: 70vh; border: 1px solid #ccc; border-radius: 6px; margin-top: 10px; }
+.colloc-report-view table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+.colloc-report-view thead th { background: #0a1628; color: #c8a84e; padding: 7px 9px; position: sticky; top: 0; z-index: 10; font-weight: 600; border-right: 1px solid #1a2a40; }
+.colloc-report-view tbody td { padding: 3px 9px; border-bottom: 1px solid #eee; border-right: 1px solid #f0f0f0; text-align: right; }
+.colloc-report-view tbody td:first-child { text-align: left; font-weight: 500; }
+.colloc-report-view tbody tr:hover td { background: #f0f0e8; }
+.colloc-report-view tbody td.red { background: #ffe0e0; border: 2px solid #e53e3e; }
+
 .audit-unaudited-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 8px; }
 .audit-unaudited-card { background: var(--surface); border: 1px dashed var(--slate-300); border-radius: var(--radius-md); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--slate-600); cursor: pointer; transition: border-color 0.15s; }
 .audit-unaudited-card:hover { border-color: var(--navy-400); }
