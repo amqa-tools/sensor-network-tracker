@@ -253,6 +253,11 @@ const db = {
         return { ...note, id: noteId };
     },
 
+    async updateNote(id, updates) {
+        const { error } = await supa.from('notes').update(updates).eq('id', id);
+        if (error) throw error;
+    },
+
     // --- Communications ---
     async getComms() {
         const { data, error } = await supa

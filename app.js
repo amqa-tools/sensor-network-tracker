@@ -187,6 +187,9 @@ async function loadAllData() {
 
     // Clean up stale service statuses on sensors based on current ticket stage
     cleanupSensorServiceStatuses();
+
+    // Merge duplicate status change notes with general notes created at same time
+    mergeStatusChangeNotes();
 }
 
 function cleanupSensorServiceStatuses() {
@@ -204,6 +207,57 @@ function cleanupSensorServiceStatuses() {
             persistSensor(s);
         }
     });
+}
+
+function mergeStatusChangeNotes() {
+    // Find Status Change notes that were created at the same date by the same user
+    // as a non-status-change note, and merge them together
+    const statusNotes = notes.filter(n => n.type === 'Status Change');
+    const toRemove = [];
+
+    statusNotes.forEach(sn => {
+        // Look for a non-status-change note at the same date/time by the same user
+        // that shares at least one tagged sensor
+        const snDate = (sn.date || '').substring(0, 16); // match to the minute
+        if (!snDate) return;
+        const snSensors = sn.taggedSensors || [];
+        if (snSensors.length === 0) return;
+
+        const match = notes.find(n =>
+            n.id !== sn.id &&
+            n.type !== 'Status Change' &&
+            (n.date || '').substring(0, 16) === snDate &&
+            n.createdBy === sn.createdBy &&
+            (n.taggedSensors || []).some(s => snSensors.includes(s))
+        );
+
+        if (match) {
+            // Merge status change text into the existing note
+            if (!match.text.includes('status changed from')) {
+                match.text = match.text + '\n' + sn.text;
+                match.type = 'Status Change';
+                // Merge tags
+                (sn.taggedSensors || []).forEach(s => { if (!(match.taggedSensors || []).includes(s)) match.taggedSensors.push(s); });
+                (sn.taggedCommunities || []).forEach(c => { if (!(match.taggedCommunities || []).includes(c)) match.taggedCommunities.push(c); });
+                // Persist the merged note
+                db.updateNote(match.id, { text: match.text, type: match.type }).catch(err => console.error('Merge note error:', err));
+            }
+            toRemove.push(sn.id);
+        }
+    });
+
+    // Remove the now-merged status change notes
+    if (toRemove.length > 0) {
+        console.log(`Merging ${toRemove.length} duplicate status change notes`);
+        toRemove.forEach(id => {
+            const idx = notes.findIndex(n => n.id === id);
+            if (idx >= 0) notes.splice(idx, 1);
+            // Delete from DB
+            supa.from('note_tags').delete().eq('note_id', id).then(() =>
+                supa.from('notes').delete().eq('id', id)
+            ).catch(err => console.error('Delete merged note error:', err));
+        });
+    }
 }
 
 // ===== PERSISTENCE LAYER =====
@@ -3476,9 +3530,7 @@ function saveNote(e) {
         taggedContacts: contactTags,
     };
 
-    notes.push(note); persistNote(note);
-
-    // Apply status change if checked
+    // Apply status change if checked — merge into the same note
     const contextType = document.getElementById('note-context-type').value;
     const contextId = document.getElementById('note-context-id').value;
     if (contextType === 'sensor' && document.getElementById('note-change-status').checked) {
@@ -3490,20 +3542,17 @@ function saveNote(e) {
             persistSensor(s);
 
             if (!setupMode) {
-                const statusNote = {
-                    id: generateId('n'),
-                    date: noteDate,
-                    type: 'Status Change',
-                    text: `${s.id} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`,
-                    createdBy: getCurrentUserName(), createdById: currentUserId,
-                    taggedSensors: [s.id],
-                    taggedCommunities: s.community ? [s.community] : [],
-                    taggedContacts: [],
-                };
-                notes.push(statusNote); persistNote(statusNote);
+                const statusText = `${s.id} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
+                note.text = note.text + '\n' + statusText;
+                note.type = 'Status Change';
+                // Ensure sensor and community are tagged
+                if (!note.taggedSensors.includes(s.id)) note.taggedSensors.push(s.id);
+                if (s.community && !note.taggedCommunities.includes(s.community)) note.taggedCommunities.push(s.community);
             }
         }
     }
+
+    notes.push(note); persistNote(note);
 
     closeModal('modal-add-note'); showSuccessToast('Note added');
 
