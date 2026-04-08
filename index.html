@@ -381,11 +381,13 @@
                         <button class="btn btn-primary" onclick="openAddNoteModal(currentSensor, 'sensor')">+ Add Note</button>
                         <select id="sensor-history-filter" onchange="filterSensorHistory()" aria-label="Filter history type">
                             <option value="">All History</option>
-                            <option value="_notes">Field Notes</option>
-                            <option value="_changes">Changes</option>
-                            <option value="Communication">Communications</option>
-                            <option value="Audit">Audits / Collocations</option>
+                            <option value="_movement">Sensor Movement</option>
+                            <option value="_troubleshooting">Troubleshooting / Site Work</option>
+                            <option value="_status">Status Changes</option>
+                            <option value="_audit">Audits / Collocations</option>
                             <option value="_service">Service Tickets</option>
+                            <option value="Communication">Communications</option>
+                            <option value="_general">General Notes</option>
                         </select>
                     </div>
                     <div id="sensor-history-timeline" class="timeline"></div>
@@ -684,7 +686,6 @@
                         <label class="note-action-option"><input type="checkbox" id="note-action-install" onchange="onNoteActionsChange()"> Sensor Install</label>
                         <label class="note-action-option"><input type="checkbox" id="note-action-removal" onchange="onNoteActionsChange()"> Sensor Removal</label>
                         <label class="note-action-option"><input type="checkbox" id="note-action-troubleshooting" onchange="onNoteActionsChange()"> Troubleshooting</label>
-                        <label class="note-action-option"><input type="checkbox" id="note-action-audit" onchange="onNoteActionsChange()"> Audit / Collocation</label>
                         <label class="note-action-option"><input type="checkbox" id="note-action-site-work" onchange="onNoteActionsChange()"> Site Work</label>
                         <label class="note-action-option" id="note-action-status-label" style="display:none"><input type="checkbox" id="note-action-status" onchange="onNoteActionsChange()"> Sensor Status Change</label>
                     </div>

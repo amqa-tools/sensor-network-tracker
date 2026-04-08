@@ -3471,40 +3471,11 @@ function openAddNoteModal(contextId, contextType) {
 }
 
 function onNoteActionsChange() {
-    const auditChecked = document.getElementById('note-action-audit').checked;
     const statusChecked = document.getElementById('note-action-status').checked;
 
     // Show/hide status toggle list
     const statusGroup = document.getElementById('note-status-change-group');
     statusGroup.style.display = statusChecked ? '' : 'none';
-
-    // Show/hide audit link options
-    const linkGroup = document.getElementById('note-audit-link-group');
-    if (auditChecked) {
-        const contextId = document.getElementById('note-context-id').value;
-        const contextType = document.getElementById('note-context-type').value;
-        let relevantAudits;
-        if (contextType === 'sensor') {
-            relevantAudits = audits.filter(a => a.auditPodId === contextId || a.communityPodId === contextId);
-        } else {
-            relevantAudits = audits.filter(a => a.communityId === contextId);
-        }
-        if (relevantAudits.length > 0) {
-            linkGroup.style.display = '';
-            document.getElementById('note-audit-link-options').innerHTML = relevantAudits.map(a => {
-                const cName = COMMUNITIES.find(c => c.id === a.communityId)?.name || a.communityId;
-                const dateStr = a.scheduledStart ? `${formatDate(a.scheduledStart)} \u2013 ${formatDate(a.scheduledEnd)}` : '';
-                return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate-600);cursor:pointer;padding:4px 0">
-                    <input type="checkbox" class="note-audit-link-cb" value="${a.id}" style="width:15px;height:15px">
-                    ${escapeHtml(a.auditPodId)} at ${escapeHtml(cName)} ${dateStr} <span class="audit-status-badge ${AUDIT_STATUS_CSS[a.status]}" style="font-size:10px;padding:1px 6px">${a.status}</span>
-                </label>`;
-            }).join('');
-        } else {
-            linkGroup.style.display = 'none';
-        }
-    } else {
-        linkGroup.style.display = 'none';
-    }
 }
 
 function getNoteActionsType() {
@@ -3512,7 +3483,6 @@ function getNoteActionsType() {
     if (document.getElementById('note-action-install').checked) actions.push('Sensor Install');
     if (document.getElementById('note-action-removal').checked) actions.push('Sensor Removal');
     if (document.getElementById('note-action-troubleshooting').checked) actions.push('Troubleshooting');
-    if (document.getElementById('note-action-audit').checked) actions.push('Audit');
     if (document.getElementById('note-action-site-work').checked) actions.push('Site Work');
     if (document.getElementById('note-action-status').checked) actions.push('Status Change');
     if (actions.length === 0) return 'General';
@@ -4480,9 +4450,12 @@ function getSelectedStatuses(containerId) {
 }
 
 const FILTER_GROUPS = {
-    '_notes': ['General', 'Audit', 'Site Work', 'Issue', 'Installation', 'Removal', 'Maintenance'],
-    '_changes': ['Info Edit', 'Status Change', 'Movement'],
+    '_movement': ['Movement', 'Sensor Install', 'Sensor Removal', 'Sensor Install + Sensor Removal'],
+    '_troubleshooting': ['Troubleshooting', 'Site Work', 'Issue', 'Maintenance', 'Troubleshooting + Site Work'],
+    '_status': ['Status Change'],
+    '_audit': ['Audit', 'Collocation'],
     '_service': ['Service'],
+    '_general': ['General', 'Info Edit'],
 };
 
 function filterSensorHistory() {
@@ -4492,7 +4465,12 @@ function filterSensorHistory() {
     let sensorNotes = notes.filter(n => n.taggedSensors && n.taggedSensors.includes(currentSensor));
 
     if (filterVal && FILTER_GROUPS[filterVal]) {
-        sensorNotes = sensorNotes.filter(n => FILTER_GROUPS[filterVal].includes(n.type));
+        const group = FILTER_GROUPS[filterVal];
+        sensorNotes = sensorNotes.filter(n => {
+            if (group.includes(n.type)) return true;
+            // Also match combined types like "Sensor Install + Status Change"
+            return group.some(g => n.type && n.type.includes(g));
+        });
     } else if (filterVal) {
         sensorNotes = sensorNotes.filter(n => n.type === filterVal);
     }
