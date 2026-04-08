@@ -11,6 +11,7 @@ let communityFiles = {};
 let communityTags = {};
 let serviceTickets = [];
 let audits = [];
+let collocations = [];
 let communityParents = {}; // childId -> parentId
 let currentUserRole = 'user'; // 'admin' or 'user' — loaded from profile on login
 let mfaRequired = true; // global setting, admin-configurable
@@ -96,6 +97,7 @@ async function loadAllData() {
         db.getCommunityFiles(),
         db.getServiceTickets(),
         db.getAudits(),
+        db.getCollocations(),
     ]);
     const getValue = (i) => results[i].status === 'fulfilled' ? results[i].value : [];
     const communitiesData = getValue(0);
@@ -107,6 +109,7 @@ async function loadAllData() {
     const filesData = getValue(6);
     const ticketsData = getValue(7);
     const auditsData = getValue(8);
+    const collocationsData = getValue(9);
     results.forEach((r, i) => { if (r.status === 'rejected') console.warn('Data load warning:', r.reason); });
 
     // Communities
@@ -185,6 +188,7 @@ async function loadAllData() {
     // Service tickets
     serviceTickets = ticketsData;
     audits = auditsData;
+    collocations = collocationsData;
 
     // Clean up stale service statuses on sensors based on current ticket stage
     cleanupSensorServiceStatuses();
@@ -665,6 +669,7 @@ async function enterApp() {
     renderPinnedSidebar();
     updateSidebarServiceCount();
     updateSidebarAuditCount();
+    updateSidebarCollocationCount();
     restoreLastView();
     startInactivityTimer();
     } catch (err) {
@@ -994,6 +999,7 @@ function showView(viewName) {
     if (viewName === 'settings') renderSettings();
     if (viewName === 'service') renderServiceView();
     if (viewName === 'audits') renderAuditsView();
+    if (viewName === 'collocations') renderCollocationsView();
     if (viewName === 'quantaq-alerts' && typeof renderQuantAQAlertsView === 'function') renderQuantAQAlertsView();
 
     saveLastView('view', viewName);
@@ -2081,6 +2087,9 @@ function showSensorView(sensorId) {
 
     // Audits
     renderSensorAudits(sensorId);
+
+    // Collocations
+    renderSensorCollocations(sensorId);
 
     resetTabs(document.getElementById('view-sensor-detail'));
 
@@ -4029,6 +4038,7 @@ function refreshCurrentView() {
     else if (activeViewId === 'view-sensor-detail' && currentSensor) { showSensorView(currentSensor); }
     else if (activeViewId === 'view-community' && currentCommunity) { showCommunityView(currentCommunity); }
     else if (activeViewId === 'view-contact-detail' && currentContact) { showContactView(currentContact); }
+    else if (activeViewId === 'view-collocations') { renderCollocationsView(); }
     // Restore active tab after re-render (showXxxView calls resetTabs which defaults to first tab)
     if (activeTab) {
         const container = document.querySelector('.view.active');
@@ -5781,7 +5791,7 @@ function openGlobalCollocationModal() {
     openModal('modal-global-collocation');
 }
 
-function saveGlobalCollocation(e) {
+async function saveGlobalCollocation(e) {
     e.preventDefault();
     const communityId = document.getElementById('global-colloc-location').value;
     if (!communityId) return;
@@ -5821,6 +5831,24 @@ function saveGlobalCollocation(e) {
         sensors: taggedSensors,
         communities: [communityId],
     }, structuredInfo);
+
+    // Create collocation record
+    try {
+        const newColloc = await db.insertCollocation({
+            locationId: communityId,
+            status: 'In Progress',
+            startDate: startDate,
+            endDate: endDate,
+            sensorIds: taggedSensors,
+            conductedBy: conductedBy,
+            notes: extraNotes,
+            createdById: currentUserId,
+        });
+        collocations.push(newColloc);
+        updateSidebarCollocationCount();
+    } catch (err) {
+        console.error('Insert collocation error:', err);
+    }
 
     // Update each sensor's collocationDates and add Collocation status
     taggedSensors.forEach(sId => {
@@ -8822,6 +8850,262 @@ async function uploadAuditPhotos(auditId, communityId, files) {
     // Refresh the photo grid inline instead of reopening the whole modal
     const grid = document.getElementById('audit-photos-grid');
     if (grid) grid.innerHTML = renderAuditPhotos(auditId, communityId);
+}
+
+// ===== COLLOCATION SYSTEM =====
+const COLLOC_STATUSES = ['In Progress', 'Complete', 'Analysis Pending', 'Collocation Complete'];
+const COLLOC_STATUS_CSS = {
+    'In Progress': 'cs-in-progress',
+    'Complete': 'cs-complete',
+    'Analysis Pending': 'cs-analysis',
+    'Collocation Complete': 'cs-verified'
+};
+
+function persistCollocationUpdate(id, updates) {
+    return db.updateCollocation(id, updates).catch(handleSaveError);
+}
+
+function updateSidebarCollocationCount() {
+    const el = document.getElementById('sidebar-colloc-count');
+    if (!el) return;
+    const count = collocations.filter(c => c.status === 'In Progress' || c.status === 'Complete').length;
+    el.textContent = count > 0 ? `(${count})` : '';
+}
+
+function getActiveCollocationsForSensor(sensorId) {
+    return collocations.filter(c => c.sensorIds.includes(sensorId) && c.status !== 'Collocation Complete');
+}
+
+function renderCollocationsView() {
+    const container = document.getElementById('collocations-pipeline');
+    if (!container) return;
+
+    const statusGroups = {};
+    COLLOC_STATUSES.forEach(s => statusGroups[s] = []);
+    collocations.forEach(c => {
+        if (statusGroups[c.status]) statusGroups[c.status].push(c);
+    });
+
+    container.innerHTML = COLLOC_STATUSES.map(status => {
+        const items = statusGroups[status];
+        return `<div class="audit-pipeline-column">
+            <div class="audit-pipeline-header"><span class="audit-status-badge ${COLLOC_STATUS_CSS[status]}">${status}</span> <span style="color:var(--slate-400);font-size:12px">(${items.length})</span></div>
+            ${items.length === 0 ? '<div class="empty-state" style="font-size:12px">None</div>' : items.map(c => renderCollocationCard(c)).join('')}
+        </div>`;
+    }).join('');
+}
+
+function renderCollocationCard(colloc) {
+    const communityName = COMMUNITIES.find(c => c.id === colloc.locationId)?.name || colloc.locationId;
+    const dateRange = colloc.startDate ? `${formatDate(colloc.startDate)}${colloc.endDate && colloc.endDate !== 'TBD' ? ' – ' + formatDate(colloc.endDate) : colloc.endDate === 'TBD' ? ' – TBD' : ''}` : '';
+    const sensorList = (colloc.sensorIds || []).map(id => shortSensorId(id)).join(', ');
+    const hasResults = Object.keys(colloc.analysisResults || {}).length > 0;
+
+    return `<div class="audit-list-card" onclick="openCollocationDetail('${colloc.id}')">
+        <div class="audit-list-card-header">
+            <span style="font-weight:600;color:var(--slate-700)">${escapeHtml(communityName)}</span>
+            <span class="audit-status-badge ${COLLOC_STATUS_CSS[colloc.status]}">${colloc.status}</span>
+        </div>
+        <div class="audit-list-card-meta">${dateRange}</div>
+        <div style="font-size:12px;color:var(--slate-500);margin-top:4px">Sensors: ${escapeHtml(sensorList) || '—'}</div>
+        ${hasResults ? '<div style="font-size:11px;color:var(--green);margin-top:4px">Analysis complete</div>' : ''}
+    </div>`;
+}
+
+function openCollocationDetail(collocId) {
+    const colloc = collocations.find(c => c.id === collocId);
+    if (!colloc) return;
+    const communityName = COMMUNITIES.find(c => c.id === colloc.locationId)?.name || colloc.locationId;
+    const statusIndex = COLLOC_STATUSES.indexOf(colloc.status);
+    const nextStatus = statusIndex < COLLOC_STATUSES.length - 1 ? COLLOC_STATUSES[statusIndex + 1] : null;
+    const isComplete = colloc.status === 'Collocation Complete';
+    const showAnalysis = statusIndex >= 1; // Complete or later
+
+    const progressHtml = COLLOC_STATUSES.map((st, i) => {
+        const state = i < statusIndex ? 'completed' : i === statusIndex ? 'current' : 'pending';
+        return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
+    }).join('');
+
+    const sensorList = (colloc.sensorIds || []).map(id => `<a href="#" onclick="closeModal('modal-collocation-detail'); showSensorDetail('${id}'); return false;" style="color:var(--navy-500)">${id}</a>`).join(', ');
+
+    // Analysis results table
+    let analysisHtml = '';
+    const hasResults = Object.keys(colloc.analysisResults || {}).length > 0;
+    if (hasResults) {
+        const PARAMS = [
+            { key: 'pm25', label: 'PM₂.₅' }, { key: 'pm10', label: 'PM₁₀' },
+            { key: 'co', label: 'CO' }, { key: 'no', label: 'NO' },
+            { key: 'no2', label: 'NO₂' }, { key: 'o3', label: 'O₃' },
+        ];
+        analysisHtml = `<div style="margin-top:12px"><table style="width:100%;font-size:12px;border-collapse:collapse">
+            <tr style="background:var(--slate-50)"><th style="padding:4px 8px;text-align:left">Parameter</th><th>R²</th><th>Slope</th><th>Intercept</th><th>Result</th></tr>
+            ${PARAMS.filter(p => colloc.analysisResults[p.key]).map(p => {
+                const r = colloc.analysisResults[p.key];
+                const passColor = r.pass ? 'var(--green)' : '#e53e3e';
+                return `<tr><td style="padding:4px 8px">${p.label}</td><td style="text-align:center">${(r.r2||0).toFixed(3)}</td><td style="text-align:center">${(r.slope||0).toFixed(3)}</td><td style="text-align:center">${(r.intercept||0).toFixed(3)}</td><td style="text-align:center;color:${passColor};font-weight:600">${r.pass ? 'PASS' : 'FAIL'}</td></tr>`;
+            }).join('')}
+        </table></div>`;
+    }
+
+    document.getElementById('collocation-detail-title').textContent = `Collocation: ${communityName}`;
+    document.getElementById('collocation-detail-body').innerHTML = `
+        <div style="padding:12px 28px 0"><div class="ticket-steps ticket-steps-detail">${progressHtml}</div></div>
+        <div class="ticket-detail-actions" style="border-top:none">
+            ${!isComplete && nextStatus ? `<button class="btn btn-primary" onclick="advanceCollocationStatus('${colloc.id}')">Advance to: ${nextStatus}</button>` : ''}
+            ${statusIndex > 0 && !isComplete ? `<a class="undo-link" onclick="revertCollocationStatus('${colloc.id}')">Undo</a>` : ''}
+            ${showAnalysis ? `<button class="btn" onclick="beginCollocationAnalysis('${colloc.id}')">${hasResults ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
+            <span class="action-spacer"></span>
+            <button class="btn" onclick="closeModal('modal-collocation-detail')">Done</button>
+        </div>
+        <div class="ticket-detail-grid">
+            <div class="ticket-field"><label>Location</label><p><a href="#" onclick="closeModal('modal-collocation-detail'); showCommunity('${colloc.locationId}'); return false;" style="color:var(--navy-500)">${escapeHtml(communityName)}</a></p></div>
+            <div class="ticket-field"><label>Status</label><p><span class="audit-status-badge ${COLLOC_STATUS_CSS[colloc.status]}">${colloc.status}</span></p></div>
+            <div class="ticket-field"><label>Start Date</label>${!isComplete ? `<input class="ticket-edit-input" type="date" value="${colloc.startDate}" onblur="saveCollocationField('${colloc.id}','startDate',this.value)">` : `<p>${formatDate(colloc.startDate) || '—'}</p>`}</div>
+            <div class="ticket-field"><label>End Date</label>${!isComplete ? `<input class="ticket-edit-input" type="date" value="${colloc.endDate === 'TBD' ? '' : colloc.endDate}" onblur="saveCollocationField('${colloc.id}','endDate',this.value)">` : `<p>${colloc.endDate === 'TBD' ? 'TBD' : formatDate(colloc.endDate) || '—'}</p>`}</div>
+            <div class="ticket-field full-width"><label>Sensors</label><p>${sensorList || '—'}</p></div>
+            <div class="ticket-field"><label>Conducted By</label>${!isComplete ? `<input class="ticket-edit-input" value="${escapeHtml(colloc.conductedBy)}" onblur="saveCollocationField('${colloc.id}','conductedBy',this.value)">` : `<p>${escapeHtml(colloc.conductedBy) || '—'}</p>`}</div>
+            <div class="ticket-field full-width"><label>Notes</label>${!isComplete ? `<textarea class="ticket-edit-input" rows="3" onblur="saveCollocationField('${colloc.id}','notes',this.value)">${escapeHtml(colloc.notes)}</textarea>` : `<p>${escapeHtml(colloc.notes) || '—'}</p>`}</div>
+        </div>
+        ${analysisHtml}
+        <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
+            <button class="btn btn-sm btn-danger" onclick="deleteCollocation('${colloc.id}')" style="font-size:11px;opacity:0.7">Delete Collocation</button>
+        </div>`;
+    openModal('modal-collocation-detail');
+}
+
+function saveCollocationField(collocId, field, value) {
+    const colloc = collocations.find(c => c.id === collocId);
+    if (!colloc || colloc[field] === value) return;
+    colloc[field] = value;
+    persistCollocationUpdate(collocId, { [field]: value });
+}
+
+function advanceCollocationStatus(collocId) {
+    const colloc = collocations.find(c => c.id === collocId);
+    if (!colloc) return;
+    const idx = COLLOC_STATUSES.indexOf(colloc.status);
+    if (idx >= COLLOC_STATUSES.length - 1) return;
+    const oldStatus = colloc.status;
+    const newStatus = COLLOC_STATUSES[idx + 1];
+    colloc.status = newStatus;
+    persistCollocationUpdate(collocId, { status: newStatus });
+
+    // Update sensor statuses
+    if (newStatus === 'Complete' || newStatus === 'Collocation Complete') {
+        colloc.sensorIds.forEach(sId => {
+            const s = sensors.find(x => x.id === sId);
+            if (s) {
+                const statuses = getStatusArray(s).filter(st => st !== 'Collocation');
+                s.status = statuses.length > 0 ? statuses : ['Online'];
+                persistSensor(s);
+            }
+        });
+        buildSensorSidebar();
+    }
+
+    createNote('Collocation', `Collocation at ${getCommunityName(colloc.locationId)} advanced: "${oldStatus}" → "${newStatus}".`, {
+        sensors: colloc.sensorIds,
+        communities: [colloc.locationId],
+    });
+
+    openCollocationDetail(collocId);
+    updateSidebarCollocationCount();
+    if (document.getElementById('view-collocations')?.classList.contains('active')) renderCollocationsView();
+}
+
+function revertCollocationStatus(collocId) {
+    const colloc = collocations.find(c => c.id === collocId);
+    if (!colloc) return;
+    const idx = COLLOC_STATUSES.indexOf(colloc.status);
+    if (idx <= 0) return;
+    const oldStatus = colloc.status;
+    const newStatus = COLLOC_STATUSES[idx - 1];
+    colloc.status = newStatus;
+    persistCollocationUpdate(collocId, { status: newStatus });
+
+    // Re-add Collocation status if reverting back to In Progress
+    if (newStatus === 'In Progress') {
+        colloc.sensorIds.forEach(sId => {
+            const s = sensors.find(x => x.id === sId);
+            if (s) {
+                const statuses = getStatusArray(s);
+                if (!statuses.includes('Collocation')) {
+                    s.status = [...statuses, 'Collocation'];
+                    persistSensor(s);
+                }
+            }
+        });
+        buildSensorSidebar();
+    }
+
+    createNote('Collocation', `Collocation at ${getCommunityName(colloc.locationId)} reverted: "${oldStatus}" → "${newStatus}".`, {
+        sensors: colloc.sensorIds,
+        communities: [colloc.locationId],
+    });
+
+    openCollocationDetail(collocId);
+    updateSidebarCollocationCount();
+    if (document.getElementById('view-collocations')?.classList.contains('active')) renderCollocationsView();
+}
+
+async function deleteCollocation(collocId) {
+    const colloc = collocations.find(c => c.id === collocId);
+    if (!colloc) return;
+    const communityName = getCommunityName(colloc.locationId);
+
+    showConfirm('Delete Collocation', `Delete this collocation at ${communityName} permanently?<br><br>This cannot be undone.`, async () => {
+        const idx = collocations.indexOf(colloc);
+        if (idx >= 0) collocations.splice(idx, 1);
+
+        // Remove Collocation status from sensors
+        colloc.sensorIds.forEach(sId => {
+            const s = sensors.find(x => x.id === sId);
+            if (s) {
+                const statuses = getStatusArray(s).filter(st => st !== 'Collocation');
+                s.status = statuses.length > 0 ? statuses : ['Online'];
+                persistSensor(s);
+            }
+        });
+
+        try { await db.deleteCollocation(collocId); } catch (err) { console.error('Delete collocation error:', err); }
+
+        closeModal('modal-collocation-detail');
+        buildSensorSidebar();
+        updateSidebarCollocationCount();
+        if (document.getElementById('view-collocations')?.classList.contains('active')) renderCollocationsView();
+        refreshCurrentView();
+    }, { danger: true });
+}
+
+function renderSensorCollocations(sensorId) {
+    const section = document.getElementById('sensor-collocations-section');
+    if (!section) return;
+
+    const sensorCollocs = collocations.filter(c => c.sensorIds.includes(sensorId));
+    if (sensorCollocs.length === 0) {
+        section.innerHTML = '<div class="empty-state">No collocations involving this sensor.</div>';
+        return;
+    }
+
+    section.innerHTML = sensorCollocs.map(c => {
+        const communityName = COMMUNITIES.find(x => x.id === c.locationId)?.name || c.locationId;
+        const dateRange = c.startDate ? `${formatDate(c.startDate)}${c.endDate && c.endDate !== 'TBD' ? ' – ' + formatDate(c.endDate) : ''}` : '—';
+        const hasResults = Object.keys(c.analysisResults || {}).length > 0;
+        return `<div class="audit-list-card" onclick="openCollocationDetail('${c.id}')">
+            <div class="audit-list-card-header">
+                <span style="font-weight:600;color:var(--slate-700)">${escapeHtml(communityName)}</span>
+                <span class="audit-status-badge ${COLLOC_STATUS_CSS[c.status]}">${c.status}</span>
+            </div>
+            <div class="audit-list-card-meta">${dateRange}</div>
+            <div style="font-size:12px;color:var(--slate-500);margin-top:4px">Sensors: ${c.sensorIds.map(id => shortSensorId(id)).join(', ')}</div>
+            ${hasResults ? `<div style="font-size:11px;color:var(--green);margin-top:4px">Analysis complete · <a onclick="event.stopPropagation(); beginCollocationAnalysis('${c.id}')">View &rarr;</a></div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function beginCollocationAnalysis(collocId) {
+    // Placeholder — analysis engine will be added next
+    showAlert('Coming Soon', 'Collocation analysis upload is being built. Check back shortly.');
 }
 
 // ===== MOBILE SIDEBAR =====

@@ -101,6 +101,7 @@
                     </a>
                     <ul class="community-list" id="sensor-tag-list"></ul>
                     <a href="#" class="sidebar-sub-item" onclick="event.preventDefault(); showView('audits')">&#8860; Audits <span style="opacity:0.8" id="sidebar-audit-count"></span></a>
+                    <a href="#" class="sidebar-sub-item" onclick="event.preventDefault(); showView('collocations')">&#9679; Collocations <span style="opacity:0.8" id="sidebar-colloc-count"></span></a>
                     <a href="#" class="sidebar-sub-item" onclick="event.preventDefault(); showView('service')">&#9888; Quant Service Tickets <span style="opacity:0.8" id="sidebar-service-count"></span></a>
                 </li>
                 <li>
@@ -235,6 +236,15 @@
                     </select>
                 </div>
                 <div id="audit-pipeline" class="audit-pipeline"></div>
+            </div>
+
+            <!-- Collocations View -->
+            <div id="view-collocations" class="view">
+                <div class="view-header">
+                    <h1>Collocations</h1>
+                    <button class="btn btn-primary" onclick="openGlobalCollocationModal()">+ Start Collocation</button>
+                </div>
+                <div id="collocations-pipeline" class="audit-pipeline"></div>
             </div>
 
             <!-- All Communities View -->
@@ -373,6 +383,7 @@
                     <button class="tab active" data-tab="sensor-history">Device History</button>
                     <button class="tab" data-tab="sensor-tickets">Service Tickets</button>
                     <button class="tab" data-tab="sensor-audits">Audits</button>
+                    <button class="tab" data-tab="sensor-collocations">Collocations</button>
                 </div>
 
                 <div id="tab-sensor-history" class="tab-content active">
@@ -401,6 +412,10 @@
 
                 <div id="tab-sensor-audits" class="tab-content">
                     <div id="sensor-audits-section"></div>
+                </div>
+
+                <div id="tab-sensor-collocations" class="tab-content">
+                    <div id="sensor-collocations-section"></div>
                 </div>
             </div>
 
@@ -1106,6 +1121,17 @@
                 <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-audit-detail')">&times;</button>
             </div>
             <div id="audit-detail-modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Collocation Detail Modal -->
+    <div id="modal-collocation-detail" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2 id="collocation-detail-title">Collocation</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-collocation-detail')">&times;</button>
+            </div>
+            <div id="collocation-detail-body"></div>
         </div>
     </div>
 

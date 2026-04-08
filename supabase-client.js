@@ -423,6 +423,69 @@ const db = {
         if (error) throw error;
     },
 
+    // --- Collocations ---
+    async getCollocations() {
+        const { data, error } = await supa.from('collocations').select('*, profiles(name)').order('start_date', { ascending: false });
+        if (error) throw error;
+        return (data || []).map(c => ({
+            id: c.id, locationId: c.location_id, status: c.status,
+            startDate: c.start_date || '', endDate: c.end_date || '',
+            sensorIds: c.sensor_ids || [], permanentPodId: c.permanent_pod_id || '',
+            bamSource: c.bam_source || '', conductedBy: c.conducted_by || '',
+            notes: c.notes || '', analysisResults: c.analysis_results || {},
+            analysisChartData: c.analysis_chart_data || null,
+            analysisName: c.analysis_name || '',
+            analysisUploadDate: c.analysis_upload_date || null,
+            analysisUploadedBy: c.analysis_uploaded_by || '',
+            createdBy: c.profiles?.name || (c.created_by ? '[Deleted User]' : ''),
+            createdById: c.created_by, createdAt: c.created_at, updatedAt: c.updated_at,
+        }));
+    },
+
+    async insertCollocation(colloc) {
+        const { data, error } = await supa.from('collocations').insert({
+            location_id: colloc.locationId, status: colloc.status || 'In Progress',
+            start_date: colloc.startDate || '', end_date: colloc.endDate || '',
+            sensor_ids: colloc.sensorIds || [], permanent_pod_id: colloc.permanentPodId || '',
+            bam_source: colloc.bamSource || '', conducted_by: colloc.conductedBy || '',
+            notes: colloc.notes || '', created_by: colloc.createdById || null,
+        }).select('*, profiles(name)');
+        if (error) throw error;
+        const c = data[0];
+        return {
+            id: c.id, locationId: c.location_id, status: c.status,
+            startDate: c.start_date || '', endDate: c.end_date || '',
+            sensorIds: c.sensor_ids || [], permanentPodId: c.permanent_pod_id || '',
+            bamSource: c.bam_source || '', conductedBy: c.conducted_by || '',
+            notes: c.notes || '', analysisResults: c.analysis_results || {},
+            analysisChartData: c.analysis_chart_data || null, analysisName: c.analysis_name || '',
+            analysisUploadDate: c.analysis_upload_date || null, analysisUploadedBy: c.analysis_uploaded_by || '',
+            createdBy: c.profiles?.name || '', createdById: c.created_by,
+            createdAt: c.created_at, updatedAt: c.updated_at,
+        };
+    },
+
+    async updateCollocation(id, updates) {
+        const row = { updated_at: new Date().toISOString() };
+        const map = {
+            locationId: 'location_id', status: 'status', startDate: 'start_date', endDate: 'end_date',
+            sensorIds: 'sensor_ids', permanentPodId: 'permanent_pod_id', bamSource: 'bam_source',
+            conductedBy: 'conducted_by', notes: 'notes', analysisResults: 'analysis_results',
+            analysisChartData: 'analysis_chart_data', analysisName: 'analysis_name',
+            analysisUploadDate: 'analysis_upload_date', analysisUploadedBy: 'analysis_uploaded_by',
+        };
+        for (const [k, v] of Object.entries(updates)) {
+            if (map[k]) row[map[k]] = v;
+        }
+        const { error } = await supa.from('collocations').update(row).eq('id', id);
+        if (error) throw error;
+    },
+
+    async deleteCollocation(id) {
+        const { error } = await supa.from('collocations').delete().eq('id', id);
+        if (error) throw error;
+    },
+
     // --- Service Tickets ---
     async getServiceTickets() {
         const { data, error } = await supa.from('service_tickets').select('*, profiles(name)').order('created_at', { ascending: false });
