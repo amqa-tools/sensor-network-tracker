@@ -54,8 +54,9 @@ function showAlert(title, message, onDismiss) {
 
 function acceptConfirmModal() {
     const modal = document.getElementById('modal-confirm');
-    modal.classList.remove('open');
+    // Run callback BEFORE closing so form inputs (selects, inputs) are still readable
     if (_confirmCallback) { const cb = _confirmCallback; _confirmCallback = null; _confirmDismissCallback = null; cb(); }
+    modal.classList.remove('open');
 }
 
 function dismissConfirmModal() {
@@ -2204,11 +2205,11 @@ function showCommunityView(communityId) {
     ).join(' ') +
     ` <span class="community-tag-edit" onclick="openEditCommunityTags('${communityId}')">+ Edit Tags</span>`;
 
-    // Show/hide sub-community button (only for non-child communities)
+    // Show/hide toolbar buttons
     const isDeactivated = isCommunityDeactivated(communityId);
     const isChild = isChildCommunity(communityId);
     document.getElementById('add-sub-community-btn').style.display = isChild || isDeactivated ? 'none' : '';
-    document.getElementById('detach-community-btn').style.display = isChild && !isDeactivated ? '' : 'none';
+    document.getElementById('change-parent-btn').style.display = isDeactivated ? 'none' : '';
     document.getElementById('deactivate-community-btn').style.display = isDeactivated ? 'none' : '';
     document.getElementById('reactivate-community-btn').style.display = isDeactivated ? '' : 'none';
     updatePinButton(communityId);
@@ -5836,25 +5837,77 @@ function editCommunityName() {
     renderPinnedSidebar();
 }
 
-function detachFromParent(communityId) {
+function openChangeParentModal(communityId) {
     const community = COMMUNITIES.find(c => c.id === communityId);
     if (!community) return;
-    const parent = getParentCommunity(communityId);
-    if (!parent) return;
+    const currentParent = getParentCommunity(communityId);
+    const children = getChildCommunities(communityId);
+    const childIds = children.map(c => c.id);
 
-    showConfirm('Make Standalone', `Remove "${community.name}" from under "${parent.name}" and make it a standalone community?`, () => {
-        delete communityParents[communityId];
-        db.updateCommunity(communityId, { parent_id: null }).catch(err => console.error('Detach error:', err));
+    // Build options: "None (standalone)" + all top-level communities except self and own children
+    const options = COMMUNITIES
+        .filter(c => c.id !== communityId && !childIds.includes(c.id) && !isChildCommunity(c.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
+    const currentLabel = currentParent ? currentParent.name : 'None (standalone)';
+
+    const body = `
+        <p style="margin-bottom:12px;color:var(--slate-500);font-size:13px">
+            <strong>${escapeHtml(community.name)}</strong> is currently:
+            <strong>${currentParent ? 'a child of ' + escapeHtml(currentParent.name) : 'a standalone community'}</strong>
+        </p>
+        ${children.length > 0 ? `<p style="margin-bottom:12px;color:var(--slate-400);font-size:12px">This community has ${children.length} sub-communit${children.length === 1 ? 'y' : 'ies'}: ${children.map(c => escapeHtml(c.name)).join(', ')}. Assigning a parent will move them too.</p>` : ''}
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--slate-500);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em">Parent Community</label>
+        <select id="change-parent-select" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)">
+            <option value="">None (standalone)</option>
+            ${options.map(c => `<option value="${c.id}" ${currentParent && currentParent.id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+        </select>
+    `;
+
+    showConfirm('Change Parent Community', body, () => {
+        const select = document.getElementById('change-parent-select');
+        if (!select) return;
+        const newParentId = select.value;
+        const oldParentId = communityParents[communityId] || null;
+
+        // No change
+        if ((newParentId || null) === oldParentId) return;
+
+        const oldParentName = oldParentId ? getCommunityName(oldParentId) : 'standalone';
+        const newParentName = newParentId ? getCommunityName(newParentId) : 'standalone';
+
+        // Update in-memory
+        if (newParentId) {
+            communityParents[communityId] = newParentId;
+        } else {
+            delete communityParents[communityId];
+        }
+
+        // Persist to DB
+        db.updateCommunity(communityId, { parent_id: newParentId || null }).catch(err => console.error('Change parent error:', err));
+
+        // Log note
         if (!setupMode) {
+            let noteText;
+            if (!oldParentId && newParentId) {
+                noteText = `"${community.name}" assigned as a sub-community of "${newParentName}".`;
+            } else if (oldParentId && !newParentId) {
+                noteText = `"${community.name}" detached from "${oldParentName}" and is now standalone.`;
+            } else {
+                noteText = `"${community.name}" moved from under "${oldParentName}" to under "${newParentName}".`;
+            }
+            const taggedCommunities = [communityId];
+            if (oldParentId) taggedCommunities.push(oldParentId);
+            if (newParentId && !taggedCommunities.includes(newParentId)) taggedCommunities.push(newParentId);
+
             const note = {
                 id: generateId('n'),
                 date: nowDatetime(),
                 type: 'Info Edit',
-                text: `Community "${community.name}" detached from parent "${parent.name}" and is now standalone.`,
+                text: noteText,
                 createdBy: getCurrentUserName(), createdById: currentUserId,
                 taggedSensors: [],
-                taggedCommunities: [communityId, parent.id],
+                taggedCommunities: taggedCommunities,
                 taggedContacts: [],
             };
             notes.push(note); persistNote(note);
@@ -5863,8 +5916,8 @@ function detachFromParent(communityId) {
         showCommunityView(communityId);
         buildSidebar();
         renderPinnedSidebar();
-        showSuccessToast(`"${community.name}" is now a standalone community`);
-    });
+        showSuccessToast(newParentId ? `"${community.name}" is now under "${newParentName}"` : `"${community.name}" is now standalone`);
+    }, { confirmText: 'Save' });
 }
 
 function pinTag(tag) {
