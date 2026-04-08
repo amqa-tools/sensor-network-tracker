@@ -190,6 +190,9 @@ async function loadAllData() {
 
     // Merge duplicate status change notes with general notes created at same time
     mergeStatusChangeNotes();
+
+    // Ensure notes containing status change text have the Status Change type tag
+    tagNotesWithStatusChange();
 }
 
 function cleanupSensorServiceStatuses() {
@@ -258,6 +261,20 @@ function mergeStatusChangeNotes() {
             ).catch(err => console.error('Delete merged note error:', err));
         });
     }
+}
+
+function tagNotesWithStatusChange() {
+    // Ensure any note whose text contains a status change line has Status Change in its type
+    notes.forEach(n => {
+        if (n.text && n.text.includes('status changed from') && !n.type.includes('Status Change')) {
+            if (n.type === 'General' || !n.type) {
+                n.type = 'Status Change';
+            } else {
+                n.type = n.type + ' + Status Change';
+            }
+            db.updateNote(n.id, { type: n.type }).catch(err => console.error('Tag status change error:', err));
+        }
+    });
 }
 
 // ===== PERSISTENCE LAYER =====
