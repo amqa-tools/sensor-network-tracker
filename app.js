@@ -9795,17 +9795,23 @@ function renderCollocationAnalysisResults(collocId, parsed) {
             </div>
         `;
 
-        // Build tab HTML first (no charts yet), then render only visible charts
+        // Build tab HTML first (no charts yet), then render visible charts
         _buildCollocTSTabs(parsed, colloc);
         _buildCollocRegTabs(parsed, results);
 
-        // Render only the first visible chart after delay (modal must be visible for Plotly)
+        // Render charts after modal is fully visible and DOM settled
         setTimeout(() => {
             try {
+                console.log('Rendering collocation charts...');
+                const tsEl = document.getElementById('colloc-ts-plot-pm25');
+                console.log('TS plot container:', tsEl ? `${tsEl.offsetWidth}x${tsEl.offsetHeight}` : 'NOT FOUND');
+                // Render first TS chart
                 _renderCollocTSChart(parsed, AUDIT_PARAMETERS[0].key);
+                // Render first regression tab
                 _renderFirstVisibleRegTab(parsed, results);
+                console.log('Charts rendered successfully');
             } catch (err) { console.error('Chart render error:', err, err.stack); }
-        }, 300);
+        }, 500);
 
     } catch (err) {
         console.error('Analysis render error:', err);
