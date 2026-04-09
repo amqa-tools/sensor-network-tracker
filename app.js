@@ -9892,6 +9892,7 @@ function _renderCollocTSChart(parsed, paramKey) {
     const yMax = allY.length > 0 ? allY.reduce((a, b) => Math.max(a, b), -Infinity) : 1;
     const dt = _collocNiceDtick(yMin, yMax);
 
+    console.log(`Plotly render ${plotId}: ${traces.length} traces, ${allY.length} data points, yRange=[${yMin},${yMax}]`);
     try {
         Plotly.newPlot(plotId, traces, {
             margin: { t: 8, b: 45, l: 80, r: 15 },
