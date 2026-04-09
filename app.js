@@ -9392,8 +9392,11 @@ function renderSensorCollocations(sensorId) {
         html += initialNotes.map(n => {
             const collocText = n.text.replace('Initial collocation: ', '');
             return `<div class="audit-list-card" style="cursor:default;opacity:0.8">
-                <div style="font-size:13px;color:var(--slate-600)">${escapeHtml(collocText)}</div>
-                <div class="audit-list-card-meta">${formatDate(n.date)}</div>
+                <div class="audit-list-card-header">
+                    <span style="font-weight:600;color:var(--slate-700)">Initial Collocation</span>
+                </div>
+                <div style="font-size:13px;color:var(--slate-600);margin-top:4px">${escapeHtml(collocText)}</div>
+                <div class="audit-list-card-meta">${formatDate(n.date)}${n.createdBy ? ' — Logged by ' + escapeHtml(n.createdBy) : ''}</div>
             </div>`;
         }).join('');
     }
