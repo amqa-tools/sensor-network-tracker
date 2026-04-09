@@ -6846,18 +6846,20 @@ function _regressionSelfTest() {
     if (_regressionSelfTestResults !== null) return _regressionSelfTestResults;
     _regressionSelfTestResults = [];
     try {
-        const r1 = runLinearRegression([1,2,3,4,5], [2.1,3.9,6.1,7.9,10.1]);
+        // Test 1: Perfect line y = 2x + 1 (slope=2, intercept=1, R²=1)
+        const r1 = runLinearRegression([1,2,3,4,5], [3,5,7,9,11]);
+        // Test 2: Perfect line y = x (slope=1, intercept=0, R²=1)
         const r2 = runLinearRegression([1,2,3,4,5], [1,2,3,4,5]);
         if (!r1 || !r2) {
             _regressionSelfTestResults.push({ test: 'Regression returns results', pass: false, detail: 'Function returned null' });
             return _regressionSelfTestResults;
         }
-        _regressionSelfTestResults.push({ test: 'Known slope (expected ~2.0)', pass: Math.abs(r1.slope - 2.0) < 0.05, detail: `Got ${r1.slope}` });
-        _regressionSelfTestResults.push({ test: 'Known intercept (expected ~0.1)', pass: Math.abs(r1.intercept - 0.1) < 0.3, detail: `Got ${r1.intercept}` });
-        _regressionSelfTestResults.push({ test: 'Known R\u00B2 (expected >0.999)', pass: r1.r2 >= 0.999, detail: `Got ${r1.r2}` });
-        _regressionSelfTestResults.push({ test: 'Perfect fit slope (expected 1.0)', pass: Math.abs(r2.slope - 1) < 0.001, detail: `Got ${r2.slope}` });
-        _regressionSelfTestResults.push({ test: 'Perfect fit intercept (expected 0)', pass: Math.abs(r2.intercept) < 0.001, detail: `Got ${r2.intercept}` });
-        _regressionSelfTestResults.push({ test: 'Perfect fit R\u00B2 (expected 1.0)', pass: r2.r2 >= 0.9999, detail: `Got ${r2.r2}` });
+        _regressionSelfTestResults.push({ test: 'Known slope (y=2x+1, expected 2.0)', pass: Math.abs(r1.slope - 2.0) < 0.001, detail: `Got ${r1.slope}` });
+        _regressionSelfTestResults.push({ test: 'Known intercept (y=2x+1, expected 1.0)', pass: Math.abs(r1.intercept - 1.0) < 0.001, detail: `Got ${r1.intercept}` });
+        _regressionSelfTestResults.push({ test: 'Perfect fit R\u00B2 (y=2x+1, expected 1.0)', pass: r1.r2 >= 0.9999, detail: `Got ${r1.r2}` });
+        _regressionSelfTestResults.push({ test: 'Identity slope (y=x, expected 1.0)', pass: Math.abs(r2.slope - 1) < 0.001, detail: `Got ${r2.slope}` });
+        _regressionSelfTestResults.push({ test: 'Identity intercept (y=x, expected 0)', pass: Math.abs(r2.intercept) < 0.001, detail: `Got ${r2.intercept}` });
+        _regressionSelfTestResults.push({ test: 'Identity R\u00B2 (y=x, expected 1.0)', pass: r2.r2 >= 0.9999, detail: `Got ${r2.r2}` });
         _regressionSelfTestResults.push({ test: 'Sample size preserved (n=5)', pass: r1.n === 5 && r2.n === 5, detail: `Got n=${r1.n}, n=${r2.n}` });
     } catch(e) {
         _regressionSelfTestResults.push({ test: 'Regression engine runs without error', pass: false, detail: e.message });
