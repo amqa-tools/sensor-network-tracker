@@ -9016,7 +9016,7 @@ function openCollocationDetail(collocId) {
             ${!isComplete && nextStatus ? `<button class="btn btn-primary" onclick="advanceCollocationStatus('${colloc.id}')">Advance to: ${nextStatus}</button>` : ''}
             ${statusIndex > 0 && !isComplete ? `<a class="undo-link" onclick="revertCollocationStatus('${colloc.id}')">Undo</a>` : ''}
             ${showAnalysis ? `<button class="btn" onclick="beginCollocationAnalysis('${colloc.id}')">${hasResults ? 'View Analysis' : 'Upload Data'}</button>` : ''}
-            ${hasResults ? `<button class="btn" onclick="delete collocAnalysisCache['${colloc.id}']; beginCollocationAnalysis('${colloc.id}')">Re-upload Data</button>` : ''}
+            ${hasResults ? `<button class="btn" onclick="reuploadCollocationData('${colloc.id}')">Re-upload Data</button>` : ''}
             <span class="action-spacer"></span>
             <button class="btn" onclick="closeModal('modal-collocation-detail')">Done</button>
         </div>
@@ -9189,6 +9189,19 @@ const COLLOC_COLUMN_MAP = {
     no2: [/NO2_PPB/i],
     o3: [/OZONE_PPB/i, /O3_PPB/i],
 };
+
+function reuploadCollocationData(collocId) {
+    const colloc = collocations.find(c => c.id === collocId);
+    if (!colloc) return;
+    // Clear cache and results so beginCollocationAnalysis shows upload form
+    delete collocAnalysisCache[collocId];
+    colloc.analysisResults = {};
+    colloc.analysisChartData = null;
+    colloc.analysisName = '';
+    colloc.analysisUploadDate = null;
+    colloc.analysisUploadedBy = '';
+    beginCollocationAnalysis(collocId);
+}
 
 function beginCollocationAnalysis(collocId) {
     const colloc = collocations.find(c => c.id === collocId);
@@ -9671,7 +9684,7 @@ function renderCollocationAnalysisResults(collocId, parsed) {
 
                 <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center">
                     <button class="btn btn-primary" onclick="generateCollocationReport('${collocId}')">Save as HTML</button>
-                    <button class="btn" onclick="delete collocAnalysisCache['${collocId}']; beginCollocationAnalysis('${collocId}')">Re-upload Data</button>
+                    <button class="btn" onclick="reuploadCollocationData('${collocId}')">Re-upload Data</button>
                 </div>
             </div>
         `;
@@ -9690,7 +9703,7 @@ function renderCollocationAnalysisResults(collocId, parsed) {
 
     } catch (err) {
         console.error('Analysis render error:', err);
-        document.getElementById('audit-analysis-body').innerHTML = `<div style="padding:20px;color:#c53030">Error rendering analysis: ${escapeHtml(err.message)}<br><br><button class="btn" onclick="delete collocAnalysisCache['${collocId}']; beginCollocationAnalysis('${collocId}')">Re-upload Data</button></div>`;
+        document.getElementById('audit-analysis-body').innerHTML = `<div style="padding:20px;color:#c53030">Error rendering analysis: ${escapeHtml(err.message)}<br><br><button class="btn" onclick="reuploadCollocationData('${collocId}')">Re-upload Data</button></div>`;
     }
 }
 
@@ -10194,7 +10207,7 @@ function renderCollocationSavedView(collocId) {
     const body = document.getElementById('audit-analysis-body');
     body.innerHTML = `<div style="padding:20px;text-align:center;color:var(--slate-400)">
         <p>Analysis results saved. Re-upload the data file to view full charts.</p>
-        <button class="btn" style="margin-top:12px" onclick="delete collocAnalysisCache['${collocId}']; beginCollocationAnalysis('${collocId}')">Re-upload Data</button>
+        <button class="btn" style="margin-top:12px" onclick="reuploadCollocationData('${collocId}')">Re-upload Data</button>
     </div>`;
 }
 
