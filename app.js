@@ -363,10 +363,17 @@ function tagNotesWithStatusChange() {
 }
 
 function migrateCollocationDatesToNotes() {
-    if (localStorage.getItem('snt_collocDates_migrated')) return;
+    if (localStorage.getItem('snt_collocDates_migrated_v2')) return;
     let count = 0;
     sensors.forEach(s => {
         if (s.collocationDates && s.collocationDates.trim()) {
+            // Check if a migration note already exists for this sensor
+            const alreadyMigrated = notes.some(n =>
+                n.type === 'Collocation' &&
+                n.taggedSensors && n.taggedSensors.includes(s.id) &&
+                n.text && n.text.includes('Initial collocation:')
+            );
+            if (alreadyMigrated) return;
             createNote('Collocation', 'Initial collocation: ' + s.collocationDates, {
                 sensors: [s.id],
                 communities: s.community ? [s.community] : [],
@@ -374,8 +381,8 @@ function migrateCollocationDatesToNotes() {
             count++;
         }
     });
-    localStorage.setItem('snt_collocDates_migrated', '1');
-    console.log('Migrated ' + count + ' collocation dates to notes');
+    localStorage.setItem('snt_collocDates_migrated_v2', '1');
+    if (count > 0) console.log('Migrated ' + count + ' collocation dates to notes');
 }
 
 // ===== PERSISTENCE LAYER =====
