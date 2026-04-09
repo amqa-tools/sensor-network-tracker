@@ -9293,8 +9293,8 @@ function beginCollocationAnalysis(collocId) {
 
     if (hasResults && collocAnalysisCache[collocId]) {
         document.getElementById('analysis-modal-title').textContent = colloc.analysisName || `Collocation Analysis: ${communityName}`;
-        renderCollocationAnalysisResults(collocId, collocAnalysisCache[collocId]);
         openModal('modal-audit-analysis');
+        setTimeout(() => renderCollocationAnalysisResults(collocId, collocAnalysisCache[collocId]), 50);
         return;
     }
 
@@ -9302,16 +9302,16 @@ function beginCollocationAnalysis(collocId) {
         collocAnalysisCache[collocId] = rebuildCollocCacheFromSaved(colloc);
         if (collocAnalysisCache[collocId]) {
             document.getElementById('analysis-modal-title').textContent = colloc.analysisName || `Collocation Analysis: ${communityName}`;
-            renderCollocationAnalysisResults(collocId, collocAnalysisCache[collocId]);
             openModal('modal-audit-analysis');
+            setTimeout(() => renderCollocationAnalysisResults(collocId, collocAnalysisCache[collocId]), 50);
             return;
         }
     }
 
     if (hasResults) {
         document.getElementById('analysis-modal-title').textContent = colloc.analysisName || `Collocation Analysis: ${communityName}`;
-        renderCollocationSavedView(collocId);
         openModal('modal-audit-analysis');
+        setTimeout(() => renderCollocationSavedView(collocId), 50);
         return;
     }
 
@@ -9799,13 +9799,13 @@ function renderCollocationAnalysisResults(collocId, parsed) {
         _buildCollocTSTabs(parsed, colloc);
         _buildCollocRegTabs(parsed, results);
 
-        // Render only the first visible chart after a brief delay (let DOM settle)
+        // Render only the first visible chart after delay (modal must be visible for Plotly)
         setTimeout(() => {
             try {
-                _renderCollocTSChart(parsed, AUDIT_PARAMETERS[0].key, colloc);
+                _renderCollocTSChart(parsed, AUDIT_PARAMETERS[0].key);
                 _renderFirstVisibleRegTab(parsed, results);
-            } catch (err) { console.error('Chart render error:', err); }
-        }, 100);
+            } catch (err) { console.error('Chart render error:', err, err.stack); }
+        }, 300);
 
     } catch (err) {
         console.error('Analysis render error:', err);
@@ -9862,21 +9862,21 @@ function _renderCollocTSChart(parsed, paramKey) {
     if (!el || el.dataset.rendered) return;
     el.dataset.rendered = '1';
 
-    const hasBam = parsed.allRows.some(r => !isNaN(r.bam.pm25) || !isNaN(r.bam.pm10));
+    const hasBam = parsed.allRows.some(r => !isNaN(Number(r.bam?.pm25)) || !isNaN(Number(r.bam?.pm10)));
     const paramLabels = { pm25: 'PM₂.₅ (µg/m³)', pm10: 'PM₁₀ (µg/m³)', co: 'CO (ppb)', no: 'NO (ppb)', no2: 'NO₂ (ppb)', o3: 'O₃ (ppb)' };
     const dates = _getCollocDates(parsed);
     const traces = [];
 
     if (hasBam && (paramKey === 'pm25' || paramKey === 'pm10')) {
-        traces.push({ x: dates, y: parsed.allRows.map(r => isNaN(r.bam[paramKey]) ? null : r.bam[paramKey]), name: parsed.bamLabel, type: 'scatter', mode: 'lines', line: { color: COLLOC_COLORS.BAM, width: 2.5 }, connectgaps: false });
+        traces.push({ x: dates, y: parsed.allRows.map(r => { const v = Number(r.bam?.[paramKey]); return isNaN(v) ? null : v; }), name: parsed.bamLabel, type: 'scatter', mode: 'lines', line: { color: COLLOC_COLORS.BAM, width: 2.5 }, connectgaps: false });
     }
     if (parsed.permaPod) {
-        const vals = parsed.allRows.map(r => isNaN(r.perma[paramKey]) ? null : r.perma[paramKey]);
+        const vals = parsed.allRows.map(r => { const v = Number(r.perma?.[paramKey]); return isNaN(v) ? null : v; });
         if (vals.some(v => v !== null)) traces.push({ x: dates, y: vals, name: shortSensorId(parsed.permaPodId) + ' (Perma)', type: 'scatter', mode: 'lines', line: { color: COLLOC_COLORS.PERMA, width: 2 }, connectgaps: false });
     }
     parsed.podIds.forEach((podId, idx) => {
         if (parsed.isPmOnly[podId] && paramKey !== 'pm25' && paramKey !== 'pm10') return;
-        const vals = parsed.allRows.map(r => isNaN(r.pods[podId]?.[paramKey]) ? null : r.pods[podId][paramKey]);
+        const vals = parsed.allRows.map(r => { const v = Number(r.pods?.[podId]?.[paramKey]); return isNaN(v) ? null : v; });
         if (!vals.some(v => v !== null)) return;
         traces.push({ x: dates, y: vals, name: shortSensorId(podId), type: 'scatter', mode: 'lines', line: { color: _collocPodColor(idx), width: 1.5 }, connectgaps: false });
     });
