@@ -6835,6 +6835,274 @@ const DQO_THRESHOLDS = {
     rmse: { max: 7 },
 };
 
+const PHYSICAL_RANGES = {
+    pm25: { min: 0, max: 500 }, pm10: { min: 0, max: 1000 },
+    co: { min: 0, max: 50000 }, no: { min: 0, max: 1000 },
+    no2: { min: 0, max: 2000 }, o3: { min: 0, max: 500 },
+};
+const SAMPLE_SIZE_TIERS = { critical: 10, minimum: 24, adequate: 72, ideal: 168 };
+
+// ===== FAILSAFE VALIDATION =====
+
+// Check 7: Self-test (runs once, cached)
+let _regressionSelfTestPassed = null;
+function _regressionSelfTest() {
+    if (_regressionSelfTestPassed !== null) return _regressionSelfTestPassed;
+    try {
+        const r1 = runLinearRegression([1,2,3,4,5], [2.1,3.9,6.1,7.9,10.1]);
+        const r2 = runLinearRegression([1,2,3,4,5], [1,2,3,4,5]);
+        _regressionSelfTestPassed = r1 && r2 &&
+            Math.abs(r1.slope - 2.0) < 0.05 && Math.abs(r1.intercept - 0.1) < 0.2 && r1.r2 > 0.999 &&
+            r2.slope === 1 && r2.intercept === 0 && r2.r2 === 1;
+    } catch(e) { _regressionSelfTestPassed = false; }
+    if (!_regressionSelfTestPassed) console.error('REGRESSION SELF-TEST FAILED');
+    return _regressionSelfTestPassed;
+}
+
+function runFailsafeValidation(parsed, results, type) {
+    const warnings = [];
+
+    // Check 7 — Self-test
+    if (!_regressionSelfTest()) {
+        warnings.push({ category: 'self-test', severity: 'error', msg: 'Internal regression self-test FAILED. Results may be unreliable.' });
+    }
+
+    // Helper: iterate all result entries with their label and result object
+    function _forEachResult(callback) {
+        if (type === 'audit') {
+            AUDIT_PARAMETERS.forEach(p => {
+                if (results[p.key]) callback(p.label, p.key, results[p.key]);
+            });
+        } else {
+            // Collocation: bamVsPods, bamVsPerma, permaVsPods
+            if (results.bamVsPods) {
+                for (const podId of Object.keys(results.bamVsPods)) {
+                    for (const [key, res] of Object.entries(results.bamVsPods[podId])) {
+                        const p = AUDIT_PARAMETERS.find(x => x.key === key);
+                        callback(`BAM vs ${podId} ${p ? p.label : key}`, key, res);
+                    }
+                }
+            }
+            if (results.bamVsPerma) {
+                for (const [key, res] of Object.entries(results.bamVsPerma)) {
+                    const p = AUDIT_PARAMETERS.find(x => x.key === key);
+                    callback(`BAM vs Perma ${p ? p.label : key}`, key, res);
+                }
+            }
+            if (results.permaVsPods) {
+                for (const podId of Object.keys(results.permaVsPods)) {
+                    for (const [key, res] of Object.entries(results.permaVsPods[podId])) {
+                        const p = AUDIT_PARAMETERS.find(x => x.key === key);
+                        callback(`Perma vs ${podId} ${p ? p.label : key}`, key, res);
+                    }
+                }
+            }
+        }
+    }
+
+    // Check 1 — Regression verification (Pearson R2 cross-check)
+    _forEachResult((paramLabel, key, result) => {
+        const pairs = result.pairs;
+        if (pairs && pairs.length > 2) {
+            const n = pairs.length;
+            let sx=0,sy=0,sxy=0,sx2=0,sy2=0;
+            pairs.forEach(p => { sx+=p.x; sy+=p.y; sxy+=p.x*p.y; sx2+=p.x*p.x; sy2+=p.y*p.y; });
+            const num = n*sxy - sx*sy;
+            const den = Math.sqrt((n*sx2-sx*sx)*(n*sy2-sy*sy));
+            const r2_pearson = den === 0 ? 0 : (num/den)*(num/den);
+            if (Math.abs(r2_pearson - result.r2) > 0.002) {
+                warnings.push({ category: 'regression-verify', severity: 'error', msg: `${paramLabel} R\u00B2 verification mismatch: regression=${result.r2}, Pearson=${r2_pearson.toFixed(4)}` });
+            }
+        }
+    });
+
+    // Check 2 — Physical range validation
+    if (parsed.trimmedRows && parsed.trimmedRows.length > 0) {
+        const totalRows = parsed.trimmedRows.length;
+        for (const [key, range] of Object.entries(PHYSICAL_RANGES)) {
+            let outCount = 0;
+            let extremeVal = null;
+            const checkValue = (v) => {
+                if (isNaN(v) || !isFinite(v)) return;
+                if (v < range.min || v > range.max) {
+                    outCount++;
+                    if (extremeVal === null || Math.abs(v) > Math.abs(extremeVal)) extremeVal = v;
+                }
+            };
+            for (const row of parsed.trimmedRows) {
+                if (type === 'audit') {
+                    checkValue(row.values[key]?.a);
+                    checkValue(row.values[key]?.b);
+                } else {
+                    checkValue(Number(row.bam?.[key] ?? NaN));
+                    checkValue(Number(row.perma?.[key] ?? NaN));
+                    if (row.pods) {
+                        for (const podId of Object.keys(row.pods)) {
+                            checkValue(Number(row.pods[podId]?.[key] ?? NaN));
+                        }
+                    }
+                }
+            }
+            const p = AUDIT_PARAMETERS.find(x => x.key === key);
+            const label = p ? p.label : key;
+            const pct = ((outCount / totalRows) * 100).toFixed(1);
+            if (outCount > 0 && (outCount / totalRows) > 0.05) {
+                warnings.push({ category: 'physical-range', severity: 'error', msg: `${label}: ${pct}% of values outside physical range [${range.min}\u2013${range.max}] (extreme: ${extremeVal})` });
+            } else if (outCount > 0) {
+                warnings.push({ category: 'physical-range', severity: 'warning', msg: `${label}: ${outCount} value(s) outside physical range [${range.min}\u2013${range.max}] (extreme: ${extremeVal})` });
+            }
+        }
+    }
+
+    // Check 3 — Timestamp validation
+    if (parsed.trimmedRows && parsed.trimmedRows.length >= 2) {
+        const rows = parsed.trimmedRows;
+        const now = new Date();
+        const minDate = new Date('2020-01-01T00:00:00Z');
+        let gapCount = 0;
+        let maxGapHours = 0;
+        let futureCount = 0;
+        let preDateCount = 0;
+
+        for (let i = 0; i < rows.length; i++) {
+            const ts = rows[i].timestamp;
+            if (ts > now) futureCount++;
+            if (ts < minDate) preDateCount++;
+            if (i > 0) {
+                const diffHours = Math.abs(ts - rows[i-1].timestamp) / 3600000;
+                if (diffHours > 2) {
+                    gapCount++;
+                    if (diffHours > maxGapHours) maxGapHours = diffHours;
+                }
+            }
+        }
+
+        const firstTs = rows[0].timestamp;
+        const lastTs = rows[rows.length - 1].timestamp;
+        const totalHours = Math.abs(lastTs - firstTs) / 3600000;
+
+        if (gapCount > 0) {
+            warnings.push({ category: 'timestamp', severity: 'warning', msg: `${gapCount} time gap(s) > 2 hours detected (largest: ${maxGapHours.toFixed(1)}h)` });
+        }
+        if (totalHours < 48) {
+            warnings.push({ category: 'timestamp', severity: 'warning', msg: `Post-trim data spans only ${totalHours.toFixed(1)} hours (< 48h recommended)` });
+        }
+        if (futureCount > 0) {
+            warnings.push({ category: 'timestamp', severity: 'error', msg: `${futureCount} timestamp(s) are in the future` });
+        }
+        if (preDateCount > 0) {
+            warnings.push({ category: 'timestamp', severity: 'error', msg: `${preDateCount} timestamp(s) are before 2020` });
+        }
+    }
+
+    // Check 4 — Sample size
+    _forEachResult((paramLabel, key, result) => {
+        const n = result.n;
+        if (n == null) return;
+        if (n < SAMPLE_SIZE_TIERS.critical) {
+            warnings.push({ category: 'sample-size', severity: 'error', msg: `${paramLabel}: only ${n} data pairs \u2014 critically low (minimum ${SAMPLE_SIZE_TIERS.critical})` });
+        } else if (n < SAMPLE_SIZE_TIERS.minimum) {
+            warnings.push({ category: 'sample-size', severity: 'error', msg: `${paramLabel}: ${n} data pairs \u2014 minimum ${SAMPLE_SIZE_TIERS.minimum} recommended` });
+        } else if (n < SAMPLE_SIZE_TIERS.adequate) {
+            warnings.push({ category: 'sample-size', severity: 'warning', msg: `${paramLabel}: ${n} data pairs \u2014 ${SAMPLE_SIZE_TIERS.adequate}+ recommended for robust analysis` });
+        } else {
+            warnings.push({ category: 'sample-size', severity: 'info', msg: `${paramLabel}: ${n} data pairs` });
+        }
+    });
+
+    // Check 5 — Outlier detection (simplified IQR on residuals)
+    _forEachResult((paramLabel, key, result) => {
+        const pairs = result.pairs;
+        if (!pairs || pairs.length < 10) return;
+        // Compute residuals
+        const residuals = pairs.map(p => p.y - (result.slope * p.x + result.intercept));
+        const sorted = residuals.slice().sort((a, b) => a - b);
+        const q1 = sorted[Math.floor(sorted.length * 0.25)];
+        const q3 = sorted[Math.floor(sorted.length * 0.75)];
+        const iqr = q3 - q1;
+        const lower = q1 - 3 * iqr;
+        const upper = q3 + 3 * iqr;
+        const outlierIndices = [];
+        residuals.forEach((r, i) => { if (r < lower || r > upper) outlierIndices.push(i); });
+        if (outlierIndices.length === 0) return;
+
+        // Check if removing outliers changes DQO verdict
+        const cleanPairsX = [], cleanPairsY = [];
+        pairs.forEach((p, i) => {
+            if (!outlierIndices.includes(i)) { cleanPairsX.push(p.x); cleanPairsY.push(p.y); }
+        });
+        const cleanReg = runLinearRegression(cleanPairsX, cleanPairsY);
+        const originalPass = result.pass;
+        const cleanPass = cleanReg ? checkDQO(cleanReg).pass : originalPass;
+
+        if (originalPass !== cleanPass) {
+            warnings.push({ category: 'outlier', severity: 'error', msg: `${paramLabel}: ${outlierIndices.length} outlier(s) detected \u2014 removing them changes DQO verdict from ${originalPass ? 'PASS' : 'FAIL'} to ${cleanPass ? 'PASS' : 'FAIL'}` });
+        } else {
+            warnings.push({ category: 'outlier', severity: 'warning', msg: `${paramLabel}: ${outlierIndices.length} outlier(s) detected (IQR method, 3x) \u2014 DQO verdict unchanged` });
+        }
+    });
+
+    // Check 8 — Near-boundary DQO
+    _forEachResult((paramLabel, key, result) => {
+        const T = DQO_THRESHOLDS;
+        // R2 near boundary: 0.70-0.73
+        if (result.r2 >= T.r2.min && result.r2 < T.r2.min + 0.03) {
+            const margin = ((result.r2 - T.r2.min) * 100).toFixed(1);
+            warnings.push({ category: 'near-boundary', severity: 'info', msg: `${paramLabel} R\u00B2 = ${result.r2} \u2014 borderline (margin: ${margin}%)` });
+        }
+        // Slope near lower boundary: 0.65-0.72
+        if (result.slope >= T.slope.min && result.slope < T.slope.min + 0.07) {
+            const margin = ((result.slope - T.slope.min) / T.slope.min * 100).toFixed(1);
+            warnings.push({ category: 'near-boundary', severity: 'info', msg: `${paramLabel} slope = ${result.slope} \u2014 borderline (margin: ${margin}%)` });
+        }
+        // Slope near upper boundary: 1.28-1.35
+        if (result.slope > T.slope.max - 0.07 && result.slope <= T.slope.max) {
+            const margin = ((T.slope.max - result.slope) / T.slope.max * 100).toFixed(1);
+            warnings.push({ category: 'near-boundary', severity: 'info', msg: `${paramLabel} slope = ${result.slope} \u2014 borderline (margin: ${margin}%)` });
+        }
+        // Intercept near lower: -5 to -4
+        if (result.intercept >= T.intercept.min && result.intercept < T.intercept.min + 1) {
+            const margin = (result.intercept - T.intercept.min).toFixed(2);
+            warnings.push({ category: 'near-boundary', severity: 'info', msg: `${paramLabel} intercept = ${result.intercept} \u2014 borderline (margin: ${margin})` });
+        }
+        // Intercept near upper: 4 to 5
+        if (result.intercept > T.intercept.max - 1 && result.intercept <= T.intercept.max) {
+            const margin = (T.intercept.max - result.intercept).toFixed(2);
+            warnings.push({ category: 'near-boundary', severity: 'info', msg: `${paramLabel} intercept = ${result.intercept} \u2014 borderline (margin: ${margin})` });
+        }
+        // SD near boundary: 4.5-5.0
+        if (result.sd > T.sd.max - 0.5 && result.sd <= T.sd.max) {
+            const margin = ((T.sd.max - result.sd) / T.sd.max * 100).toFixed(1);
+            warnings.push({ category: 'near-boundary', severity: 'info', msg: `${paramLabel} SD = ${result.sd} \u2014 borderline (margin: ${margin}%)` });
+        }
+        // RMSE near boundary: 6.3-7.0
+        if (result.rmse > T.rmse.max - 0.7 && result.rmse <= T.rmse.max) {
+            const margin = ((T.rmse.max - result.rmse) / T.rmse.max * 100).toFixed(1);
+            warnings.push({ category: 'near-boundary', severity: 'info', msg: `${paramLabel} RMSE = ${result.rmse} \u2014 borderline (margin: ${margin}%)` });
+        }
+    });
+
+    return warnings;
+}
+
+function renderValidationReport(warnings) {
+    if (!warnings || !warnings.length) return '<div style="padding:8px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#15803d;margin-bottom:12px">All failsafe checks passed.</div>';
+    const errors = warnings.filter(w => w.severity === 'error');
+    const warns = warnings.filter(w => w.severity === 'warning');
+    const infos = warnings.filter(w => w.severity === 'info');
+    let html = '<div style="margin-bottom:16px">';
+    html += `<div style="font-size:12px;font-weight:600;margin-bottom:8px">Validation: ${errors.length} errors, ${warns.length} warnings, ${infos.length} info</div>`;
+    warnings.forEach(w => {
+        const color = w.severity === 'error' ? '#c53030' : w.severity === 'warning' ? '#d97706' : '#64748b';
+        const bg = w.severity === 'error' ? '#fef2f2' : w.severity === 'warning' ? '#fffbeb' : '#f8fafc';
+        const border = w.severity === 'error' ? '#fecaca' : w.severity === 'warning' ? '#fde68a' : '#e2e8f0';
+        const icon = w.severity === 'error' ? '\u26D4' : w.severity === 'warning' ? '\u26A0' : '\u2139';
+        html += `<div style="padding:6px 10px;margin-bottom:4px;border-radius:4px;font-size:11px;background:${bg};color:${color};border:1px solid ${border}">${icon} ${escapeHtml(w.msg)}</div>`;
+    });
+    html += '</div>';
+    return html;
+}
+
 // Column name mapping: match QuantAQ AirVision export columns to our parameter keys
 const PARAM_COLUMN_MAP = {
     co: [/\bCO_PPB\b/i, /\bco_ppb\b/i, /\bCO\b.*ppb/i],
@@ -7285,6 +7553,10 @@ function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collected
     const integrityWarnings = _buildDataIntegrityWarnings(parsed, audit);
     analysisDataCache[auditId].integrityWarnings = integrityWarnings;
 
+    // Run failsafe validation checks
+    const validationWarnings = runFailsafeValidation(parsed, results, 'audit');
+    analysisDataCache[auditId].validationWarnings = validationWarnings;
+
     // Advance status based on DQO results
     const allPass = AUDIT_PARAMETERS.filter(p => audit.analysisResults[p.key]).every(p => audit.analysisResults[p.key]?.pass) && AUDIT_PARAMETERS.some(p => audit.analysisResults[p.key]);
     if (audit.status === 'Complete' || audit.status === 'Analysis Pending') {
@@ -7626,6 +7898,14 @@ function renderAnalysisResults(auditId, parsed) {
     }
     const warningsHtml = _renderIntegrityWarnings(integrityWarnings);
 
+    // Build failsafe validation report (from cache or compute fresh)
+    let validationWarnings = analysisDataCache[auditId]?.validationWarnings;
+    if (!validationWarnings) {
+        validationWarnings = runFailsafeValidation(parsed, results, 'audit');
+        if (analysisDataCache[auditId]) analysisDataCache[auditId].validationWarnings = validationWarnings;
+    }
+    const validationHtml = renderValidationReport(validationWarnings);
+
     const body = document.getElementById('audit-analysis-body');
     body.innerHTML = `
         <div style="margin-top:16px">
@@ -7638,7 +7918,7 @@ function renderAnalysisResults(auditId, parsed) {
             <button class="analysis-tab" onclick="switchAnalysisTab(this, 'rawdata')">Raw Data</button>
         </div>
         <div id="analysis-panel-analysis" class="analysis-tab-panel active">
-            <div id="analysis-section-warnings">${warningsHtml}</div>
+            <div id="analysis-section-warnings">${warningsHtml}${validationHtml}</div>
             <div id="analysis-section-dqo"></div>
             <div id="analysis-section-timeseries" style="margin-top:28px"></div>
             <div id="analysis-section-scatter" style="margin-top:28px"></div>
@@ -9416,6 +9696,10 @@ function finalizeCollocationAnalysis(collocId, colloc, parsed, analysisName, bam
     parsed.regressionResults = results;
     collocAnalysisCache[collocId] = parsed;
 
+    // Run failsafe validation checks
+    const validationWarnings = runFailsafeValidation(parsed, results, 'collocation');
+    collocAnalysisCache[collocId].validationWarnings = validationWarnings;
+
     // Auto-advance status and remove Collocation tag from sensors
     if (colloc.status === 'Complete' || colloc.status === 'Analysis Pending') {
         colloc.status = 'Collocation Complete';
@@ -9496,6 +9780,14 @@ function renderCollocationAnalysisResults(collocId, parsed) {
         // Store context for lazy rendering
         _collocRenderCtx = { collocId, parsed, results, colloc };
 
+        // Build failsafe validation report (from cache or compute fresh)
+        let collocValidationWarnings = collocAnalysisCache[collocId]?.validationWarnings;
+        if (!collocValidationWarnings) {
+            collocValidationWarnings = runFailsafeValidation(parsed, results, 'collocation');
+            if (collocAnalysisCache[collocId]) collocAnalysisCache[collocId].validationWarnings = collocValidationWarnings;
+        }
+        const collocValidationHtml = renderValidationReport(collocValidationWarnings);
+
         const body = document.getElementById('audit-analysis-body');
         body.innerHTML = `
             <div class="colloc-report-view">
@@ -9505,6 +9797,8 @@ function renderCollocationAnalysisResults(collocId, parsed) {
                     <div class="colloc-title-dates">${colloc.startDate ? formatDate(colloc.startDate) : ''} &ndash; ${colloc.endDate && colloc.endDate !== 'TBD' ? formatDate(colloc.endDate) : 'TBD'}</div>
                     <div style="font-size:12px;color:#888;margin-top:4px">First 24 hours excluded (${trimCount} of ${totalCount} hourly rows trimmed) &mdash; analysis on ${analysisCount} rows</div>
                 </div>
+
+                ${collocValidationHtml}
 
                 <div class="colloc-section-header"><h2>Time Series Collocation Results</h2></div>
                 <div id="colloc-ts-tabset"></div>
