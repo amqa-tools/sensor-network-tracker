@@ -9865,8 +9865,7 @@ function _buildCollocTSTabs(parsed, colloc) {
 function _renderCollocTSChart(parsed, paramKey) {
     const plotId = `colloc-ts-plot-${paramKey}`;
     const el = document.getElementById(plotId);
-    if (!el || el.dataset.rendered) return;
-    el.dataset.rendered = '1';
+    if (!el) return;
 
     const hasBam = parsed.allRows.some(r => !isNaN(Number(r.bam?.pm25)) || !isNaN(Number(r.bam?.pm10)));
     const paramLabels = { pm25: 'PM₂.₅ (µg/m³)', pm10: 'PM₁₀ (µg/m³)', co: 'CO (ppb)', no: 'NO (ppb)', no2: 'NO₂ (ppb)', o3: 'O₃ (ppb)' };
@@ -10102,55 +10101,45 @@ function _renderCollocRegChart(parsed, results, tabName) {
     // Only render charts for the requested tab
     if (tabName === 'bam' && hasBam) {
         for (const key of ['pm25', 'pm10']) {
-            if (document.getElementById(`colloc-reg-bam-${key}`)?.dataset.rendered) continue;
             const p = AUDIT_PARAMETERS.find(x => x.key === key);
             const allPods = parsed.permaPod ? [parsed.permaPodId, ...parsed.podIds] : [...parsed.podIds];
             buildRegRow(`colloc-reg-bam-${key}`, key, p.label, allPods, parsed.bamLabel,
                 `${parsed.bamLabel} ${p.label}`,
                 (r, k) => r.bam[k],
                 (r, podId, k) => podId === parsed.permaPodId ? r.perma[k] : (r.pods[podId]?.[k] ?? NaN));
-            const el = document.getElementById(`colloc-reg-bam-${key}`); if (el) el.dataset.rendered = '1';
         }
     } else if (tabName === 'quants-pm') {
         if (hasPerma) {
             for (const key of ['pm25', 'pm10']) {
-                if (document.getElementById(`colloc-reg-quants-pm-${key}`)?.dataset.rendered) continue;
                 const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 buildRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, parsed.podIds, shortSensorId(parsed.permaPodId),
                     `${shortSensorId(parsed.permaPodId)} ${p.label}`,
                     (r, k) => r.perma[k], (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
-                const el = document.getElementById(`colloc-reg-quants-pm-${key}`); if (el) el.dataset.rendered = '1';
             }
         } else {
             const pmPairs = [];
             for (let i = 0; i < parsed.podIds.length; i++) for (let j = i + 1; j < parsed.podIds.length; j++) pmPairs.push({ ref: parsed.podIds[i], pod: parsed.podIds[j] });
             for (const key of ['pm25', 'pm10']) {
-                if (document.getElementById(`colloc-reg-quants-pm-${key}`)?.dataset.rendered) continue;
                 const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 buildInterPodRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, pmPairs, trimmed, parsed);
-                const el = document.getElementById(`colloc-reg-quants-pm-${key}`); if (el) el.dataset.rendered = '1';
             }
         }
     } else if (tabName === 'quants-gas' && hasGas) {
         if (hasPerma) {
             const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
             for (const key of ['co', 'no', 'no2', 'o3']) {
-                if (document.getElementById(`colloc-reg-quants-gas-${key}`)?.dataset.rendered) continue;
                 const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 buildRegRow(`colloc-reg-quants-gas-${key}`, key, p.label, gasPods, shortSensorId(parsed.permaPodId),
                     `${shortSensorId(parsed.permaPodId)} ${p.label}`,
                     (r, k) => r.perma[k], (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
-                const el = document.getElementById(`colloc-reg-quants-gas-${key}`); if (el) el.dataset.rendered = '1';
             }
         } else {
             const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
             const gasPairs = [];
             for (let i = 0; i < gasPods.length; i++) for (let j = i + 1; j < gasPods.length; j++) gasPairs.push({ ref: gasPods[i], pod: gasPods[j] });
             for (const key of ['co', 'no', 'no2', 'o3']) {
-                if (document.getElementById(`colloc-reg-quants-gas-${key}`)?.dataset.rendered) continue;
                 const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 buildInterPodRegRow(`colloc-reg-quants-gas-${key}`, key, p.label, gasPairs, trimmed, parsed);
-                const el = document.getElementById(`colloc-reg-quants-gas-${key}`); if (el) el.dataset.rendered = '1';
             }
         }
     }
