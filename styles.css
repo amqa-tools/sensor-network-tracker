@@ -2115,11 +2115,7 @@ tr:hover .contact-delete-btn {
 }
 
 /* Prevent stray Plotly SVG artifacts from showing in the modal */
-#audit-analysis-body .svg-container,
-#audit-analysis-body .plot-container,
-#audit-analysis-body .draglayer,
-#audit-analysis-body .nsewdrag { pointer-events: none; }
-#audit-analysis-body:not(:has(.colloc-report-view)) .js-plotly-plot { display: none !important; }
+/* Plotly cleanup is handled in JS by purgeAnalysisPlots() — no CSS hacks needed */
 
 .analysis-upload-zone {
     border: 2px dashed var(--slate-200);

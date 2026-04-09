@@ -7149,25 +7149,30 @@ function beginAnalysis(auditId) {
     const defaultName = `Audit ${audit.auditPodId} \u2014 ${communityName} ${audit.communityPodId}, ${audit.scheduledStart || ''} to ${audit.scheduledEnd || ''}`;
     document.getElementById('analysis-modal-title').textContent = 'New Audit Analysis';
 
-    document.getElementById('audit-analysis-body').innerHTML = `
-        <div class="analysis-instructions">
-            <strong>Data Preparation Instructions:</strong>
-            <ol>
-                <li>Pull data from the audit pod and local pod from AirVision</li>
-                <li>Open the file and clean up: remove invalidated data</li>
-                <li>Trim start and end of dataset to the start and end of the audit period</li>
-                <li><strong>Do not remove the first 24 hours</strong> \u2014 the app will automatically exclude them from regression analysis</li>
-            </ol>
-        </div>
-        <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Analysis Name</label>
-        <input type="text" class="analysis-name-input" id="analysis-name-input" value="${escapeHtml(defaultName)}" placeholder="e.g. Audit 471 - Kodiak 660, March 4-13 2026">
-        <label class="analysis-upload-zone" id="analysis-drop-zone">
-            <div class="analysis-upload-icon">&#128196;</div>
-            <div class="analysis-upload-text">Click to upload Excel file (.xls or .xlsx)</div>
-            <div class="analysis-upload-hint">Hourly data export from AirVision with both sensor columns</div>
-            <input type="file" accept=".xls,.xlsx" onchange="handleAnalysisUpload('${auditId}', this.files[0])">
-        </label>
-    `;
+    // Body was already cleared by purgeAnalysisPlots; use requestAnimationFrame
+    // to let the browser fully flush the empty state before injecting new content
+    const body = document.getElementById('audit-analysis-body');
+    requestAnimationFrame(() => {
+        body.innerHTML = `
+            <div class="analysis-instructions">
+                <strong>Data Preparation Instructions:</strong>
+                <ol>
+                    <li>Pull data from the audit pod and local pod from AirVision</li>
+                    <li>Open the file and clean up: remove invalidated data</li>
+                    <li>Trim start and end of dataset to the start and end of the audit period</li>
+                    <li><strong>Do not remove the first 24 hours</strong> \u2014 the app will automatically exclude them from regression analysis</li>
+                </ol>
+            </div>
+            <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Analysis Name</label>
+            <input type="text" class="analysis-name-input" id="analysis-name-input" value="${escapeHtml(defaultName)}" placeholder="e.g. Audit 471 - Kodiak 660, March 4-13 2026">
+            <label class="analysis-upload-zone" id="analysis-drop-zone">
+                <div class="analysis-upload-icon">&#128196;</div>
+                <div class="analysis-upload-text">Click to upload Excel file (.xls or .xlsx)</div>
+                <div class="analysis-upload-hint">Hourly data export from AirVision with both sensor columns</div>
+                <input type="file" accept=".xls,.xlsx" onchange="handleAnalysisUpload('${auditId}', this.files[0])">
+            </label>
+        `;
+    });
     openModal('modal-audit-analysis');
 }
 
@@ -7177,8 +7182,15 @@ function purgeAnalysisPlots() {
     analysisChartInstances = [];
     // Purge all Plotly plots from the analysis modal body
     const body = document.getElementById('audit-analysis-body');
-    if (body && typeof Plotly !== 'undefined') {
-        body.querySelectorAll('.js-plotly-plot').forEach(el => { try { Plotly.purge(el); } catch(e) {} });
+    if (body) {
+        if (typeof Plotly !== 'undefined') {
+            // Purge every child that Plotly may have touched — not just .js-plotly-plot
+            Array.from(body.querySelectorAll('.js-plotly-plot, .plot-container, .svg-container')).forEach(el => {
+                try { Plotly.purge(el); } catch(e) {}
+            });
+        }
+        // Nuke the entire container so no stale SVG/DOM fragments survive
+        body.innerHTML = '';
     }
 }
 
@@ -9287,43 +9299,48 @@ function beginCollocationAnalysis(collocId) {
     const permaPods = sensors.filter(s => s.type === 'Permanent Pod').sort((a, b) => a.id.localeCompare(b.id));
     const permaOptions = permaPods.map(s => `<option value="${s.id}">${s.id} (${getCommunityName(s.community)})</option>`).join('');
 
-    document.getElementById('audit-analysis-body').innerHTML = `
-        <div class="analysis-instructions">
-            <strong>Data Preparation Instructions:</strong>
-            <ol>
-                <li>Export hourly data from AirVision for the BAM, permanent pod, and all community pods</li>
-                <li>When selecting regulatory site data, use <strong>PM2.5 and PM10 local conditions</strong></li>
-                <li>Clean up: remove any invalidated data</li>
-                <li>Trim to the collocation period dates</li>
-                <li><strong>Do not remove the first 24 hours</strong> — the app will automatically exclude them from regression</li>
-            </ol>
-        </div>
-        <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Analysis Name</label>
-        <input type="text" class="analysis-name-input" id="colloc-analysis-name" value="${escapeHtml(defaultName)}">
-        <div style="display:flex;gap:12px;margin-top:12px">
-            <div style="flex:1">
-                <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Regulatory Data Source</label>
-                <select id="colloc-bam-source" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)">
-                    <option value="Garden">Garden BAM</option>
-                    <option value="NCore">NCore BAM</option>
-                    <option value="Floyd Dryden">Floyd Dryden BAM</option>
-                </select>
+    // Body was already cleared by purgeAnalysisPlots; use requestAnimationFrame
+    // to let the browser fully flush the empty state before injecting new content
+    const body = document.getElementById('audit-analysis-body');
+    requestAnimationFrame(() => {
+        body.innerHTML = `
+            <div class="analysis-instructions">
+                <strong>Data Preparation Instructions:</strong>
+                <ol>
+                    <li>Export hourly data from AirVision for the BAM, permanent pod, and all community pods</li>
+                    <li>When selecting regulatory site data, use <strong>PM2.5 and PM10 local conditions</strong></li>
+                    <li>Clean up: remove any invalidated data</li>
+                    <li>Trim to the collocation period dates</li>
+                    <li><strong>Do not remove the first 24 hours</strong> — the app will automatically exclude them from regression</li>
+                </ol>
             </div>
-            <div style="flex:1">
-                <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Permanent Pod</label>
-                <select id="colloc-perma-pod" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)">
-                    <option value="">— None —</option>
-                    ${permaOptions}
-                </select>
+            <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Analysis Name</label>
+            <input type="text" class="analysis-name-input" id="colloc-analysis-name" value="${escapeHtml(defaultName)}">
+            <div style="display:flex;gap:12px;margin-top:12px">
+                <div style="flex:1">
+                    <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Regulatory Data Source</label>
+                    <select id="colloc-bam-source" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)">
+                        <option value="Garden">Garden BAM</option>
+                        <option value="NCore">NCore BAM</option>
+                        <option value="Floyd Dryden">Floyd Dryden BAM</option>
+                    </select>
+                </div>
+                <div style="flex:1">
+                    <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Permanent Pod</label>
+                    <select id="colloc-perma-pod" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)">
+                        <option value="">— None —</option>
+                        ${permaOptions}
+                    </select>
+                </div>
             </div>
-        </div>
-        <label class="analysis-upload-zone" id="analysis-drop-zone" style="margin-top:16px">
-            <div class="analysis-upload-icon">&#128196;</div>
-            <div class="analysis-upload-text">Click to upload Excel file (.xls or .xlsx)</div>
-            <div class="analysis-upload-hint">Hourly data with BAM, permanent pod, and community pod columns</div>
-            <input type="file" accept=".xls,.xlsx" onchange="handleCollocationUpload('${collocId}', this.files[0])">
-        </label>
-    `;
+            <label class="analysis-upload-zone" id="analysis-drop-zone" style="margin-top:16px">
+                <div class="analysis-upload-icon">&#128196;</div>
+                <div class="analysis-upload-text">Click to upload Excel file (.xls or .xlsx)</div>
+                <div class="analysis-upload-hint">Hourly data with BAM, permanent pod, and community pod columns</div>
+                <input type="file" accept=".xls,.xlsx" onchange="handleCollocationUpload('${collocId}', this.files[0])">
+            </label>
+        `;
+    });
     openModal('modal-audit-analysis');
 }
 
