@@ -1213,6 +1213,7 @@ function showView(viewName) {
     if (viewName === 'audits') renderAuditsView();
     if (viewName === 'collocations') renderCollocationsView();
     if (viewName === 'quantaq-alerts' && typeof renderQuantAQAlertsView === 'function') renderQuantAQAlertsView();
+    if (viewName === 'user-guide') renderUserGuide();
 
     saveLastView('view', viewName);
 }
@@ -10783,6 +10784,44 @@ var gasPairs = interPairs.filter(function(pk) { return REG.interPod[pk].co || RE
     a.click();
     URL.revokeObjectURL(url);
     showSuccessToast('Report saved as ' + filename);
+}
+
+// ===== USER GUIDE =====
+function renderUserGuide() {
+    const container = document.getElementById('user-guide-content');
+    if (!container) return;
+    if (container.dataset.loaded) return;
+    container.dataset.loaded = '1';
+    fetch('user-guide.html')
+        .then(r => r.text())
+        .then(html => {
+            // Extract just the body content (between <body> and </body>)
+            const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+            if (bodyMatch) {
+                container.innerHTML = bodyMatch[1];
+            } else {
+                container.innerHTML = html;
+            }
+        })
+        .catch(() => {
+            container.innerHTML = '<p style="color:var(--slate-400)">Could not load user guide. Make sure user-guide.html is in the same folder as the app.</p>';
+        });
+}
+
+function exportUserGuide() {
+    fetch('user-guide.html')
+        .then(r => r.text())
+        .then(html => {
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'ADEC_Sensor_Network_Tracker_User_Guide.html';
+            a.click();
+            URL.revokeObjectURL(url);
+            showSuccessToast('User guide exported');
+        })
+        .catch(() => showAlert('Error', 'Could not export user guide.'));
 }
 
 // ===== MOBILE SIDEBAR =====

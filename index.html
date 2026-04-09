@@ -123,6 +123,7 @@
                 </li>
             </ul>
             <div class="sidebar-bottom-actions">
+                <a href="#" class="sidebar-bottom-link" onclick="event.preventDefault(); showView('user-guide')" style="display:block;padding:8px 16px;font-size:13px;color:var(--slate-400);text-decoration:none">&#128218; User Guide</a>
                 <div class="setup-mode-toggle" id="setup-mode-toggle" onclick="toggleSetupMode()" role="button" aria-label="Toggle setup mode" tabindex="0">
                     <span class="setup-mode-icon" aria-hidden="true">&#9881;</span>
                     <span class="setup-mode-label">Setup Mode</span>
@@ -414,6 +415,15 @@
                 <div id="tab-sensor-collocations" class="tab-content">
                     <div id="sensor-collocations-section"></div>
                 </div>
+            </div>
+
+            <!-- User Guide View -->
+            <div id="view-user-guide" class="view">
+                <div class="view-header">
+                    <h1>User Guide</h1>
+                    <button class="btn" onclick="exportUserGuide()">Export as HTML</button>
+                </div>
+                <div id="user-guide-content" style="background:#fff;border-radius:12px;padding:32px;max-width:800px;box-shadow:0 1px 3px rgba(0,0,0,0.06)"></div>
             </div>
 
             <!-- Settings View -->
