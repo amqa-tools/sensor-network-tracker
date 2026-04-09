@@ -9885,7 +9885,7 @@ function _buildCollocRegTabs(parsed, results) {
 
         if (hasGas) {
             tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-gas', this, 'reg')">Quants Gaseous</button></li>`;
-        panelsHtml += `<div id="colloc-reg-tab-inter-gas" class="colloc-tab-pane">`;
+        panelsHtml += `<div id="colloc-reg-tab-quants-gas" class="colloc-tab-pane">`;
         for (const key of ['co', 'no', 'no2', 'o3']) {
             const p = COLLOC_PARAMS.find(x => x.key === key);
             panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Inter-Pod Comparisons</div>`;
