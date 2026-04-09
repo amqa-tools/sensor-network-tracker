@@ -9344,36 +9344,40 @@ function renderSensorCollocations(sensorId) {
 
     let html = '';
 
-    // Active/completed collocations from the collocations table
-    const sensorCollocs = collocations.filter(c => c.sensorIds.includes(sensorId));
+    // Collocation records from the collocations table — clickable cards
+    const sensorCollocs = collocations.filter(c => c.sensorIds.includes(sensorId))
+        .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
     html += sensorCollocs.map(c => {
         const communityName = COMMUNITIES.find(x => x.id === c.locationId)?.name || c.locationId;
         const dateRange = c.startDate ? `${formatDate(c.startDate)}${c.endDate && c.endDate !== 'TBD' ? ' – ' + formatDate(c.endDate) : ''}` : '—';
         const hasResults = Object.keys(c.analysisResults || {}).length > 0;
-        return `<div class="audit-list-card" onclick="openCollocationDetail('${c.id}')">
+        return `<div class="audit-list-card" onclick="openCollocationDetail('${c.id}')" style="cursor:pointer">
             <div class="audit-list-card-header">
                 <span style="font-weight:600;color:var(--slate-700)">${escapeHtml(communityName)}</span>
                 <span class="audit-status-badge ${COLLOC_STATUS_CSS[c.status]}">${c.status}</span>
             </div>
             <div class="audit-list-card-meta">${dateRange}</div>
             <div style="font-size:12px;color:var(--slate-500);margin-top:4px">Sensors: ${c.sensorIds.map(id => shortSensorId(id)).join(', ')}</div>
-            ${hasResults ? `<div style="font-size:11px;color:var(--green);margin-top:4px">Analysis complete · <a onclick="event.stopPropagation(); beginCollocationAnalysis('${c.id}')">View &rarr;</a></div>` : ''}
+            ${hasResults ? `<div style="font-size:11px;color:var(--green);margin-top:4px">Analysis complete · <a onclick="event.stopPropagation(); beginCollocationAnalysis('${c.id}')">View Analysis &rarr;</a></div>` : ''}
         </div>`;
     }).join('');
 
-    // Collocation notes (includes initial collocations from migration)
-    const collocNotes = notes.filter(n =>
+    // Initial collocation history (from Salesforce import) — simple entries at bottom
+    const initialNotes = notes.filter(n =>
         n.type === 'Collocation' &&
-        n.taggedSensors && n.taggedSensors.includes(sensorId)
-    ).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        n.taggedSensors && n.taggedSensors.includes(sensorId) &&
+        n.text && n.text.startsWith('Initial collocation:')
+    ).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
-    if (collocNotes.length > 0) {
-        html += collocNotes.map(n => `<div class="audit-list-card" style="cursor:default">
-            <div class="audit-list-card-header">
-                <span style="font-weight:600;color:var(--slate-700)">${escapeHtml(n.text.substring(0, 80))}${n.text.length > 80 ? '...' : ''}</span>
-            </div>
-            <div class="audit-list-card-meta">${formatDate(n.date)}${n.createdBy ? ' — ' + escapeHtml(n.createdBy) : ''}</div>
-        </div>`).join('');
+    if (initialNotes.length > 0) {
+        if (sensorCollocs.length > 0) html += '<div style="border-top:1px solid var(--slate-100);margin-top:12px;padding-top:12px"><div style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Historical Collocations</div></div>';
+        html += initialNotes.map(n => {
+            const collocText = n.text.replace('Initial collocation: ', '');
+            return `<div class="audit-list-card" style="cursor:default;opacity:0.8">
+                <div style="font-size:13px;color:var(--slate-600)">${escapeHtml(collocText)}</div>
+                <div class="audit-list-card-meta">${formatDate(n.date)}</div>
+            </div>`;
+        }).join('');
     }
 
     if (!html) {
