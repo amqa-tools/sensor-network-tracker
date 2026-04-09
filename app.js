@@ -9385,11 +9385,19 @@ function parseCollocationData(rows, colloc, bamSource, permaPodId) {
     });
 
     // Separate permanent pod from community pods
+    // Only include pods that are in the collocation's sensor list (if available)
     const permaPod = permaPodId ? podMap[permaPodId] || null : null;
     const permaPodLabel = permaPodId || '';
+    const collocSensorIds = (colloc.sensorIds || []).map(id => id.replace(/[-_]/g, '').toUpperCase());
     const communityPods = {};
     for (const [id, cols] of Object.entries(podMap)) {
         if (id === permaPodId) continue;
+        // If collocation has sensor IDs defined, only include matching pods
+        if (collocSensorIds.length > 0) {
+            const idNorm = id.replace(/[-_]/g, '').toUpperCase();
+            const isInColloc = collocSensorIds.some(sid => sid === idNorm || sid.includes(idNorm.replace('MOD', '')) || idNorm.includes(sid.replace('MOD', '')));
+            if (!isInColloc) continue;
+        }
         communityPods[id] = cols;
     }
 
