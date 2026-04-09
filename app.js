@@ -6192,7 +6192,7 @@ function updateSidebarServiceCount() {
     const count = getActiveTicketCount();
     const el = document.getElementById('sidebar-service-count');
     if (!el) return;
-    el.textContent = `(${count})`;
+    el.textContent = count > 0 ? `(${count})` : '';
 }
 
 function renderServiceView() {
@@ -9254,9 +9254,9 @@ function parseCollocationData(rows, colloc, bamSource, permaPodId) {
         // Match parameter from column name
         const hUpper = h.toUpperCase();
         // Skip CO_PPM (only want CO_PPB), skip PM1, skip RH, skip TEMP
-        if (hUpper.includes('CO_PPM') || hUpper.includes('PM1 ') || hUpper.includes('PM1_') ||
-            hUpper.includes('AMBTEMP') || hUpper.includes('TEMP') ||
-            hUpper.includes('RELHUMID') || hUpper.includes('RH')) return;
+        if (hUpper.includes('CO_PPM') || /\bPM1[\b_ ]/.test(hUpper) || /\bPM1$/.test(hUpper) ||
+            /AMBTEMP|_TEMP_|_TEMP\b|TEMP_C|TEMP_F/.test(hUpper) ||
+            /RELHUMID|\bRH[_%\s]|\bRH$/.test(hUpper)) return;
 
         for (const [paramKey, patterns] of Object.entries(COLLOC_COLUMN_MAP)) {
             for (const pat of patterns) {
@@ -9355,7 +9355,7 @@ function parseCollocationData(rows, colloc, bamSource, permaPodId) {
     const podIds = Object.keys(communityPods);
     const isPmOnly = {};
     podIds.forEach(id => {
-        isPmOnly[id] = /X[-_]?PM/i.test(id) || /MOD-X/i.test(id);
+        isPmOnly[id] = /X[-_]?PM/i.test(id) || /MOD[-_]?X[-_]?PM/i.test(id);
     });
 
     return {
@@ -9708,7 +9708,7 @@ function _switchCollocTabLazy(group, name, btn, chartType) {
 
 function _renderFirstVisibleRegTab(parsed, results) {
     const hasBam = Object.keys(results.bamVsPods || {}).length > 0;
-    const firstTab = hasBam ? 'bam' : (parsed.permaPod ? 'quants-pm' : 'quants-pm');
+    const firstTab = hasBam ? 'bam' : 'quants-pm';
     _renderCollocRegChart(parsed, results, firstTab);
 }
 
@@ -10108,7 +10108,8 @@ function generateCollocationReport(collocId) {
     const fmtShort = d => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: AK_TZ }).replace(/ /g, '') : '';
     const fmtYear = d => d ? d.toLocaleDateString('en-US', { year: 'numeric', timeZone: AK_TZ }) : '';
     const siteName = (colloc.bamSource || communityName).replace(/\s+/g, '');
-    const filename = `${siteName}_Collocation_Analysis_${podNums.join('_')}_${fmtShort(startD)}_${fmtShort(endD)}_${fmtYear(endD || startD)}.html`;
+    const endPart = endD ? `_${fmtShort(endD)}` : '';
+    const filename = `${siteName}_Collocation_Analysis_${podNums.join('_')}_${fmtShort(startD)}${endPart}_${fmtYear(endD || startD)}.html`;
 
     // Build title parts
     const titleParts = [bamLabel];
