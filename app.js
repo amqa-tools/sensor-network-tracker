@@ -363,6 +363,25 @@ function tagNotesWithStatusChange() {
 }
 
 function migrateCollocationDatesToNotes() {
+    // Always fix dates on Initial collocation notes (regardless of migration flag)
+    notes.forEach(n => {
+        if (n.type === 'Collocation' && n.text && n.text.startsWith('Initial collocation:')) {
+            const dateMatch = n.text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+            if (dateMatch) {
+                let y = parseInt(dateMatch[3]); if (y < 100) y += 2000;
+                const oldDate = `${y}-${String(dateMatch[1]).padStart(2,'0')}-${String(dateMatch[2]).padStart(2,'0')}T00:00`;
+                if (n.date !== oldDate) {
+                    n.date = oldDate;
+                    db.updateNote(n.id, { date: oldDate }).catch(() => {});
+                }
+            } else if (!n.date || n.date > '2025-01-01') {
+                // No parseable date — force to 2023-01-01 so it sorts to bottom
+                n.date = '2023-01-01T00:00';
+                db.updateNote(n.id, { date: '2023-01-01T00:00' }).catch(() => {});
+            }
+        }
+    });
+
     if (localStorage.getItem('snt_collocDates_migrated_v3')) return;
     let count = 0;
 
