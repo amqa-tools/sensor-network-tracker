@@ -9472,8 +9472,8 @@ function runCollocationAnalysis(parsed) {
     for (const podId of parsed.podIds) {
         results.bamVsPods[podId] = {};
         for (const key of ['pm25', 'pm10']) {
-            const x = trimmed.map(r => r.bam[key]);
-            const y = trimmed.map(r => r.pods[podId]?.[key] ?? NaN);
+            const x = trimmed.map(r => Number(r.bam?.[key] ?? NaN));
+            const y = trimmed.map(r => Number(r.pods?.[podId]?.[key] ?? NaN));
             const reg = runLinearRegression(x, y);
             if (reg) {
                 const dqo = checkDQO(reg);
@@ -9486,8 +9486,8 @@ function runCollocationAnalysis(parsed) {
     if (parsed.permaPod) {
         results.bamVsPerma = {};
         for (const key of ['pm25', 'pm10']) {
-            const x = trimmed.map(r => r.bam[key]);
-            const y = trimmed.map(r => r.perma[key] ?? NaN);
+            const x = trimmed.map(r => Number(r.bam?.[key] ?? NaN));
+            const y = trimmed.map(r => Number(r.perma?.[key] ?? NaN));
             const reg = runLinearRegression(x, y);
             if (reg) {
                 const dqo = checkDQO(reg);
@@ -9502,8 +9502,8 @@ function runCollocationAnalysis(parsed) {
             results.permaVsPods[podId] = {};
             const params = parsed.isPmOnly[podId] ? ['pm25', 'pm10'] : COLLOC_PARAMS.map(p => p.key);
             for (const key of params) {
-                const x = trimmed.map(r => r.perma[key] ?? NaN);
-                const y = trimmed.map(r => r.pods[podId]?.[key] ?? NaN);
+                const x = trimmed.map(r => Number(r.perma?.[key] ?? NaN));
+                const y = trimmed.map(r => Number(r.pods?.[podId]?.[key] ?? NaN));
                 const reg = runLinearRegression(x, y);
                 if (reg) {
                     const dqo = checkDQO(reg);
@@ -9596,9 +9596,24 @@ function rebuildCollocCacheFromSaved(colloc) {
     const cd = colloc.analysisChartData;
     if (!cd || !cd.rows?.length) return null;
 
-    const allRows = cd.rows.map(r => ({
-        timestamp: new Date(r.t), bam: r.bam || {}, perma: r.perma || {}, pods: r.pods || {},
-    }));
+    const allRows = cd.rows.map(r => {
+        // Ensure all nested objects exist and numeric values are proper numbers
+        const bam = r.bam || {};
+        const perma = r.perma || {};
+        const pods = {};
+        for (const [id, vals] of Object.entries(r.pods || {})) {
+            pods[id] = {};
+            for (const [k, v] of Object.entries(vals || {})) {
+                pods[id][k] = (v === null || v === undefined || v === '') ? NaN : Number(v);
+            }
+        }
+        return {
+            timestamp: new Date(r.t),
+            bam: { pm25: bam.pm25 != null ? Number(bam.pm25) : NaN, pm10: bam.pm10 != null ? Number(bam.pm10) : NaN },
+            perma: Object.fromEntries(Object.entries(perma).map(([k, v]) => [k, v != null ? Number(v) : NaN])),
+            pods,
+        };
+    });
 
     const trimIndex = cd.trimIndex || 0;
     const parsed = {
@@ -10091,8 +10106,8 @@ function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed
 }
 
 function _getCollocVal(row, sensorId, paramKey, parsed) {
-    if (sensorId === parsed.permaPodId) return row.perma[paramKey] ?? NaN;
-    return row.pods[sensorId]?.[paramKey] ?? NaN;
+    if (sensorId === parsed.permaPodId) return Number(row.perma?.[paramKey] ?? NaN);
+    return Number(row.pods?.[sensorId]?.[paramKey] ?? NaN);
 }
 
 function _switchCollocTab(group, name, btn) {
@@ -10137,21 +10152,21 @@ function _renderCollocDataSheet(parsed) {
         let cells = `<td style="text-align:left;font-weight:500">${dateStr}${isTrimmed ? ' *' : ''}</td>`;
         if (hasBam) {
             for (const k of ['pm25', 'pm10']) {
-                const v = row.bam[k];
+                const v = Number(row.bam?.[k]);
                 cells += `<td${isNaN(v) ? ' class="red"' : ''}>${isNaN(v) ? '' : v.toFixed(1)}</td>`;
             }
         }
         if (parsed.permaPod) {
             for (const key of params) {
-                if (!parsed.allRows.some(r => !isNaN(r.perma[key]))) continue;
-                const v = row.perma[key];
+                if (!parsed.allRows.some(r => !isNaN(Number(r.perma?.[key])))) continue;
+                const v = Number(row.perma?.[key]);
                 cells += `<td${isNaN(v) ? ' class="red"' : ''}>${isNaN(v) ? '' : v.toFixed(3)}</td>`;
             }
         }
         for (const podId of parsed.podIds) {
             const podParams = parsed.isPmOnly[podId] ? ['pm25', 'pm10'] : params;
             for (const key of podParams) {
-                const v = row.pods[podId]?.[key];
+                const v = Number(row.pods?.[podId]?.[key]);
                 cells += `<td${isNaN(v) ? ' class="red"' : ''}>${isNaN(v) ? '' : v.toFixed(3)}</td>`;
             }
         }
