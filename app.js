@@ -232,6 +232,9 @@ async function loadAllData() {
     // Ensure notes containing status change text have the Status Change type tag
     tagNotesWithStatusChange();
 
+    // One-time migration: convert legacy collocationDates to notes
+    migrateCollocationDatesToNotes();
+
     // Build O(1) lookup maps
     rebuildLookupMaps();
 }
@@ -357,6 +360,22 @@ function tagNotesWithStatusChange() {
             db.updateNote(n.id, { type: n.type }).catch(err => console.error('Tag status change error:', err));
         }
     });
+}
+
+function migrateCollocationDatesToNotes() {
+    if (localStorage.getItem('snt_collocDates_migrated')) return;
+    let count = 0;
+    sensors.forEach(s => {
+        if (s.collocationDates && s.collocationDates.trim()) {
+            createNote('Collocation', 'Initial collocation: ' + s.collocationDates, {
+                sensors: [s.id],
+                communities: s.community ? [s.community] : [],
+            });
+            count++;
+        }
+    });
+    localStorage.setItem('snt_collocDates_migrated', '1');
+    console.log('Migrated ' + count + ' collocation dates to notes');
 }
 
 // ===== PERSISTENCE LAYER =====
@@ -1415,7 +1434,7 @@ const ALL_SENSOR_COLUMNS = [
     { key: 'community', label: 'Community', sortable: true, removable: false },
     { key: 'location', label: 'Location', sortable: true, removable: true },
     { key: 'dateInstalled', label: 'Install Date', sortable: true, removable: true },
-    { key: 'collocationDates', label: 'Initial Collocation', sortable: false, removable: true },
+
     { key: 'soaTagId', label: 'SOA Tag ID', sortable: true, removable: true },
     { key: 'datePurchased', label: 'Purchase Date', sortable: true, removable: true },
 ];
@@ -1731,7 +1750,7 @@ function openEditSensorModal(sensorId) {
     document.getElementById('sensor-community-input').value = s.community;
     document.getElementById('sensor-location-input').value = s.location || '';
     document.getElementById('sensor-purchased-input').value = s.datePurchased || '';
-    document.getElementById('sensor-collocation-input').value = s.collocationDates || '';
+
     openModal('modal-add-sensor');
 }
 
@@ -1750,7 +1769,7 @@ function saveSensor(e) {
         community: document.getElementById('sensor-community-input').value,
         location: document.getElementById('sensor-location-input').value.trim(),
         datePurchased: document.getElementById('sensor-purchased-input').value,
-        collocationDates: document.getElementById('sensor-collocation-input').value.trim(),
+
     };
 
     // Validate SOA Tag ID uniqueness
@@ -1770,7 +1789,7 @@ function saveSensor(e) {
         const fieldLabels = {
             soaTagId: 'SOA Tag ID', type: 'Type', status: 'Status',
             community: 'Community', location: 'Location',
-            datePurchased: 'Purchase Date', collocationDates: 'Initial Collocation'
+            datePurchased: 'Purchase Date'
         };
 
         const changes = [];
@@ -2148,9 +2167,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Install Date</label>
                 <input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="dateInstalled" value="${s.dateInstalled || ''}" onblur="inlineSaveSensor(this)">
             </div>
-            <div class="info-item"><label>Initial Collocation</label>
-                <input class="inline-edit-input" data-sensor="${s.id}" data-field="collocationDates" value="${s.collocationDates || ''}" placeholder="e.g. Floyd Dryden, Mar 5-25" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
-            </div>
+
             <div class="info-item"><label>SOA Tag ID</label>
                 <input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${s.soaTagId || ''}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
@@ -2168,7 +2185,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Community</label><p>${getCommunityName(s.community)} <a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move &rarr;</a></p></div>
             <div class="info-item"><label>Location</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
             <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'}</p></div>
-            <div class="info-item"><label>Initial Collocation</label><p>${(() => { const c = getMostRecentCollocation(s.id); return c ? `${c.communityName}, ${c.dateRange}` : (s.collocationDates || '\u2014'); })()}</p></div>
+
             <div class="info-item"><label>SOA Tag ID</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'soaTagId')">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
@@ -2201,7 +2218,7 @@ function inlineEditSensor(sensorId, field) {
     const s = sensors.find(x => x.id === sensorId);
     if (!s) return;
 
-    const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date', collocationDates: 'Initial Collocation' };
+    const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date' };
     const label = labels[field] || field;
     const oldVal = s[field] || '';
     const promptMsg = field === 'location' ? `Edit ${label} (enter an address or GPS coordinates):` : `Edit ${label}:`;
@@ -2331,7 +2348,7 @@ function showCommunityView(communityId) {
 
     const sensorTableHead = `<thead><tr>
         <th>Sensor ID</th><th>Status</th>
-        <th>Location</th><th>Install Date</th><th>Initial Collocation</th><th>SOA Tag ID</th><th>Purchase Date</th><th>Actions</th>
+        <th>Location</th><th>Install Date</th><th>SOA Tag ID</th><th>Purchase Date</th><th>Actions</th>
     </tr></thead>`;
 
     function renderSensorRows(list) {
@@ -2351,7 +2368,7 @@ function showCommunityView(communityId) {
                     </select></td>
                     <td><input class="inline-edit-input" data-sensor="${s.id}" data-field="location" value="${s.location || ''}" placeholder="Address or GPS" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
                     <td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="dateInstalled" value="${s.dateInstalled || ''}" onblur="inlineSaveSensor(this)"></td>
-                    <td><input class="inline-edit-input" data-sensor="${s.id}" data-field="collocationDates" value="${s.collocationDates || ''}" placeholder="e.g. Mar 5-13" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
+
                     <td><input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${s.soaTagId || ''}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
                     <td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="datePurchased" value="${s.datePurchased || ''}" onblur="inlineSaveSensor(this)"></td>
                     <td><button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button></td>
@@ -2363,7 +2380,7 @@ function showCommunityView(communityId) {
             <td>${renderStatusBadges(s, true)}</td>
             <td>${s.location || '—'}</td>
             <td>${s.dateInstalled || '—'}</td>
-            <td>${s.collocationDates || '—'}</td>
+
             <td>${s.soaTagId || '—'}</td>
             <td>${s.datePurchased || '—'}</td>
             <td>
@@ -4067,17 +4084,6 @@ async function deleteTimelineItem(id, isNote) {
                             }
                         }
                     }
-                } else if (note.type === 'Collocation') {
-                    // Revert collocationDates for all tagged sensors
-                    if (parsed.beforeCollocationDates) {
-                        for (const [sId, oldValue] of Object.entries(parsed.beforeCollocationDates)) {
-                            const s = sensors.find(x => x.id === sId);
-                            if (s) {
-                                s.collocationDates = oldValue;
-                                persistSensor(s);
-                            }
-                        }
-                    }
                 }
             }
         } catch (err) {
@@ -5370,7 +5376,7 @@ const SENSOR_EXPORT_FIELDS = [
     { key: 'community', label: 'Community', get: s => getCommunityName(s.community) },
     { key: 'location', label: 'Location', get: s => s.location || '' },
     { key: 'dateInstalled', label: 'Install Date', get: s => s.dateInstalled || '' },
-    { key: 'collocationDates', label: 'Initial Collocation', get: s => s.collocationDates || '' },
+
     { key: 'soaTagId', label: 'SOA Tag ID', get: s => s.soaTagId || '' },
     { key: 'datePurchased', label: 'Purchase Date', get: s => s.datePurchased || '' },
 ];
@@ -5607,9 +5613,6 @@ function saveCollocation(e) {
 
     const s = sensors.find(x => x.id === sensorId);
     const communityId = s?.community || '';
-    const beforeCollocationDates = {};
-    beforeCollocationDates[sensorId] = s.collocationDates || '';
-
     // Create note with structured additionalInfo for getMostRecentCollocation
     const noteText = `Collocation at ${location}: ${formatDate(startDate)} \u2013 ${formatDate(endDate)}.${extraNotes ? ' ' + extraNotes : ''}`;
     const structuredInfo = JSON.stringify({
@@ -5617,16 +5620,11 @@ function saveCollocation(e) {
         location: location,
         startDate: startDate,
         endDate: endDate,
-        beforeCollocationDates: beforeCollocationDates,
     });
     createNote('Collocation', noteText, {
         sensors: [sensorId],
         communities: communityId ? [communityId] : [],
     }, structuredInfo);
-
-    // Update the sensor's collocationDates field for backward compatibility
-    s.collocationDates = `${location}, ${formatDate(startDate)} \u2013 ${formatDate(endDate)}`;
-    persistSensor(s);
 
     closeModal('modal-collocation'); showSuccessToast('Collocation logged');
     if (currentSensor === sensorId) showSensorView(sensorId);
@@ -5679,19 +5677,12 @@ async function saveGlobalCollocation(e) {
     const endDisplay = endTbd ? 'TBD' : formatDate(endDate);
     const noteText = `Collocation at ${communityName}: ${formatDate(startDate)} \u2013 ${endDisplay}.${conductedBy ? ' Conducted by ' + conductedBy + '.' : ''}${extraNotes ? ' ' + extraNotes : ''}`;
 
-    const beforeCollocationDates = {};
-    taggedSensors.forEach(sId => {
-        const s = sensors.find(x => x.id === sId);
-        if (s) beforeCollocationDates[sId] = s.collocationDates || '';
-    });
-
     const structuredInfo = JSON.stringify({
         userNotes: extraNotes || '',
         location: communityName,
         startDate: startDate,
         endDate: endDate,
         conductedBy: conductedBy,
-        beforeCollocationDates: beforeCollocationDates,
     });
 
     createNote('Collocation', noteText, {
@@ -5717,11 +5708,10 @@ async function saveGlobalCollocation(e) {
         console.error('Insert collocation error:', err);
     }
 
-    // Update each sensor's collocationDates and add Collocation status
+    // Add Collocation status to each tagged sensor
     taggedSensors.forEach(sId => {
         const s = sensors.find(x => x.id === sId);
         if (s) {
-            s.collocationDates = `${communityName}, ${formatDate(startDate)} \u2013 ${endDisplay}`;
             const statuses = getStatusArray(s);
             if (!statuses.includes('Collocation')) {
                 s.status = [...statuses, 'Collocation'];
