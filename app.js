@@ -16,6 +16,34 @@ let communityParents = {}; // childId -> parentId
 let currentUserRole = 'user'; // 'admin' or 'user' — loaded from profile on login
 let mfaRequired = true; // global setting, admin-configurable
 
+// Build lookup maps for O(1) access
+const communityNameMap = {};
+const contactMap = {};
+const sensorTicketMap = {};
+
+function rebuildLookupMaps() {
+    // Community name lookup
+    for (const key in communityNameMap) delete communityNameMap[key];
+    COMMUNITIES.forEach(c => { communityNameMap[c.id] = c.name; });
+
+    // Contact lookup by ID
+    for (const key in contactMap) delete contactMap[key];
+    contacts.forEach(c => { contactMap[c.id] = c; });
+
+    // Sensor -> active tickets lookup
+    rebuildSensorTicketMap();
+}
+
+function rebuildSensorTicketMap() {
+    for (const key in sensorTicketMap) delete sensorTicketMap[key];
+    serviceTickets.forEach(t => {
+        if (t.status !== 'Closed') {
+            if (!sensorTicketMap[t.sensorId]) sensorTicketMap[t.sensorId] = [];
+            sensorTicketMap[t.sensorId].push(t);
+        }
+    });
+}
+
 // ===== CUSTOM CONFIRM / ALERT MODAL =====
 let _confirmCallback = null;
 let _confirmDismissCallback = null;
@@ -121,7 +149,6 @@ async function loadAllData() {
 
     // Sync deactivated communities from DB active column
     deactivatedCommunities = communitiesData.filter(c => c.active === false).map(c => c.id);
-    saveData('deactivatedCommunities', deactivatedCommunities);
 
     // Tags
     communityTags = {};
@@ -204,6 +231,9 @@ async function loadAllData() {
 
     // Ensure notes containing status change text have the Status Change type tag
     tagNotesWithStatusChange();
+
+    // Build O(1) lookup maps
+    rebuildLookupMaps();
 }
 
 function cleanupSensorServiceStatuses() {
@@ -363,7 +393,10 @@ function persistAuditUpdate(id, updates) { db.updateAudit(id, updates).catch(han
 
 // ===== UTILITIES =====
 function generateId(prefix) {
-    return prefix + Date.now() + Math.random().toString(36).slice(2, 6);
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return prefix + '-' + crypto.randomUUID().substring(0, 12);
+    }
+    return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
 }
 
 function createNote(type, text, tags, additionalInfo) {
@@ -444,11 +477,23 @@ function isChildCommunity(communityId) {
 }
 
 // ===== RECENT ACTIVITY TRACKING =====
-let recentActivity = loadData('recentActivity', { communities: [], contacts: [], sensors: [] });
+let recentActivity = null;
+
+function getRecentActivityKey() {
+    return 'recentActivity_' + (currentUserId || 'anon');
+}
+
+function ensureRecentActivity() {
+    if (!recentActivity) {
+        recentActivity = loadData(getRecentActivityKey(), { communities: [], contacts: [], sensors: [] });
+    }
+    return recentActivity;
+}
 
 function trackRecent(type, id, action) {
     // type: 'communities' | 'contacts' | 'sensors'
     // action: 'viewed' | 'edited'
+    ensureRecentActivity();
     const list = recentActivity[type] || [];
     // Remove existing entry for this id
     const filtered = list.filter(item => item.id !== id);
@@ -456,7 +501,7 @@ function trackRecent(type, id, action) {
     filtered.unshift({ id, action, time: nowDatetime() });
     // Keep only 5
     recentActivity[type] = filtered.slice(0, 5);
-    saveData('recentActivity', recentActivity);
+    saveData(getRecentActivityKey(), recentActivity);
 }
 
 // ===== USER SYSTEM (Supabase Auth) =====
@@ -678,6 +723,7 @@ async function enterApp() {
     const profile = await db.getProfile();
     currentUser = profile?.name || profile?.email || 'User';
     currentUserId = profile?.id || null;
+    recentActivity = null; // Reset so lazy init loads with correct user key
     const userEmail = profile?.email || '';
 
     // Check if user has been archived or deleted
@@ -1361,8 +1407,7 @@ function renderStatusBadges(s, clickable) {
 }
 
 function getCommunityName(id) {
-    const c = COMMUNITIES.find(c => c.id === id);
-    return c ? c.name : id || '—';
+    return communityNameMap[id] || id || '—';
 }
 
 const ALL_SENSOR_COLUMNS = [
@@ -1650,29 +1695,17 @@ function inlineSaveContact(el) {
     // Auto-log active status changes (not in setup mode)
     if (!setupMode && field === 'active') {
         const action = c.active ? 'reactivated' : 'marked as inactive';
-        const note = {
-            id: generateId('n'), date: nowDatetime(), type: 'Info Edit',
-            text: `${c.name} ${action}.`,
-            createdBy: getCurrentUserName(), createdById: currentUserId,
-            taggedSensors: [], taggedCommunities: c.community ? [c.community] : [], taggedContacts: [contactId],
-        };
-        notes.push(note); persistNote(note);
+        createNote('Info Edit', `${c.name} ${action}.`, {
+            sensors: [], communities: c.community ? [c.community] : [], contacts: [contactId],
+        });
     }
 
     // Auto-log phone/email changes (not in setup mode)
     if (!setupMode && (field === 'email' || field === 'phone') && oldVal !== newVal) {
         const label = field === 'email' ? 'Email' : 'Phone';
-        const note = {
-            id: generateId('n'),
-            date: nowDatetime(),
-            type: 'Info Edit',
-            text: `${c.name} ${label.toLowerCase()} changed from "${oldVal || '(empty)'}" to "${newVal || '(empty)'}".`,
-            createdBy: getCurrentUserName(), createdById: currentUserId,
-            taggedSensors: [],
-            taggedCommunities: c.community ? [c.community] : [],
-            taggedContacts: [contactId],
-        };
-        notes.push(note); persistNote(note);
+        createNote('Info Edit', `${c.name} ${label.toLowerCase()} changed from "${oldVal || '(empty)'}" to "${newVal || '(empty)'}".`, {
+            sensors: [], communities: c.community ? [c.community] : [], contacts: [contactId],
+        });
     }
 }
 
@@ -1840,6 +1873,7 @@ function buildAnnotationNote(annotation, additionalInfo, date) {
         text: noteText,
         additionalInfo: additionalInfo || '',
         createdBy: getCurrentUserName(), createdById: currentUserId,
+        createdAt: new Date().toISOString(),
         taggedSensors: [annotation.sensorId],
         taggedCommunities: taggedCommunities,
         taggedContacts: additionalInfo ? parseMentionedContacts(additionalInfo) : [],
@@ -1920,6 +1954,7 @@ function saveStatusChange(e) {
         text: noteText,
         additionalInfo: structuredInfo,
         createdBy: getCurrentUserName(), createdById: currentUserId,
+        createdAt: new Date().toISOString(),
         taggedSensors: [sensorId],
         taggedCommunities: s.community ? [s.community] : [],
         taggedContacts: mentionedContacts,
@@ -2047,6 +2082,7 @@ function moveSensor(e) {
         text: noteText,
         additionalInfo: structuredInfo,
         createdBy: getCurrentUserName(), createdById: currentUserId,
+        createdAt: new Date().toISOString(),
         taggedSensors: [sensorId],
         taggedCommunities: taggedCommunities,
         taggedContacts: mentionedContacts,
@@ -2779,12 +2815,22 @@ async function saveContact(e) {
         primaryContact: document.getElementById('contact-primary-contact').checked,
     };
 
-    // Check for duplicate contact name
+    // Check for duplicate contact name — confirm before proceeding
     const nameDup = contacts.find(c => c.name.toLowerCase() === data.name.toLowerCase() && c.id !== data.id);
     if (nameDup) {
-        showAlert('Duplicate Contact', `A contact named "${nameDup.name}" already exists (${getCommunityName(nameDup.community) || nameDup.org || 'no community'}). Are you sure this isn't the same person?`);
+        return new Promise(resolve => {
+            showConfirm('Duplicate Contact',
+                `A contact named "${nameDup.name}" already exists (${getCommunityName(nameDup.community) || nameDup.org || 'no community'}). Are you sure this isn't the same person?\n\nClick "Save Anyway" to save, or "Cancel" to go back and edit.`,
+                () => { doSaveContact(data, editId, isActive); resolve(); },
+                { confirmText: 'Save Anyway' }
+            );
+        });
     }
 
+    doSaveContact(data, editId, isActive);
+}
+
+async function doSaveContact(data, editId, isActive) {
     let statusChanged = null;
     let emailChanged = false;
     let phoneChanged = false;
@@ -2840,10 +2886,9 @@ async function saveContact(e) {
         if (phoneChanged) allChanges.push(`Phone changed from "${oldPhone || '(empty)'}" to "${data.phone || '(empty)'}"`);
 
         if (allChanges.length > 0) {
-            const note = { id: generateId('n'), date: nowDatetime(), type: 'Info Edit',
-                text: `Contact updated: ${allChanges.join('; ')}.`,
-                createdBy: getCurrentUserName(), createdById: currentUserId, taggedSensors: [], taggedCommunities: data.community ? [data.community] : [], taggedContacts: [data.id] };
-            notes.push(note); persistNote(note);
+            createNote('Info Edit', `Contact updated: ${allChanges.join('; ')}.`, {
+                sensors: [], communities: data.community ? [data.community] : [], contacts: [data.id],
+            });
         }
     }
 
@@ -2893,6 +2938,7 @@ function saveContactStatusNote() {
         text: noteText,
         additionalInfo: additionalInfo,
         createdBy: getCurrentUserName(), createdById: currentUserId,
+        createdAt: new Date().toISOString(),
         taggedSensors: [],
         taggedCommunities: p.community ? [p.community] : [],
         taggedContacts: [p.contactId],
@@ -2968,7 +3014,7 @@ function showContactView(contactId) {
                 </select>
             </div>
             <div class="info-item" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--slate-200)">
-                <button class="btn btn-danger btn-sm" onclick="deleteContactFromDetail('${c.id}')">Delete Contact</button>
+                <button class="btn btn-danger btn-sm" onclick="confirmDeleteContact('${c.id}')">Delete Contact</button>
             </div>
         `;
     } else {
@@ -3092,14 +3138,9 @@ function inlineEditContact(contactId, field) {
             }
 
             if (!setupMode) {
-                const noteObj = {
-                    id: generateId('n'), date: nowDatetime(), type: 'Info Edit',
-                    text: `${label} changed from "${oldVal || '(empty)'}" to "${newVal || '(empty)'}" for ${c.name}.`,
-                    createdBy: getCurrentUserName(), createdById: currentUserId,
-                    taggedSensors: [], taggedCommunities: c.community ? [c.community] : [], taggedContacts: [contactId],
-                };
-                notes.push(noteObj);
-                persistNote(noteObj);
+                createNote('Info Edit', `${label} changed from "${oldVal || '(empty)'}" to "${newVal || '(empty)'}" for ${c.name}.`, {
+                    sensors: [], communities: c.community ? [c.community] : [], contacts: [contactId],
+                });
             }
         }
 
@@ -3195,14 +3236,9 @@ function inlineEditContactCommunity(contactId) {
             if (!setupMode) {
                 const oldName = oldVal ? getCommunityName(oldVal) : '(none)';
                 const newName = newVal ? getCommunityName(newVal) : '(none)';
-                const noteObj = {
-                    id: generateId('n'), date: nowDatetime(), type: 'Info Edit',
-                    text: `Community changed from "${oldName}" to "${newName}" for ${c.name}.`,
-                    createdBy: getCurrentUserName(), createdById: currentUserId,
-                    taggedSensors: [], taggedCommunities: [oldVal, newVal].filter(Boolean), taggedContacts: [contactId],
-                };
-                notes.push(noteObj);
-                persistNote(noteObj);
+                createNote('Info Edit', `Community changed from "${oldName}" to "${newName}" for ${c.name}.`, {
+                    sensors: [], communities: [oldVal, newVal].filter(Boolean), contacts: [contactId],
+                });
             }
         }
         showContactView(contactId);
@@ -3218,26 +3254,6 @@ function inlineEditContactCommunity(contactId) {
             if (!handled) { handled = true; showContactView(contactId); }
         }
     });
-}
-
-function deleteCurrentContact() {
-    if (!currentContact) return;
-    const c = contacts.find(x => x.id === currentContact);
-    if (!c) return;
-    showConfirm('Delete Contact', `Delete contact "${c.name}"? This cannot be undone.`, () => {
-        db.deleteContact(currentContact).catch(err => console.error('Delete error:', err));
-        contacts = contacts.filter(x => x.id !== currentContact);
-        closeModal('modal-add-contact'); showSuccessToast('Contact deleted');
-
-        // Close the tab and go to contacts list
-        const tabId = getTabId('contact', currentContact);
-        const tabIdx = openTabs.findIndex(t => t.id === tabId);
-        if (tabIdx >= 0) openTabs.splice(tabIdx, 1);
-        activeTabId = null;
-        renderOpenTabs();
-        currentContact = null;
-        showView('contacts');
-    }, { danger: true });
 }
 
 function confirmDeleteContact(contactId) {
@@ -3275,23 +3291,7 @@ function confirmDeleteContact(contactId) {
     );
 }
 
-function deleteContactFromDetail(contactId) {
-    const c = contacts.find(x => x.id === contactId);
-    if (!c) return;
-    showConfirm('Delete Contact', `Delete contact "${c.name}"? This cannot be undone.`, () => {
-        db.deleteContact(contactId).catch(err => console.error('Delete error:', err));
-        contacts = contacts.filter(x => x.id !== contactId);
-        showSuccessToast('Contact deleted');
 
-        const tabId = getTabId('contact', contactId);
-        const tabIdx = openTabs.findIndex(t => t.id === tabId);
-        if (tabIdx >= 0) openTabs.splice(tabIdx, 1);
-        activeTabId = null;
-        renderOpenTabs();
-        currentContact = null;
-        showView('contacts');
-    }, { danger: true });
-}
 
 function openContactCommModal() {
     if (!currentContact) return;
@@ -3589,7 +3589,7 @@ function saveNote(e) {
 
     const sensorTags = getChipValues('tag-sensors-container');
 
-    const communityTags = getChipValues('tag-communities-container')
+    const noteCommunityTags = getChipValues('tag-communities-container')
         .map(name => {
             const c = COMMUNITIES.find(c => c.name.toLowerCase() === name.toLowerCase());
             return c ? c.id : null;
@@ -3615,7 +3615,7 @@ function saveNote(e) {
         createdBy: getCurrentUserName(), createdById: currentUserId,
         createdAt: new Date().toISOString(),
         taggedSensors: sensorTags,
-        taggedCommunities: communityTags,
+        taggedCommunities: noteCommunityTags,
         taggedContacts: contactTags,
     };
 
@@ -4143,7 +4143,7 @@ function buildTagsHTML(item) {
     }
     if (item.taggedContacts) {
         tags += item.taggedContacts.map(cId => {
-            const contact = contacts.find(x => x.id === cId);
+            const contact = contactMap[cId];
             return contact ? `<span class="tag tag-contact" onclick="event.stopPropagation(); showContactDetail('${cId}')">${contact.name}</span>` : '';
         }).join('');
     }
@@ -4359,6 +4359,7 @@ function saveCommunity(e) {
     // Add to communities list (sorted)
     COMMUNITIES.push({ id, name });
     COMMUNITIES.sort((a, b) => a.name.localeCompare(b.name));
+    communityNameMap[id] = name;
 
     // Set tags if any selected
     if (newCommunitySelectedTags.length > 0) {
@@ -4379,17 +4380,9 @@ function saveCommunity(e) {
 
     // Log sub-community creation
     if (!setupMode && parentId) {
-        const note = {
-            id: generateId('n'),
-            date: nowDatetime(),
-            type: 'Info Edit',
-            text: `Sub-community "${name}" added under ${getCommunityName(parentId)}.`,
-            createdBy: getCurrentUserName(), createdById: currentUserId,
-            taggedSensors: [],
-            taggedCommunities: [parentId, id],
-            taggedContacts: [],
-        };
-        notes.push(note); persistNote(note);
+        createNote('Info Edit', `Sub-community "${name}" added under ${getCommunityName(parentId)}.`, {
+            sensors: [], communities: [parentId, id], contacts: [],
+        });
     }
 
     buildSidebar();
@@ -4430,33 +4423,21 @@ function toggleCommunityTag(tag) {
         // Remove tag
         communityTags[editingTagsCommunity] = current.filter(t => t !== tag);
 
-        const note = {
-            id: generateId('n'),
-            date: nowDatetime(),
-            type: 'Info Edit',
-            text: `Tag "${tag}" removed from ${community.name}.`,
-            createdBy: getCurrentUserName(), createdById: currentUserId,
-            taggedSensors: [],
-            taggedCommunities: [editingTagsCommunity],
-            taggedContacts: [],
-        };
-        if (!setupMode) { notes.push(note); persistNote(note); }
+        if (!setupMode) {
+            createNote('Info Edit', `Tag "${tag}" removed from ${community.name}.`, {
+                sensors: [], communities: [editingTagsCommunity], contacts: [],
+            });
+        }
     } else {
         // Add tag
         if (!communityTags[editingTagsCommunity]) communityTags[editingTagsCommunity] = [];
         communityTags[editingTagsCommunity].push(tag);
 
-        const note = {
-            id: generateId('n'),
-            date: nowDatetime(),
-            type: 'Info Edit',
-            text: `Tag "${tag}" added to ${community.name}.`,
-            createdBy: getCurrentUserName(), createdById: currentUserId,
-            taggedSensors: [],
-            taggedCommunities: [editingTagsCommunity],
-            taggedContacts: [],
-        };
-        if (!setupMode) { notes.push(note); persistNote(note); }
+        if (!setupMode) {
+            createNote('Info Edit', `Tag "${tag}" added to ${community.name}.`, {
+                sensors: [], communities: [editingTagsCommunity], contacts: [],
+            });
+        }
     }
 
     trackRecent('communities', editingTagsCommunity, 'edited');
@@ -4481,17 +4462,11 @@ function addCustomTag() {
         communityTags[editingTagsCommunity].push(tag);
 
         const community = COMMUNITIES.find(c => c.id === editingTagsCommunity);
-        const note = {
-            id: generateId('n'),
-            date: nowDatetime(),
-            type: 'Info Edit',
-            text: `Tag "${tag}" added to ${community.name}.`,
-            createdBy: getCurrentUserName(), createdById: currentUserId,
-            taggedSensors: [],
-            taggedCommunities: [editingTagsCommunity],
-            taggedContacts: [],
-        };
-        if (!setupMode) { notes.push(note); persistNote(note); }
+        if (!setupMode) {
+            createNote('Info Edit', `Tag "${tag}" added to ${community.name}.`, {
+                sensors: [], communities: [editingTagsCommunity], contacts: [],
+            });
+        }
         persistCommunityTags(editingTagsCommunity, getCommunityTags(editingTagsCommunity));
     }
 
@@ -5823,20 +5798,13 @@ function editCommunityName() {
 
     const oldName = c.name;
     c.name = trimmedName;
+    communityNameMap[currentCommunity] = trimmedName;
     db.updateCommunity(currentCommunity, { name: c.name }).catch(err => console.error(err));
 
     if (!setupMode) {
-        const note = {
-            id: generateId('n'),
-            date: nowDatetime(),
-            type: 'Info Edit',
-            text: `Community renamed from "${oldName}" to "${c.name}".`,
-            createdBy: getCurrentUserName(), createdById: currentUserId,
-            taggedSensors: [],
-            taggedCommunities: [currentCommunity],
-            taggedContacts: [],
-        };
-        notes.push(note); persistNote(note);
+        createNote('Info Edit', `Community renamed from "${oldName}" to "${c.name}".`, {
+            sensors: [], communities: [currentCommunity], contacts: [],
+        });
     }
 
     showCommunityView(currentCommunity);
@@ -5907,17 +5875,9 @@ function openChangeParentModal(communityId) {
             if (oldParentId) taggedCommunities.push(oldParentId);
             if (newParentId && !taggedCommunities.includes(newParentId)) taggedCommunities.push(newParentId);
 
-            const note = {
-                id: generateId('n'),
-                date: nowDatetime(),
-                type: 'Info Edit',
-                text: noteText,
-                createdBy: getCurrentUserName(), createdById: currentUserId,
-                taggedSensors: [],
-                taggedCommunities: taggedCommunities,
-                taggedContacts: [],
-            };
-            notes.push(note); persistNote(note);
+            createNote('Info Edit', noteText, {
+                sensors: [], communities: taggedCommunities, contacts: [],
+            });
         }
 
         showCommunityView(communityId);
@@ -5941,7 +5901,7 @@ function unpinItem(type, id) {
 }
 
 // ===== COMMUNITY DEACTIVATION =====
-let deactivatedCommunities = loadData('deactivatedCommunities', []);
+let deactivatedCommunities = [];
 
 function deactivateCommunity(communityId) {
     const community = COMMUNITIES.find(c => c.id === communityId);
@@ -5954,7 +5914,6 @@ function deactivateCommunity(communityId) {
     showConfirm('Deactivate Community', `Deactivate "${communityName}"? It will move to the Inactive tab. All history is preserved.${contactMsg}`, () => {
         if (!deactivatedCommunities.includes(communityId)) {
             deactivatedCommunities.push(communityId);
-            saveData('deactivatedCommunities', deactivatedCommunities);
         }
         // Persist to Supabase
         db.updateCommunity(communityId, { active: false }).catch(err => console.error('Deactivate error:', err));
@@ -5967,7 +5926,6 @@ function deactivateCommunity(communityId) {
             }
             db.updateCommunity(child.id, { active: false }).catch(err => console.error('Deactivate child error:', err));
         });
-        saveData('deactivatedCommunities', deactivatedCommunities);
 
         // Auto-inactivate contacts in this community (and children)
         const allDeactivatedIds = [communityId, ...children.map(c => c.id)];
@@ -5988,7 +5946,6 @@ function reactivateCommunity(communityId) {
     const communityName = community ? community.name : communityId;
 
     deactivatedCommunities = deactivatedCommunities.filter(id => id !== communityId);
-    saveData('deactivatedCommunities', deactivatedCommunities);
     db.updateCommunity(communityId, { active: true }).catch(err => console.error('Reactivate error:', err));
 
     // Also reactivate child communities
@@ -5997,7 +5954,6 @@ function reactivateCommunity(communityId) {
         deactivatedCommunities = deactivatedCommunities.filter(id => id !== child.id);
         db.updateCommunity(child.id, { active: true }).catch(err => console.error('Reactivate child error:', err));
     });
-    saveData('deactivatedCommunities', deactivatedCommunities);
 
     showSuccessToast(`${communityName} reactivated`);
     showView('communities');
@@ -6032,9 +5988,9 @@ function confirmDeleteCommunity(communityId) {
             // Remove from COMMUNITIES array
             const idx = COMMUNITIES.findIndex(c => c.id === communityId);
             if (idx >= 0) COMMUNITIES.splice(idx, 1);
+            delete communityNameMap[communityId];
             // Remove from deactivated list
             deactivatedCommunities = deactivatedCommunities.filter(id => id !== communityId);
-            saveData('deactivatedCommunities', deactivatedCommunities);
             // Delete from DB (handles all FK cleanup)
             await db.deleteCommunity(communityId);
             // Close any open tabs for this community
@@ -6186,7 +6142,7 @@ function formatTicketType(type) {
     if (type === 'calibration') return 'Calibration';
     return 'Issue / Repair';
 }
-function getActiveTicketsForSensor(sensorId) { return serviceTickets.filter(t => t.sensorId === sensorId && t.status !== 'Closed'); }
+function getActiveTicketsForSensor(sensorId) { return sensorTicketMap[sensorId] || []; }
 
 function updateSidebarServiceCount() {
     const count = getActiveTicketCount();
@@ -6378,6 +6334,7 @@ function advanceTicketStatus(ticketId) {
         }
     }
 
+    rebuildSensorTicketMap();
     createNote('Service', `Service ticket advanced: "${oldStatus}" → "${newStatus}".`, { sensors: [ticket.sensorId] });
     openTicketDetail(ticketId);
     updateSidebarServiceCount();
@@ -6411,6 +6368,7 @@ function revertTicketStatus(ticketId) {
     }
 
     createNote('Service', `Service ticket reverted: "${oldStatus}" \u2192 "${newStatus}".`, { sensors: [ticket.sensorId] });
+    rebuildSensorTicketMap();
     openTicketDetail(ticketId);
     updateSidebarServiceCount();
     if (document.getElementById('view-service')?.classList.contains('active')) renderServiceView();
@@ -6424,6 +6382,7 @@ async function deleteServiceTicket(ticketId) {
         // Remove from in-memory array
         const idx = serviceTickets.indexOf(ticket);
         if (idx >= 0) serviceTickets.splice(idx, 1);
+        rebuildSensorTicketMap();
 
         // Delete auto-generated service notes
         await deleteAutoNotes('Service', [ticket.sensorId]);
@@ -6503,6 +6462,7 @@ async function saveNewTicket(event) {
         }
     }
 
+    rebuildSensorTicketMap();
     createNote('Service', `Service ticket opened (${actions.join(' + ')}): ${description}`, { sensors: [sensorId] });
     closeModal('modal-new-service-ticket');
     updateSidebarServiceCount();
@@ -6532,6 +6492,7 @@ function confirmCloseTicket() {
     ticket.closedAt = nowDatetime();
     if (workCompleted) ticket.workCompleted = workCompleted;
     persistServiceTicketUpdate(ticketId, { status: 'Closed', closedAt: ticket.closedAt, workCompleted: ticket.workCompleted });
+    rebuildSensorTicketMap();
 
     const s = sensors.find(x => x.id === ticket.sensorId);
     if (s) {
@@ -6877,11 +6838,11 @@ const DQO_THRESHOLDS = {
 // Column name mapping: match QuantAQ AirVision export columns to our parameter keys
 const PARAM_COLUMN_MAP = {
     co: [/\bCO_PPB\b/i, /\bco_ppb\b/i, /\bCO\b.*ppb/i],
-    no: [/\bNO_PPB\b/i, /\bno_ppb\b/i, /(?<![A-Z])NO\b.*ppb/i],
+    no: [/(?<!NO2|OZONE)\bNO_PPB\b/i, /(?<![A-Z])NO_PPB/i, /(?<![A-Z])NO\b.*ppb/i],
     no2: [/\bNO2_PPB\b/i, /\bno2_ppb\b/i, /\bNO\u2082\b/i],
-    o3: [/\bOZONE_PPB\b/i, /\bo3_ppb\b/i, /\bO3\b.*ppb/i, /\bozone\b/i],
-    pm10: [/\bPM10_CONTIN\b/i, /\bpm10\b/i, /\bPM\s*10\b/i],
-    pm25: [/\bPM25\b/i, /\bpm2\.?5\b/i, /\bPM\s*2\.?5\b/i],
+    o3: [/\bOZONE_PPB\b/i, /\bO3_PPB\b/i, /\bO3\b.*ppb/i, /\bozone\b/i],
+    pm10: [/\bPM10[_\s]?CONTIN\b/i, /\bPM10L\b/i, /\bPM10\b/i, /\bPM\s*10\b/i],
+    pm25: [/\bPM25(?!L)\b/i, /\bPM2[\._]?5(?!L)\b/i, /\bPM\s*2\.?5\b/i],
 };
 
 async function deleteAudit(auditId) {
@@ -7102,12 +7063,10 @@ function _analysisValidationChain(auditId, audit, parsed, analysisName, body, co
                 if (note) notes.push(note);
                 _analysisValidationChainStep2(auditId, audit, parsed, analysisName, body, notes);
             });
-        }, { confirmText: 'Proceed Anyway', cancelText: 'Cancel' });
-        // On cancel, restore the upload UI
-        _confirmDismissCallback = () => {
+        }, { confirmText: 'Proceed Anyway', cancelText: 'Cancel', onCancel: () => {
             body.innerHTML = '<div class="analysis-processing" style="color:var(--slate-400)">Upload cancelled.</div>';
             setTimeout(() => rerunAnalysisUpload(auditId), 600);
-        };
+        } });
     } else {
         _analysisValidationChainStep2(auditId, audit, parsed, analysisName, body, collectedNotes);
     }
@@ -7128,11 +7087,10 @@ function _analysisValidationChainStep2(auditId, audit, parsed, analysisName, bod
                 if (note) notes.push(note);
                 _finalizeAnalysis(auditId, audit, parsed, analysisName, body, notes);
             });
-        }, { confirmText: 'Proceed Anyway', cancelText: 'Cancel' });
-        _confirmDismissCallback = () => {
+        }, { confirmText: 'Proceed Anyway', cancelText: 'Cancel', onCancel: () => {
             body.innerHTML = '<div class="analysis-processing" style="color:var(--slate-400)">Upload cancelled.</div>';
             setTimeout(() => rerunAnalysisUpload(auditId), 600);
-        };
+        } });
     } else {
         _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collectedNotes);
     }
@@ -7145,8 +7103,7 @@ function _promptAnalysisNote(context, callback) {
     showConfirm('Add Note (Optional)', msg, () => {
         const note = document.getElementById('analysis-warning-note')?.value?.trim() || '';
         callback(note);
-    }, { confirmText: 'Continue', cancelText: 'Skip' });
-    _confirmDismissCallback = () => { callback(''); };
+    }, { confirmText: 'Continue', cancelText: 'Skip', onCancel: () => { callback(''); } });
 }
 
 // Build data integrity warnings for the analysis view
@@ -9047,23 +9004,7 @@ function renderSensorCollocations(sensorId) {
 // ===== COLLOCATION ANALYSIS ENGINE =====
 let collocAnalysisCache = {};
 
-const COLLOC_PARAMS = [
-    { key: 'pm25', label: 'PM2.5', labelHtml: 'PM<sub>2.5</sub>', unit: 'µg/m³' },
-    { key: 'pm10', label: 'PM10', labelHtml: 'PM<sub>10</sub>', unit: 'µg/m³' },
-    { key: 'co', label: 'CO', labelHtml: 'CO', unit: 'ppb' },
-    { key: 'no', label: 'NO', labelHtml: 'NO', unit: 'ppb' },
-    { key: 'no2', label: 'NO2', labelHtml: 'NO<sub>2</sub>', unit: 'ppb' },
-    { key: 'o3', label: 'O3', labelHtml: 'O<sub>3</sub>', unit: 'ppb' },
-];
-
-const COLLOC_COLUMN_MAP = {
-    pm25: [/PM25(?!L)\b/i, /PM2[\._]?5(?!L)/i],
-    pm10: [/PM10[_\s]?CONTIN/i, /PM10L/i, /PM10(?!_CONTIN)/i],
-    co: [/CO_PPB/i],
-    no: [/(?<!NO2|OZONE)\bNO_PPB/i, /(?<![A-Z])NO_PPB/i],
-    no2: [/NO2_PPB/i],
-    o3: [/OZONE_PPB/i, /O3_PPB/i],
-};
+// AUDIT_PARAMETERS removed — use AUDIT_PARAMETERS instead
 
 function reuploadCollocationData(collocId) {
     const colloc = collocations.find(c => c.id === collocId);
@@ -9258,7 +9199,7 @@ function parseCollocationData(rows, colloc, bamSource, permaPodId) {
             /AMBTEMP|_TEMP_|_TEMP\b|TEMP_C|TEMP_F/.test(hUpper) ||
             /RELHUMID|\bRH[_%\s]|\bRH$/.test(hUpper)) return;
 
-        for (const [paramKey, patterns] of Object.entries(COLLOC_COLUMN_MAP)) {
+        for (const [paramKey, patterns] of Object.entries(PARAM_COLUMN_MAP)) {
             for (const pat of patterns) {
                 if (pat.test(h)) { podMap[rawId][paramKey] = idx; break; }
             }
@@ -9317,7 +9258,7 @@ function parseCollocationData(rows, colloc, bamSource, permaPodId) {
 
         // Permanent pod values
         if (permaPod) {
-            for (const key of Object.keys(COLLOC_COLUMN_MAP)) {
+            for (const key of Object.keys(PARAM_COLUMN_MAP)) {
                 entry.perma[key] = permaPod[key] !== undefined ? parseFloat(row[permaPod[key]]) : NaN;
             }
         }
@@ -9325,7 +9266,7 @@ function parseCollocationData(rows, colloc, bamSource, permaPodId) {
         // Community pod values
         for (const [podId, cols] of Object.entries(communityPods)) {
             entry.pods[podId] = {};
-            for (const key of Object.keys(COLLOC_COLUMN_MAP)) {
+            for (const key of Object.keys(PARAM_COLUMN_MAP)) {
                 entry.pods[podId][key] = cols[key] !== undefined ? parseFloat(row[cols[key]]) : NaN;
             }
         }
@@ -9402,7 +9343,7 @@ function runCollocationAnalysis(parsed) {
     if (parsed.permaPod) {
         for (const podId of parsed.podIds) {
             results.permaVsPods[podId] = {};
-            const params = parsed.isPmOnly[podId] ? ['pm25', 'pm10'] : COLLOC_PARAMS.map(p => p.key);
+            const params = parsed.isPmOnly[podId] ? ['pm25', 'pm10'] : AUDIT_PARAMETERS.map(p => p.key);
             for (const key of params) {
                 const x = trimmed.map(r => Number(r.perma?.[key] ?? NaN));
                 const y = trimmed.map(r => Number(r.pods?.[podId]?.[key] ?? NaN));
@@ -9585,7 +9526,7 @@ function renderCollocationAnalysisResults(collocId, parsed) {
         // Render only the first visible chart after a brief delay (let DOM settle)
         setTimeout(() => {
             try {
-                _renderCollocTSChart(parsed, COLLOC_PARAMS[0].key, colloc);
+                _renderCollocTSChart(parsed, AUDIT_PARAMETERS[0].key, colloc);
                 _renderFirstVisibleRegTab(parsed, results);
             } catch (err) { console.error('Chart render error:', err); }
         }, 100);
@@ -9621,7 +9562,7 @@ function _getCollocDates(parsed) {
 function _buildCollocTSTabs(parsed, colloc) {
     const container = document.getElementById('colloc-ts-tabset');
     const hasGas = parsed.podIds.some(id => !parsed.isPmOnly[id]);
-    const params = hasGas ? COLLOC_PARAMS : COLLOC_PARAMS.filter(p => p.key === 'pm25' || p.key === 'pm10');
+    const params = hasGas ? AUDIT_PARAMETERS : AUDIT_PARAMETERS.filter(p => p.key === 'pm25' || p.key === 'pm10');
 
     let tabsHtml = '<ul class="colloc-nav-tabs">';
     let panelsHtml = '';
@@ -9729,7 +9670,7 @@ function _buildCollocRegTabs(parsed, results) {
         tabsHtml += `<li><button class="colloc-nav-link${active}" onclick="_switchCollocTabLazy('colloc-reg', 'bam', this, 'reg')">Pods vs ${parsed.bamLabel}</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-bam" class="colloc-tab-pane${active}">`;
         for (const key of ['pm25', 'pm10']) {
-            const p = COLLOC_PARAMS.find(x => x.key === key);
+            const p = AUDIT_PARAMETERS.find(x => x.key === key);
             panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; All Sensors vs ${parsed.bamLabel}</div>`;
             panelsHtml += `<div id="colloc-reg-bam-${key}" style="width:100%;height:360px"></div>`;
         }
@@ -9744,7 +9685,7 @@ function _buildCollocRegTabs(parsed, results) {
         tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-pm', this, 'reg')">Quants PM</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-quants-pm" class="colloc-tab-pane">`;
         for (const key of ['pm25', 'pm10']) {
-            const p = COLLOC_PARAMS.find(x => x.key === key);
+            const p = AUDIT_PARAMETERS.find(x => x.key === key);
             panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Pods ${podShortList} vs ${permaShort}</div>`;
             panelsHtml += `<div id="colloc-reg-quants-pm-${key}" style="width:100%;height:360px"></div>`;
         }
@@ -9755,7 +9696,7 @@ function _buildCollocRegTabs(parsed, results) {
             tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-gas', this, 'reg')">Quants Gaseous</button></li>`;
             panelsHtml += `<div id="colloc-reg-tab-quants-gas" class="colloc-tab-pane">`;
             for (const key of ['co', 'no', 'no2', 'o3']) {
-                const p = COLLOC_PARAMS.find(x => x.key === key);
+                const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Pods ${podShortList} vs ${permaShort}</div>`;
                 panelsHtml += `<div id="colloc-reg-quants-gas-${key}" style="width:100%;height:360px"></div>`;
             }
@@ -9766,7 +9707,7 @@ function _buildCollocRegTabs(parsed, results) {
         tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-pm', this, 'reg')">Quants PM</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-quants-pm" class="colloc-tab-pane">`;
         for (const key of ['pm25', 'pm10']) {
-            const p = COLLOC_PARAMS.find(x => x.key === key);
+            const p = AUDIT_PARAMETERS.find(x => x.key === key);
             panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Inter-Pod Comparisons</div>`;
             panelsHtml += `<div id="colloc-reg-quants-pm-${key}" style="width:100%;height:360px"></div>`;
         }
@@ -9776,7 +9717,7 @@ function _buildCollocRegTabs(parsed, results) {
             tabsHtml += `<li><button class="colloc-nav-link" onclick="_switchCollocTabLazy('colloc-reg', 'quants-gas', this, 'reg')">Quants Gaseous</button></li>`;
         panelsHtml += `<div id="colloc-reg-tab-quants-gas" class="colloc-tab-pane">`;
         for (const key of ['co', 'no', 'no2', 'o3']) {
-            const p = COLLOC_PARAMS.find(x => x.key === key);
+            const p = AUDIT_PARAMETERS.find(x => x.key === key);
             panelsHtml += `<div class="colloc-reg-param-title">${p.labelHtml} &mdash; Inter-Pod Comparisons</div>`;
             panelsHtml += `<div id="colloc-reg-quants-gas-${key}" style="width:100%;height:360px"></div>`;
         }
@@ -9879,7 +9820,7 @@ function _renderCollocRegChart(parsed, results, tabName) {
     if (tabName === 'bam' && hasBam) {
         for (const key of ['pm25', 'pm10']) {
             if (document.getElementById(`colloc-reg-bam-${key}`)?.dataset.rendered) continue;
-            const p = COLLOC_PARAMS.find(x => x.key === key);
+            const p = AUDIT_PARAMETERS.find(x => x.key === key);
             const allPods = parsed.permaPod ? [parsed.permaPodId, ...parsed.podIds] : [...parsed.podIds];
             buildRegRow(`colloc-reg-bam-${key}`, key, p.label, allPods, parsed.bamLabel,
                 `${parsed.bamLabel} ${p.label}`,
@@ -9891,7 +9832,7 @@ function _renderCollocRegChart(parsed, results, tabName) {
         if (hasPerma) {
             for (const key of ['pm25', 'pm10']) {
                 if (document.getElementById(`colloc-reg-quants-pm-${key}`)?.dataset.rendered) continue;
-                const p = COLLOC_PARAMS.find(x => x.key === key);
+                const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 buildRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, parsed.podIds, shortSensorId(parsed.permaPodId),
                     `${shortSensorId(parsed.permaPodId)} ${p.label}`,
                     (r, k) => r.perma[k], (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
@@ -9902,7 +9843,7 @@ function _renderCollocRegChart(parsed, results, tabName) {
             for (let i = 0; i < parsed.podIds.length; i++) for (let j = i + 1; j < parsed.podIds.length; j++) pmPairs.push({ ref: parsed.podIds[i], pod: parsed.podIds[j] });
             for (const key of ['pm25', 'pm10']) {
                 if (document.getElementById(`colloc-reg-quants-pm-${key}`)?.dataset.rendered) continue;
-                const p = COLLOC_PARAMS.find(x => x.key === key);
+                const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 buildInterPodRegRow(`colloc-reg-quants-pm-${key}`, key, p.label, pmPairs, trimmed, parsed);
                 const el = document.getElementById(`colloc-reg-quants-pm-${key}`); if (el) el.dataset.rendered = '1';
             }
@@ -9912,7 +9853,7 @@ function _renderCollocRegChart(parsed, results, tabName) {
             const gasPods = parsed.podIds.filter(id => !parsed.isPmOnly[id]);
             for (const key of ['co', 'no', 'no2', 'o3']) {
                 if (document.getElementById(`colloc-reg-quants-gas-${key}`)?.dataset.rendered) continue;
-                const p = COLLOC_PARAMS.find(x => x.key === key);
+                const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 buildRegRow(`colloc-reg-quants-gas-${key}`, key, p.label, gasPods, shortSensorId(parsed.permaPodId),
                     `${shortSensorId(parsed.permaPodId)} ${p.label}`,
                     (r, k) => r.perma[k], (r, podId, k) => r.pods[podId]?.[k] ?? NaN);
@@ -9924,7 +9865,7 @@ function _renderCollocRegChart(parsed, results, tabName) {
             for (let i = 0; i < gasPods.length; i++) for (let j = i + 1; j < gasPods.length; j++) gasPairs.push({ ref: gasPods[i], pod: gasPods[j] });
             for (const key of ['co', 'no', 'no2', 'o3']) {
                 if (document.getElementById(`colloc-reg-quants-gas-${key}`)?.dataset.rendered) continue;
-                const p = COLLOC_PARAMS.find(x => x.key === key);
+                const p = AUDIT_PARAMETERS.find(x => x.key === key);
                 buildInterPodRegRow(`colloc-reg-quants-gas-${key}`, key, p.label, gasPairs, trimmed, parsed);
                 const el = document.getElementById(`colloc-reg-quants-gas-${key}`); if (el) el.dataset.rendered = '1';
             }
