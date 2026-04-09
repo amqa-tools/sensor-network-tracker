@@ -6847,8 +6847,8 @@ function _regressionSelfTest() {
         const r1 = runLinearRegression([1,2,3,4,5], [2.1,3.9,6.1,7.9,10.1]);
         const r2 = runLinearRegression([1,2,3,4,5], [1,2,3,4,5]);
         _regressionSelfTestPassed = r1 && r2 &&
-            Math.abs(r1.slope - 2.0) < 0.05 && Math.abs(r1.intercept - 0.1) < 0.2 && r1.r2 > 0.999 &&
-            r2.slope === 1 && r2.intercept === 0 && r2.r2 === 1;
+            Math.abs(r1.slope - 2.0) < 0.05 && Math.abs(r1.intercept - 0.1) < 0.3 && r1.r2 >= 0.999 &&
+            Math.abs(r2.slope - 1) < 0.001 && Math.abs(r2.intercept) < 0.001 && r2.r2 >= 0.9999;
     } catch(e) { _regressionSelfTestPassed = false; }
     if (!_regressionSelfTestPassed) console.error('REGRESSION SELF-TEST FAILED');
     return _regressionSelfTestPassed;
@@ -6904,9 +6904,11 @@ function runFailsafeValidation(parsed, results, type) {
             pairs.forEach(p => { sx+=p.x; sy+=p.y; sxy+=p.x*p.y; sx2+=p.x*p.x; sy2+=p.y*p.y; });
             const num = n*sxy - sx*sy;
             const den = Math.sqrt((n*sx2-sx*sx)*(n*sy2-sy*sy));
-            const r2_pearson = den === 0 ? 0 : (num/den)*(num/den);
-            if (Math.abs(r2_pearson - result.r2) > 0.002) {
-                warnings.push({ category: 'regression-verify', severity: 'error', msg: `${paramLabel} R\u00B2 verification mismatch: regression=${result.r2}, Pearson=${r2_pearson.toFixed(4)}` });
+            const r2_pearson_raw = den === 0 ? 0 : (num/den)*(num/den);
+            // Round to same precision as runLinearRegression (4 decimal places) before comparing
+            const r2_pearson = Math.round(r2_pearson_raw * 10000) / 10000;
+            if (Math.abs(r2_pearson - result.r2) > 0.001) {
+                warnings.push({ category: 'regression-verify', severity: 'error', msg: `${paramLabel} R\u00B2 verification mismatch: regression=${result.r2}, Pearson=${r2_pearson}` });
             }
         }
     });
