@@ -7112,6 +7112,7 @@ async function deleteAudit(auditId) {
 function beginAnalysis(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
+    purgeAnalysisPlots();
     // Close audit detail modal first so analysis modal is visible
     closeModal('modal-audit-detail');
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
@@ -7170,10 +7171,19 @@ function beginAnalysis(auditId) {
     openModal('modal-audit-analysis');
 }
 
-function closeAnalysisModal() {
-    // Destroy any active charts to free memory
+function purgeAnalysisPlots() {
+    // Destroy Chart.js instances
     analysisChartInstances.forEach(c => { try { c.destroy(); } catch(e) {} });
     analysisChartInstances = [];
+    // Purge all Plotly plots from the analysis modal body
+    const body = document.getElementById('audit-analysis-body');
+    if (body && typeof Plotly !== 'undefined') {
+        body.querySelectorAll('.js-plotly-plot').forEach(el => { try { Plotly.purge(el); } catch(e) {} });
+    }
+}
+
+function closeAnalysisModal() {
+    purgeAnalysisPlots();
     closeModal('modal-audit-analysis');
 }
 
@@ -9237,6 +9247,7 @@ function reuploadCollocationData(collocId) {
 function beginCollocationAnalysis(collocId) {
     const colloc = collocations.find(c => c.id === collocId);
     if (!colloc) return;
+    purgeAnalysisPlots();
     const communityName = getCommunityName(colloc.locationId);
     const hasResults = Object.keys(colloc.analysisResults || {}).length > 0;
 
