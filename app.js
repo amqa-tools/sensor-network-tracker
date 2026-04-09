@@ -1426,8 +1426,6 @@ function filterCommunitiesByTag(tag) {
     showView('communities');
 }
 
-
-
 // ===== SENSORS =====
 function getStatusBadgeClass(status) {
     const map = {
@@ -3399,8 +3397,6 @@ function confirmDeleteContact(contactId) {
         { danger: true, confirmText: 'Delete Permanently' }
     );
 }
-
-
 
 function openContactCommModal() {
     if (!currentContact) return;
@@ -6524,8 +6520,6 @@ function openNewTicketModal(preselectedSensorId) {
 
 function openTicketFromSensor(sensorId) { openNewTicketModal(sensorId); }
 
-
-
 async function saveNewTicket(event) {
     event.preventDefault();
     const sensorId = document.getElementById('ticket-sensor-input').value;
@@ -6940,7 +6934,6 @@ const SAMPLE_SIZE_TIERS = { critical: 10, minimum: 24, adequate: 72, ideal: 168 
 // ===== FAILSAFE VALIDATION =====
 
 // Check 7: Self-test (runs once, cached)
-let _regressionSelfTestPassed = null;
 let _regressionSelfTestResults = null;
 function _regressionSelfTest() {
     if (_regressionSelfTestResults !== null) return _regressionSelfTestResults;
@@ -7034,8 +7027,6 @@ function runFailsafeValidation(parsed, results, type) {
             }
         }
     });
-
-
 
     // Check 3 — Timestamp validation
     if (parsed.trimmedRows && parsed.trimmedRows.length >= 2) {
@@ -9917,14 +9908,10 @@ function renderCollocationAnalysisResults(collocId, parsed) {
         // Render charts after modal is fully visible and DOM settled
         setTimeout(() => {
             try {
-                console.log('Rendering collocation charts...');
-                const tsEl = document.getElementById('colloc-ts-plot-pm25');
-                console.log('TS plot container:', tsEl ? `${tsEl.offsetWidth}x${tsEl.offsetHeight}` : 'NOT FOUND');
                 // Render first TS chart
                 _renderCollocTSChart(parsed, AUDIT_PARAMETERS[0].key);
                 // Render first regression tab
                 _renderFirstVisibleRegTab(parsed, results);
-                console.log('Charts rendered successfully');
             } catch (err) { console.error('Chart render error:', err, err.stack); }
         }, 500);
 
@@ -10006,7 +9993,6 @@ function _renderCollocTSChart(parsed, paramKey) {
     const yMax = allY.length > 0 ? allY.reduce((a, b) => Math.max(a, b), -Infinity) : 1;
     const dt = _collocNiceDtick(yMin, yMax);
 
-    console.log(`Plotly render ${plotId}: ${traces.length} traces, ${allY.length} data points, yRange=[${yMin},${yMax}]`);
     try {
         Plotly.newPlot(plotId, traces, {
             margin: { t: 8, b: 45, l: 80, r: 15 },
