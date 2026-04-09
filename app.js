@@ -9298,13 +9298,11 @@ function renderSensorCollocations(sensorId) {
     const section = document.getElementById('sensor-collocations-section');
     if (!section) return;
 
-    const sensorCollocs = collocations.filter(c => c.sensorIds.includes(sensorId));
-    if (sensorCollocs.length === 0) {
-        section.innerHTML = '<div class="empty-state">No collocations involving this sensor.</div>';
-        return;
-    }
+    let html = '';
 
-    section.innerHTML = sensorCollocs.map(c => {
+    // Active/completed collocations from the collocations table
+    const sensorCollocs = collocations.filter(c => c.sensorIds.includes(sensorId));
+    html += sensorCollocs.map(c => {
         const communityName = COMMUNITIES.find(x => x.id === c.locationId)?.name || c.locationId;
         const dateRange = c.startDate ? `${formatDate(c.startDate)}${c.endDate && c.endDate !== 'TBD' ? ' – ' + formatDate(c.endDate) : ''}` : '—';
         const hasResults = Object.keys(c.analysisResults || {}).length > 0;
@@ -9318,6 +9316,27 @@ function renderSensorCollocations(sensorId) {
             ${hasResults ? `<div style="font-size:11px;color:var(--green);margin-top:4px">Analysis complete · <a onclick="event.stopPropagation(); beginCollocationAnalysis('${c.id}')">View &rarr;</a></div>` : ''}
         </div>`;
     }).join('');
+
+    // Collocation notes (includes initial collocations from migration)
+    const collocNotes = notes.filter(n =>
+        n.type === 'Collocation' &&
+        n.taggedSensors && n.taggedSensors.includes(sensorId)
+    ).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    if (collocNotes.length > 0) {
+        html += collocNotes.map(n => `<div class="audit-list-card" style="cursor:default">
+            <div class="audit-list-card-header">
+                <span style="font-weight:600;color:var(--slate-700)">${escapeHtml(n.text.substring(0, 80))}${n.text.length > 80 ? '...' : ''}</span>
+            </div>
+            <div class="audit-list-card-meta">${formatDate(n.date)}${n.createdBy ? ' — ' + escapeHtml(n.createdBy) : ''}</div>
+        </div>`).join('');
+    }
+
+    if (!html) {
+        section.innerHTML = '<div class="empty-state">No collocations involving this sensor.</div>';
+        return;
+    }
+    section.innerHTML = html;
 }
 
 // ===== COLLOCATION ANALYSIS ENGINE =====
