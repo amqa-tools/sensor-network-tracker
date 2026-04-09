@@ -363,25 +363,61 @@ function tagNotesWithStatusChange() {
 }
 
 function migrateCollocationDatesToNotes() {
-    if (localStorage.getItem('snt_collocDates_migrated_v2')) return;
+    if (localStorage.getItem('snt_collocDates_migrated_v3')) return;
     let count = 0;
+
+    // Fix existing migration notes to have the correct old date (sort to bottom)
+    notes.forEach(n => {
+        if (n.type === 'Collocation' && n.text && n.text.startsWith('Initial collocation:')) {
+            // Parse date from text like "Initial collocation: 8/1/23-8/14/23 at SPAR Bldg"
+            const dateMatch = n.text.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+            if (dateMatch) {
+                const parts = dateMatch[1].split('/');
+                let y = parseInt(parts[2]); if (y < 100) y += 2000;
+                const oldDate = `${y}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}T00:00`;
+                if (n.date !== oldDate) {
+                    n.date = oldDate;
+                    supa.from('notes').update({ date: oldDate }).eq('id', n.id).catch(err => console.error('Fix date error:', err));
+                }
+            }
+        }
+    });
+
+    // Create notes for sensors that don't have one yet
     sensors.forEach(s => {
         if (s.collocationDates && s.collocationDates.trim()) {
-            // Check if a migration note already exists for this sensor
             const alreadyMigrated = notes.some(n =>
                 n.type === 'Collocation' &&
                 n.taggedSensors && n.taggedSensors.includes(s.id) &&
                 n.text && n.text.includes('Initial collocation:')
             );
             if (alreadyMigrated) return;
-            createNote('Collocation', 'Initial collocation: ' + s.collocationDates, {
-                sensors: [s.id],
-                communities: s.community ? [s.community] : [],
-            });
+
+            // Parse the start date from the collocationDates string
+            const dateMatch = s.collocationDates.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+            let noteDate = '2023-01-01T00:00'; // fallback: old date
+            if (dateMatch) {
+                const parts = dateMatch[1].split('/');
+                let y = parseInt(parts[2]); if (y < 100) y += 2000;
+                noteDate = `${y}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}T00:00`;
+            }
+
+            const note = {
+                id: generateId('n'),
+                date: noteDate,
+                type: 'Collocation',
+                text: 'Initial collocation: ' + s.collocationDates,
+                createdBy: 'System', createdById: null,
+                createdAt: new Date().toISOString(),
+                taggedSensors: [s.id],
+                taggedCommunities: s.community ? [s.community] : [],
+                taggedContacts: [],
+            };
+            notes.push(note); persistNote(note);
             count++;
         }
     });
-    localStorage.setItem('snt_collocDates_migrated_v2', '1');
+    localStorage.setItem('snt_collocDates_migrated_v3', '1');
     if (count > 0) console.log('Migrated ' + count + ' collocation dates to notes');
 }
 
