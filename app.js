@@ -6841,25 +6841,43 @@ const SAMPLE_SIZE_TIERS = { critical: 10, minimum: 24, adequate: 72, ideal: 168 
 
 // Check 7: Self-test (runs once, cached)
 let _regressionSelfTestPassed = null;
+let _regressionSelfTestResults = null;
 function _regressionSelfTest() {
-    if (_regressionSelfTestPassed !== null) return _regressionSelfTestPassed;
+    if (_regressionSelfTestResults !== null) return _regressionSelfTestResults;
+    _regressionSelfTestResults = [];
     try {
         const r1 = runLinearRegression([1,2,3,4,5], [2.1,3.9,6.1,7.9,10.1]);
         const r2 = runLinearRegression([1,2,3,4,5], [1,2,3,4,5]);
-        _regressionSelfTestPassed = r1 && r2 &&
-            Math.abs(r1.slope - 2.0) < 0.05 && Math.abs(r1.intercept - 0.1) < 0.3 && r1.r2 >= 0.999 &&
-            Math.abs(r2.slope - 1) < 0.001 && Math.abs(r2.intercept) < 0.001 && r2.r2 >= 0.9999;
-    } catch(e) { _regressionSelfTestPassed = false; }
-    if (!_regressionSelfTestPassed) console.error('REGRESSION SELF-TEST FAILED');
-    return _regressionSelfTestPassed;
+        if (!r1 || !r2) {
+            _regressionSelfTestResults.push({ test: 'Regression returns results', pass: false, detail: 'Function returned null' });
+            return _regressionSelfTestResults;
+        }
+        _regressionSelfTestResults.push({ test: 'Known slope (expected ~2.0)', pass: Math.abs(r1.slope - 2.0) < 0.05, detail: `Got ${r1.slope}` });
+        _regressionSelfTestResults.push({ test: 'Known intercept (expected ~0.1)', pass: Math.abs(r1.intercept - 0.1) < 0.3, detail: `Got ${r1.intercept}` });
+        _regressionSelfTestResults.push({ test: 'Known R\u00B2 (expected >0.999)', pass: r1.r2 >= 0.999, detail: `Got ${r1.r2}` });
+        _regressionSelfTestResults.push({ test: 'Perfect fit slope (expected 1.0)', pass: Math.abs(r2.slope - 1) < 0.001, detail: `Got ${r2.slope}` });
+        _regressionSelfTestResults.push({ test: 'Perfect fit intercept (expected 0)', pass: Math.abs(r2.intercept) < 0.001, detail: `Got ${r2.intercept}` });
+        _regressionSelfTestResults.push({ test: 'Perfect fit R\u00B2 (expected 1.0)', pass: r2.r2 >= 0.9999, detail: `Got ${r2.r2}` });
+        _regressionSelfTestResults.push({ test: 'Sample size preserved (n=5)', pass: r1.n === 5 && r2.n === 5, detail: `Got n=${r1.n}, n=${r2.n}` });
+    } catch(e) {
+        _regressionSelfTestResults.push({ test: 'Regression engine runs without error', pass: false, detail: e.message });
+    }
+    const allPass = _regressionSelfTestResults.every(t => t.pass);
+    if (!allPass) console.error('REGRESSION SELF-TEST FAILED', _regressionSelfTestResults.filter(t => !t.pass));
+    return _regressionSelfTestResults;
 }
 
 function runFailsafeValidation(parsed, results, type) {
     const warnings = [];
 
-    // Check 7 — Self-test
-    if (!_regressionSelfTest()) {
-        warnings.push({ category: 'self-test', severity: 'error', msg: 'Internal regression self-test FAILED. Results may be unreliable.' });
+    // Check 7 — Self-test (granular results)
+    const selfTestResults = _regressionSelfTest();
+    const selfTestAllPass = selfTestResults.every(t => t.pass);
+    selfTestResults.forEach(t => {
+        warnings.push({ category: 'self-test', severity: t.pass ? 'pass' : 'error', msg: `${t.test}: ${t.pass ? 'PASS' : 'FAIL'} (${t.detail})` });
+    });
+    if (!selfTestAllPass) {
+        warnings.push({ category: 'self-test', severity: 'error', msg: 'One or more self-test checks FAILED. Results may be unreliable.' });
     }
 
     // Helper: iterate all result entries with their label and result object
@@ -6908,7 +6926,9 @@ function runFailsafeValidation(parsed, results, type) {
             // Round to same precision as runLinearRegression (4 decimal places) before comparing
             const r2_pearson = Math.round(r2_pearson_raw * 10000) / 10000;
             if (Math.abs(r2_pearson - result.r2) > 0.001) {
-                warnings.push({ category: 'regression-verify', severity: 'error', msg: `${paramLabel} R\u00B2 verification mismatch: regression=${result.r2}, Pearson=${r2_pearson}` });
+                warnings.push({ category: 'regression-verify', severity: 'error', msg: `${paramLabel} R\u00B2 cross-check FAIL: regression=${result.r2}, Pearson=${r2_pearson}` });
+            } else {
+                warnings.push({ category: 'regression-verify', severity: 'pass', msg: `${paramLabel} R\u00B2 cross-check verified (${result.r2})` });
             }
         }
     });
@@ -7015,20 +7035,51 @@ function runFailsafeValidation(parsed, results, type) {
 }
 
 function renderValidationReport(warnings) {
-    if (!warnings || !warnings.length) return '<div style="padding:8px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#15803d;margin-bottom:12px">All failsafe checks passed.</div>';
+    if (!warnings || !warnings.length) return '';
     const errors = warnings.filter(w => w.severity === 'error');
     const warns = warnings.filter(w => w.severity === 'warning');
+    const passes = warnings.filter(w => w.severity === 'pass');
     const infos = warnings.filter(w => w.severity === 'info');
-    let html = '<div style="margin-bottom:16px">';
-    html += `<div style="font-size:12px;font-weight:600;margin-bottom:8px">Validation: ${errors.length} errors, ${warns.length} warnings, ${infos.length} info</div>`;
-    warnings.forEach(w => {
-        const color = w.severity === 'error' ? '#c53030' : w.severity === 'warning' ? '#d97706' : '#64748b';
-        const bg = w.severity === 'error' ? '#fef2f2' : w.severity === 'warning' ? '#fffbeb' : '#f8fafc';
-        const border = w.severity === 'error' ? '#fecaca' : w.severity === 'warning' ? '#fde68a' : '#e2e8f0';
-        const icon = w.severity === 'error' ? '\u26D4' : w.severity === 'warning' ? '\u26A0' : '\u2139';
-        html += `<div style="padding:6px 10px;margin-bottom:4px;border-radius:4px;font-size:11px;background:${bg};color:${color};border:1px solid ${border}">${icon} ${escapeHtml(w.msg)}</div>`;
+    const hasIssues = errors.length > 0 || warns.length > 0;
+
+    // Summary line
+    let summaryColor = hasIssues ? '#c53030' : '#15803d';
+    let summaryBg = hasIssues ? '#fef2f2' : '#f0fdf4';
+    let summaryBorder = hasIssues ? '#fecaca' : '#86efac';
+    let summaryIcon = hasIssues ? '\u26A0' : '\u2705';
+    let summaryText = hasIssues
+        ? `${errors.length} error(s), ${warns.length} warning(s)`
+        : `All ${passes.length + infos.length} checks passed`;
+
+    let html = `<details style="margin-bottom:16px;border:1px solid ${summaryBorder};border-radius:8px;overflow:hidden">
+        <summary style="padding:10px 14px;background:${summaryBg};color:${summaryColor};font-size:12px;font-weight:600;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px">
+            <span>${summaryIcon}</span>
+            <span>Data Validation: ${summaryText}</span>
+            <span style="margin-left:auto;font-weight:400;font-size:11px;color:#94a3b8">Click to ${hasIssues ? 'review' : 'expand'}</span>
+        </summary>
+        <div style="padding:10px 14px;background:#fff">`;
+
+    // Errors first
+    errors.forEach(w => {
+        html += `<div style="padding:5px 8px;margin-bottom:3px;border-radius:4px;font-size:11px;background:#fef2f2;color:#c53030;border:1px solid #fecaca">\u26D4 ${escapeHtml(w.msg)}</div>`;
     });
-    html += '</div>';
+
+    // Warnings
+    warns.forEach(w => {
+        html += `<div style="padding:5px 8px;margin-bottom:3px;border-radius:4px;font-size:11px;background:#fffbeb;color:#d97706;border:1px solid #fde68a">\u26A0 ${escapeHtml(w.msg)}</div>`;
+    });
+
+    // Passes (green)
+    passes.forEach(w => {
+        html += `<div style="padding:5px 8px;margin-bottom:3px;border-radius:4px;font-size:11px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">\u2713 ${escapeHtml(w.msg)}</div>`;
+    });
+
+    // Info (gray)
+    infos.forEach(w => {
+        html += `<div style="padding:5px 8px;margin-bottom:3px;border-radius:4px;font-size:11px;background:#f8fafc;color:#64748b;border:1px solid #e2e8f0">\u2139 ${escapeHtml(w.msg)}</div>`;
+    });
+
+    html += '</div></details>';
     return html;
 }
 
