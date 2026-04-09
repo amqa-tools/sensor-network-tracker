@@ -2048,6 +2048,10 @@ function openMoveSensorModal(sensorId) {
     statusCheckbox.checked = false;
     document.getElementById('move-status-list').style.display = 'none';
     renderStatusToggleList('move-status-list', getStatusArray(s));
+    // Contact tagging
+    document.querySelectorAll('#move-contacts-container .tag-chip').forEach(c => c.remove());
+    setupTagChipInput('move-contacts-container', () => contacts, c => c.name);
+    document.getElementById('move-contacts-group').style.display = setupMode ? 'none' : '';
     openModal('modal-move-sensor');
 }
 
@@ -2084,6 +2088,13 @@ function moveSensor(e) {
     let noteText = `${sensorId} removed from ${fromName} and brought to ${toName}.${statusChangeText}`;
 
     const mentionedContacts = parseMentionedContacts(additionalInfo);
+    // Get contacts tagged via chip input
+    const chipContacts = getChipValues('move-contacts-container').map(name => {
+        const c = contacts.find(x => x.name.toLowerCase() === name.toLowerCase());
+        return c ? c.id : null;
+    }).filter(Boolean);
+    // Merge chip contacts with @mentioned contacts
+    chipContacts.forEach(id => { if (!mentionedContacts.includes(id)) mentionedContacts.push(id); });
     const taggedCommunities = [fromId, toCommunityId].filter(Boolean);
 
     const structuredInfo = JSON.stringify({
@@ -2446,10 +2457,7 @@ function showCommunityView(communityId) {
     const contactIdsInCommunity = contacts.filter(c => allCommunityIds.includes(c.community)).map(c => c.id);
 
     const commNotes = notes.filter(n => {
-        if (n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id))) return true;
-        if (n.taggedSensors && n.taggedSensors.some(id => sensorIdsInCommunity.includes(id))) return true;
-        if (n.taggedContacts && n.taggedContacts.some(id => contactIdsInCommunity.includes(id))) return true;
-        return false;
+        return n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id));
     });
     renderTimeline('community-history-timeline', commNotes);
 
@@ -8373,12 +8381,9 @@ function renderCommunityOverview(communityId) {
         </div>`).join('')
         : '<p class="ov-empty">No sensors assigned</p>';
 
-    // Recent history (3 items)
-    const sensorIdsInCommunity = sensors.filter(s => allCommunityIds.includes(s.community)).map(s => s.id);
+    // Recent history (3 items) — only notes explicitly tagged to this community
     const commNotes = notes.filter(n => {
-        if (n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id))) return true;
-        if (n.taggedSensors && n.taggedSensors.some(id => sensorIdsInCommunity.includes(id))) return true;
-        return false;
+        return n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id));
     }).sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')).slice(0, 3);
     const historyHtml = commNotes.length > 0
         ? commNotes.map(n => `<div class="ov-timeline-item">
