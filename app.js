@@ -6258,21 +6258,39 @@ function updateSidebarServiceCount() {
 function renderServiceView() {
     updateSidebarServiceCount();
     const typeFilter = document.getElementById('service-type-filter')?.value || '';
-    const showClosed = document.getElementById('service-show-closed')?.checked || false;
-    let tickets = [...serviceTickets];
-    if (typeFilter) tickets = tickets.filter(t => t.ticketType.includes(typeFilter));
-    if (!showClosed) tickets = tickets.filter(t => t.status !== 'Closed');
+    let allTickets = [...serviceTickets];
+    if (typeFilter) allTickets = allTickets.filter(t => t.ticketType.includes(typeFilter));
 
+    const activeTickets = allTickets.filter(t => t.status !== 'Closed');
+    const closedTickets = allTickets.filter(t => t.status === 'Closed')
+        .sort((a, b) => (b.closedAt || b.createdAt || '').localeCompare(a.closedAt || a.createdAt || ''));
+
+    // Active pipeline (no Closed column)
     const pipeline = document.getElementById('service-pipeline');
-    const statusesToShow = showClosed ? TICKET_STATUSES : TICKET_STATUSES.filter(s => s !== 'Closed');
-
-    pipeline.innerHTML = statusesToShow.map(status => {
-        const st = tickets.filter(t => t.status === status);
+    const activeStatuses = TICKET_STATUSES.filter(s => s !== 'Closed');
+    pipeline.innerHTML = activeStatuses.map(status => {
+        const st = activeTickets.filter(t => t.status === status);
         return `<div class="service-pipeline-column">
             <div class="service-pipeline-column-header"><h3>${status}</h3><span class="service-pipeline-count">${st.length}</span></div>
             ${st.length === 0 ? '<p style="font-size:13px;color:var(--slate-400)">No tickets</p>' : st.map(t => renderTicketCard(t)).join('')}
         </div>`;
     }).join('');
+
+    // Closed tickets section below
+    const closedSection = document.getElementById('service-closed-section');
+    if (closedSection) {
+        if (closedTickets.length === 0) {
+            closedSection.innerHTML = '';
+        } else {
+            closedSection.innerHTML = `
+                <div style="border-top:2px solid var(--slate-200);margin-top:24px;padding-top:16px">
+                    <h3 style="font-size:14px;color:var(--slate-400);margin-bottom:12px">Closed Tickets (${closedTickets.length})</h3>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+                        ${closedTickets.map(t => renderTicketCard(t)).join('')}
+                    </div>
+                </div>`;
+        }
+    }
 }
 
 const TICKET_STATUS_LABELS = {
