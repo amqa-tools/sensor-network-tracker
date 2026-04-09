@@ -233,7 +233,7 @@ async function loadAllData() {
     tagNotesWithStatusChange();
 
     // One-time migration: convert legacy collocationDates to notes
-    migrateCollocationDatesToNotes();
+    cleanupOldMigrationNotes();
 
     // Build O(1) lookup maps
     rebuildLookupMaps();
@@ -443,44 +443,22 @@ function _parseCollocStartDate(text) {
     return y + '-' + m[1].padStart(2,'0') + '-' + m[2].padStart(2,'0') + 'T00:00';
 }
 
-function migrateCollocationDatesToNotes() {
-    if (localStorage.getItem('snt_collocDates_migrated_v5')) return;
-
-    // Step 1: Delete ALL old "Initial collocation:" notes from broken previous migrations
+function cleanupOldMigrationNotes() {
+    // One-time cleanup: remove any "Initial collocation:" notes from broken previous migrations
+    // These are no longer needed — initial collocations render directly from INITIAL_COLLOCATION_DATA
+    if (localStorage.getItem('snt_collocMigration_cleaned')) return;
     const toDelete = notes.filter(n => n.text && n.text.startsWith('Initial collocation:'));
-    const toDeleteIds = new Set(toDelete.map(n => n.id));
     if (toDelete.length > 0) {
+        const toDeleteIds = new Set(toDelete.map(n => n.id));
         notes = notes.filter(n => !toDeleteIds.has(n.id));
         toDelete.forEach(n => {
             supa.from('note_tags').delete().eq('note_id', n.id).then(() =>
                 supa.from('notes').delete().eq('id', n.id)
             ).catch(() => {});
         });
-        console.log('Deleted ' + toDelete.length + ' old migration notes');
+        console.log('Cleaned up ' + toDelete.length + ' old migration notes');
     }
-
-    // Step 2: Create fresh notes from embedded Salesforce data with correct dates
-    let count = 0;
-    for (const [sensorId, collocText] of Object.entries(INITIAL_COLLOCATION_DATA)) {
-        const s = sensors.find(x => x.id === sensorId);
-        if (!s) continue;
-        const noteDate = _parseCollocStartDate(collocText);
-        const note = {
-            id: generateId('n'),
-            date: noteDate,
-            type: 'Collocation',
-            text: 'Initial collocation: ' + collocText,
-            createdBy: 'System (Salesforce Import)', createdById: null,
-            createdAt: new Date().toISOString(),
-            taggedSensors: [sensorId],
-            taggedCommunities: s.community ? [s.community] : [],
-            taggedContacts: [],
-        };
-        notes.push(note); persistNote(note);
-        count++;
-    }
-    localStorage.setItem('snt_collocDates_migrated_v5', '1');
-    console.log('Created ' + count + ' initial collocation notes from Salesforce data');
+    localStorage.setItem('snt_collocMigration_cleaned', '1');
 }
 
 
@@ -9380,25 +9358,17 @@ function renderSensorCollocations(sensorId) {
         </div>`;
     }).join('');
 
-    // Initial collocation history (from Salesforce import) — simple entries at bottom
-    const initialNotes = notes.filter(n =>
-        n.type === 'Collocation' &&
-        n.taggedSensors && n.taggedSensors.includes(sensorId) &&
-        n.text && n.text.startsWith('Initial collocation:')
-    ).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-
-    if (initialNotes.length > 0) {
+    // Initial collocation from Salesforce data (rendered directly, no DB dependency)
+    const initialColloc = INITIAL_COLLOCATION_DATA[sensorId];
+    if (initialColloc) {
         if (sensorCollocs.length > 0) html += '<div style="border-top:1px solid var(--slate-100);margin-top:12px;padding-top:12px"><div style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Historical Collocations</div></div>';
-        html += initialNotes.map(n => {
-            const collocText = n.text.replace('Initial collocation: ', '');
-            return `<div class="audit-list-card" style="cursor:default;opacity:0.8">
-                <div class="audit-list-card-header">
-                    <span style="font-weight:600;color:var(--slate-700)">Initial Collocation</span>
-                </div>
-                <div style="font-size:13px;color:var(--slate-600);margin-top:4px">${escapeHtml(collocText)}</div>
-                <div class="audit-list-card-meta">${formatDate(n.date)}${n.createdBy ? ' — Logged by ' + escapeHtml(n.createdBy) : ''}</div>
-            </div>`;
-        }).join('');
+        html += `<div class="audit-list-card" style="cursor:default;opacity:0.8">
+            <div class="audit-list-card-header">
+                <span style="font-weight:600;color:var(--slate-700)">Initial Collocation</span>
+            </div>
+            <div style="font-size:13px;color:var(--slate-600);margin-top:4px">${escapeHtml(initialColloc)}</div>
+            <div class="audit-list-card-meta">${formatDate(_parseCollocStartDate(initialColloc))} — Logged by System (Salesforce Import)</div>
+        </div>`;
     }
 
     if (!html) {
