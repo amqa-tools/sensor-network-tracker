@@ -362,83 +362,127 @@ function tagNotesWithStatusChange() {
     });
 }
 
-function migrateCollocationDatesToNotes() {
-    // Always fix dates on Initial collocation notes (regardless of migration flag)
-    notes.forEach(n => {
-        if (n.type === 'Collocation' && n.text && n.text.startsWith('Initial collocation:')) {
-            const dateMatch = n.text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-            if (dateMatch) {
-                let y = parseInt(dateMatch[3]); if (y < 100) y += 2000;
-                const oldDate = `${y}-${String(dateMatch[1]).padStart(2,'0')}-${String(dateMatch[2]).padStart(2,'0')}T00:00`;
-                if (n.date !== oldDate) {
-                    n.date = oldDate;
-                    db.updateNote(n.id, { date: oldDate }).catch(() => {});
-                }
-            } else if (!n.date || n.date > '2025-01-01') {
-                // No parseable date — force to 2023-01-01 so it sorts to bottom
-                n.date = '2023-01-01T00:00';
-                db.updateNote(n.id, { date: '2023-01-01T00:00' }).catch(() => {});
-            }
-        }
-    });
+const INITIAL_COLLOCATION_DATA = {
+    "MOD-00442": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00443": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00444": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00445": "12/4/23-12/18/23 @ NCore",
+    "MOD-00446": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00447": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00448": "12/4/23-12/18/23 @ NCore",
+    "MOD-00449": "12/4/23-12/18/23 @ NCore",
+    "MOD-00450": "12/4/23-12/18/23 @ NCore",
+    "MOD-00451": "12/4/23-12/18/23 @ NCore",
+    "MOD-00452": "12/4/23-12/18/23 @ NCore",
+    "MOD-00453": "12/4/23-12/18/23 @ NCore",
+    "MOD-00454": "12/4/23-12/18/23 @ NCore",
+    "MOD-00455": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00456": "12/22/23-1/5/24 @ NCore",
+    "MOD-00457": "12/22/23-1/5/24 @ NCore",
+    "MOD-00458": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00459": "8/1/23-8/14/23 at SPAR Bldg Anchorage, 6/26/25-7/16/25 at Garden",
+    "MOD-00460": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00461": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00462": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00463": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00464": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00465": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00466": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00467": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00468": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00469": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00470": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00471": "8/1/23-8/14/23 at SPAR Bldg Anchorage",
+    "MOD-00649": "3/8/24-3/21/24 @ NCore",
+    "MOD-00650": "6/16/24-7/3/24 @ NCore",
+    "MOD-00651": "3/8/24-3/21/24 @ NCore",
+    "MOD-00652": "3/8/24-3/21/24 @ NCore",
+    "MOD-00653": "3/8/24-3/21/24 @ NCore",
+    "MOD-00654": "3/8/24-3/21/24 @ NCore",
+    "MOD-00655": "3/8/24-3/21/24 @ NCore",
+    "MOD-00656": "3/8/24-3/21/24 @ NCore",
+    "MOD-00657": "3/8/24-3/21/24 @ NCore",
+    "MOD-00658": "3/8/24-3/21/24 @ NCore",
+    "MOD-00659": "3/8/24-3/21/24 @ NCore; 2/18/24-",
+    "MOD-00660": "3/8/24-3/21/24 @ NCore",
+    "MOD-00662": "3/8/24-3/21/24 @ NCore",
+    "MOD-00663": "3/21/24-4/3/24 @ NCore",
+    "MOD-00664": "3/21/24-4/3/24 @ NCore",
+    "MOD-00665": "3/21/24-4/3/24 @ NCore",
+    "MOD-00666": "3/21/24-4/3/24 @ NCore",
+    "MOD-00667": "3/21/24-4/3/24 @ NCore",
+    "MOD-00668": "3/21/24-4/3/24 @ NCore",
+    "MOD-00669": "3/21/24-4/3/24 @ NCore",
+    "MOD-00670": "3/21/24-4/3/24 @ NCore",
+    "MOD-00671": "3/21/24-4/3/24 @ NCore",
+    "MOD-00672": "3/21/24-4/3/24 @ NCore",
+    "MOD-00673": "3/21/24-4/3/24 @ NCore",
+    "MOD-00674": "3/21/24-4/3/24 @ NCore",
+    "MOD-X-PM-01656": "Garden 6/30/25-9/26/25",
+    "MOD-X-PM-01657": "Garden 6/30/25-9/26/25",
+    "MOD-X-PM-01658": "Garden 6/30/25-9/26/25",
+    "MOD-X-PM-01754": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01755": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01756": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01757": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01758": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01759": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01760": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01761": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01762": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01763": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01764": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01765": "12/4/2025-1/16/2026 @ NCore",
+    "MOD-X-PM-01766": "12/4/2025-1/16/2026 @ NCore"
+};
 
-    if (localStorage.getItem('snt_collocDates_migrated_v3')) return;
-    let count = 0;
-
-    // Fix existing migration notes to have the correct old date (sort to bottom)
-    notes.forEach(n => {
-        if (n.type === 'Collocation' && n.text && n.text.startsWith('Initial collocation:')) {
-            // Parse date from text like "Initial collocation: 8/1/23-8/14/23 at SPAR Bldg"
-            const dateMatch = n.text.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-            if (dateMatch) {
-                const parts = dateMatch[1].split('/');
-                let y = parseInt(parts[2]); if (y < 100) y += 2000;
-                const oldDate = `${y}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}T00:00`;
-                if (n.date !== oldDate) {
-                    n.date = oldDate;
-                    supa.from('notes').update({ date: oldDate }).eq('id', n.id).catch(err => console.error('Fix date error:', err));
-                }
-            }
-        }
-    });
-
-    // Create notes for sensors that don't have one yet
-    sensors.forEach(s => {
-        if (s.collocationDates && s.collocationDates.trim()) {
-            const alreadyMigrated = notes.some(n =>
-                n.type === 'Collocation' &&
-                n.taggedSensors && n.taggedSensors.includes(s.id) &&
-                n.text && n.text.includes('Initial collocation:')
-            );
-            if (alreadyMigrated) return;
-
-            // Parse the start date from the collocationDates string
-            const dateMatch = s.collocationDates.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-            let noteDate = '2023-01-01T00:00'; // fallback: old date
-            if (dateMatch) {
-                const parts = dateMatch[1].split('/');
-                let y = parseInt(parts[2]); if (y < 100) y += 2000;
-                noteDate = `${y}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}T00:00`;
-            }
-
-            const note = {
-                id: generateId('n'),
-                date: noteDate,
-                type: 'Collocation',
-                text: 'Initial collocation: ' + s.collocationDates,
-                createdBy: 'System', createdById: null,
-                createdAt: new Date().toISOString(),
-                taggedSensors: [s.id],
-                taggedCommunities: s.community ? [s.community] : [],
-                taggedContacts: [],
-            };
-            notes.push(note); persistNote(note);
-            count++;
-        }
-    });
-    localStorage.setItem('snt_collocDates_migrated_v3', '1');
-    if (count > 0) console.log('Migrated ' + count + ' collocation dates to notes');
+function _parseCollocStartDate(text) {
+    const m = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (!m) return '2023-01-01T00:00';
+    let y = parseInt(m[3]); if (y < 100) y += 2000;
+    return y + '-' + m[1].padStart(2,'0') + '-' + m[2].padStart(2,'0') + 'T00:00';
 }
+
+function migrateCollocationDatesToNotes() {
+    if (localStorage.getItem('snt_collocDates_migrated_v4')) return;
+
+    // Step 1: Delete ALL old "Initial collocation:" notes from broken previous migrations
+    const toDelete = notes.filter(n => n.text && n.text.startsWith('Initial collocation:'));
+    const toDeleteIds = new Set(toDelete.map(n => n.id));
+    if (toDelete.length > 0) {
+        notes = notes.filter(n => !toDeleteIds.has(n.id));
+        toDelete.forEach(n => {
+            supa.from('note_tags').delete().eq('note_id', n.id).then(() =>
+                supa.from('notes').delete().eq('id', n.id)
+            ).catch(() => {});
+        });
+        console.log('Deleted ' + toDelete.length + ' old migration notes');
+    }
+
+    // Step 2: Create fresh notes from embedded Salesforce data with correct dates
+    let count = 0;
+    for (const [sensorId, collocText] of Object.entries(INITIAL_COLLOCATION_DATA)) {
+        const s = sensors.find(x => x.id === sensorId);
+        if (!s) continue;
+        const noteDate = _parseCollocStartDate(collocText);
+        const note = {
+            id: generateId('n'),
+            date: noteDate,
+            type: 'Collocation',
+            text: 'Initial collocation: ' + collocText,
+            createdBy: 'System (Salesforce Import)', createdById: null,
+            createdAt: new Date().toISOString(),
+            taggedSensors: [sensorId],
+            taggedCommunities: s.community ? [s.community] : [],
+            taggedContacts: [],
+        };
+        notes.push(note); persistNote(note);
+        count++;
+    }
+    localStorage.setItem('snt_collocDates_migrated_v4', '1');
+    console.log('Created ' + count + ' initial collocation notes from Salesforce data');
+}
+
 
 // ===== PERSISTENCE LAYER =====
 // Fire-and-forget writes to Supabase. UI updates immediately from in-memory arrays.
