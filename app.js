@@ -9797,7 +9797,7 @@ function _renderCollocTSChart(parsed, paramKey) {
             plot_bgcolor: '#fff', paper_bgcolor: 'rgba(0,0,0,0)',
             font: { family: 'Segoe UI, system-ui, sans-serif', size: 12 },
             hovermode: 'x unified',
-        }, { responsive: true });
+        }, { responsive: true, displayModeBar: false });
     } catch (err) { console.error('TS chart error for', paramKey, err); }
 }
 
@@ -9991,7 +9991,7 @@ function _renderCollocRegChart(parsed, results, tabName) {
             annotations.push({ text: eqText + '<br>' + r2text, xref: xax + ' domain', yref: yax + ' domain', x: 0.03, y: 0.97, showarrow: false, font: { size: 10.5, color: '#444' }, align: 'left', bgcolor: 'rgba(255,255,255,0.92)', borderpad: 3 });
         });
 
-        Plotly.newPlot(divId, traces, layout, { responsive: true });
+        Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
     }
 
     // Only render charts for the requested tab
@@ -10123,7 +10123,7 @@ function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed
         annotations.push({ text: eqText + '<br>' + r2text, xref: xax + ' domain', yref: yax + ' domain', x: 0.03, y: 0.97, showarrow: false, font: { size: 10.5, color: '#444' }, align: 'left', bgcolor: 'rgba(255,255,255,0.92)', borderpad: 3 });
     });
 
-    Plotly.newPlot(divId, traces, layout, { responsive: true });
+    Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
 }
 
 function _getCollocVal(row, sensorId, paramKey, parsed) {
@@ -10537,7 +10537,7 @@ function buildRegRow(divId, paramKey, sensorList, refLabel, getRegData) {
     var sign=rd.intercept>=0?' + ':' \\u2212 ';
     annotations.push({text:'y = <span style="color:'+sc+'">'+rd.slope.toFixed(3)+'</span>x'+sign+'<span style="color:'+ic+'">'+Math.abs(rd.intercept).toFixed(2)+'</span><br><span style="color:'+rc+'">R\\u00b2 = '+rd.r2.toFixed(4)+'</span>  (n='+rd.n+')',xref:xax+' domain',yref:yax+' domain',x:0.03,y:0.97,showarrow:false,font:{size:10.5,color:'#444'},align:'left',bgcolor:'rgba(255,255,255,0.92)',borderpad:3});
   });
-  Plotly.newPlot(divId, traces, layout, {responsive:true});
+  Plotly.newPlot(divId, traces, layout, {responsive:true, displayModeBar:false});
 }
 
 // BAM regression
@@ -10577,7 +10577,7 @@ function buildInterRegRow(divId, paramKey, pairs) {
     var sign=rd.intercept>=0?' + ':' \\u2212 ';
     annotations.push({text:'y = <span style="color:'+sc+'">'+rd.slope.toFixed(3)+'</span>x'+sign+'<span style="color:'+ic+'">'+Math.abs(rd.intercept).toFixed(2)+'</span><br><span style="color:'+rc+'">R\\u00b2 = '+rd.r2.toFixed(4)+'</span>  (n='+rd.n+')',xref:xax+' domain',yref:yax+' domain',x:0.03,y:0.97,showarrow:false,font:{size:10.5,color:'#444'},align:'left',bgcolor:'rgba(255,255,255,0.92)',borderpad:3});
   });
-  Plotly.newPlot(divId, traces, layout, {responsive:true});
+  Plotly.newPlot(divId, traces, layout, {responsive:true, displayModeBar:false});
 }
 
 var interPairs = Object.keys(REG.interPod);
