@@ -444,7 +444,7 @@ function _parseCollocStartDate(text) {
 }
 
 function migrateCollocationDatesToNotes() {
-    if (localStorage.getItem('snt_collocDates_migrated_v4')) return;
+    if (localStorage.getItem('snt_collocDates_migrated_v5')) return;
 
     // Step 1: Delete ALL old "Initial collocation:" notes from broken previous migrations
     const toDelete = notes.filter(n => n.text && n.text.startsWith('Initial collocation:'));
@@ -479,7 +479,7 @@ function migrateCollocationDatesToNotes() {
         notes.push(note); persistNote(note);
         count++;
     }
-    localStorage.setItem('snt_collocDates_migrated_v4', '1');
+    localStorage.setItem('snt_collocDates_migrated_v5', '1');
     console.log('Created ' + count + ' initial collocation notes from Salesforce data');
 }
 
