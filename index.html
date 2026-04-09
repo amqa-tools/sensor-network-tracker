@@ -1021,56 +1021,6 @@
         </div>
     </div>
 
-    <!-- Bulk Action Modal -->
-    <div id="modal-bulk-action" class="modal" role="dialog" aria-modal="true">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Bulk Action — <span id="bulk-action-count">0</span> sensors selected</h2>
-                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-bulk-action')">&times;</button>
-            </div>
-            <div class="form-group" style="margin-top:16px">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="bulk-do-move" onchange="toggleBulkFields()" checked style="width:16px;height:16px;margin:0"> Move to Community</label>
-                <select id="bulk-move-community" style="margin-top:6px"></select>
-            </div>
-            <div class="form-group">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="bulk-do-status" onchange="toggleBulkFields()" style="width:16px;height:16px;margin:0"> Change Status</label>
-                <div id="bulk-status-list" class="status-toggle-list" style="margin-top:6px;display:none"></div>
-            </div>
-            <div class="form-group">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="bulk-do-collocation" onchange="toggleBulkFields()" style="width:16px;height:16px;margin:0"> Log as Collocation</label>
-                <div id="bulk-collocation-fields" style="margin-top:6px;display:none">
-                    <div class="form-group" style="margin-bottom:8px">
-                        <label style="font-size:12px;font-weight:600;color:var(--slate-500)">Collocation Location</label>
-                        <select id="bulk-collocation-location"></select>
-                    </div>
-                    <div style="display:flex;gap:10px">
-                        <div class="form-group" style="flex:1;margin-bottom:0">
-                            <label style="font-size:12px;font-weight:600;color:var(--slate-500)">Start Date</label>
-                            <input type="date" id="bulk-collocation-start">
-                        </div>
-                        <div class="form-group" style="flex:1;margin-bottom:0">
-                            <label style="font-size:12px;font-weight:600;color:var(--slate-500)">End Date</label>
-                            <input type="date" id="bulk-collocation-end">
-                            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--slate-400);margin-top:4px;cursor:pointer"><input type="checkbox" id="bulk-collocation-end-tbd" onchange="document.getElementById('bulk-collocation-end').disabled=this.checked;if(this.checked)document.getElementById('bulk-collocation-end').value=''" style="width:14px;height:14px;margin:0"> TBD</label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Date of Event</label>
-                <input type="datetime-local" id="bulk-action-date">
-            </div>
-            <div class="form-group" id="bulk-notes-field">
-                <label>Notes (optional — logged as a single group event)</label>
-                <textarea id="bulk-action-notes" rows="3" placeholder="e.g. Deployed 3 sensors to Garden for spring monitoring"></textarea>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn" onclick="closeModal('modal-bulk-action')">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="executeBulkAction()">Apply</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Change Sensor Type Modal -->
     <div id="modal-type-change" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content modal-sm">

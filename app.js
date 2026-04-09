@@ -254,9 +254,9 @@ function cleanupOrphanedCollocationNotes() {
 
     if (orphaned.length > 0) {
         console.log(`Cleaning up ${orphaned.length} orphaned Collocation notes`);
+        const toRemoveIds = new Set(orphaned.map(n => n.id));
+        notes = notes.filter(n => !toRemoveIds.has(n.id));
         orphaned.forEach(n => {
-            const idx = notes.indexOf(n);
-            if (idx >= 0) notes.splice(idx, 1);
             supa.from('note_tags').delete().eq('note_id', n.id).then(() =>
                 supa.from('notes').delete().eq('id', n.id)
             ).catch(err => console.error('Delete orphaned collocation note error:', err));
@@ -304,9 +304,9 @@ function mergeStatusChangeNotes() {
     // Remove the now-merged status change notes
     if (toRemove.length > 0) {
         console.log(`Merging ${toRemove.length} duplicate status change notes`);
+        const toRemoveSet = new Set(toRemove);
+        notes = notes.filter(n => !toRemoveSet.has(n.id));
         toRemove.forEach(id => {
-            const idx = notes.findIndex(n => n.id === id);
-            if (idx >= 0) notes.splice(idx, 1);
             // Delete from DB
             supa.from('note_tags').delete().eq('note_id', id).then(() =>
                 supa.from('notes').delete().eq('id', id)
@@ -1513,7 +1513,7 @@ function renderSensorCell(s, col) {
         }
         if (key === 'community') {
             return `<td><select class="inline-edit-select" data-sensor="${s.id}" data-field="community" onchange="inlineSaveSensor(this)">
-                ${('<option value="">— None —</option>' + COMMUNITIES.map(c => `<option value="${c.id}" ${s.community === c.id ? 'selected' : ''}>${c.name}</option>`).join(''))}
+                ${('<option value="">— None —</option>' + COMMUNITIES.map(c => `<option value="${c.id}" ${s.community === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join(''))}
             </select></td>`;
         }
         if (key === 'dateInstalled') return `<td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="dateInstalled" value="${val}" onblur="inlineSaveSensor(this)"></td>`;
@@ -1967,7 +1967,7 @@ function confirmDeleteSensor(sensorId) {
         if (idx >= 0) sensors.splice(idx, 1);
         openTabs = openTabs.filter(t => t.id !== getTabId('sensor', sensorId));
         renderOpenTabs();
-        showView('sensors');
+        showView('all-sensors');
         renderSensors();
         buildSensorSidebar();
         showSuccessToast(`Sensor ${s.id} deleted`);
@@ -2103,7 +2103,7 @@ function showSensorView(sensorId) {
             </div>
             <div class="info-item"><label>Community</label>
                 <select class="inline-edit-select" data-sensor="${s.id}" data-field="community" onchange="inlineSaveSensor(this); showSensorView('${s.id}')">
-                    ${'<option value="">— None —</option>' + [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}" ${s.community === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                    ${'<option value="">— None —</option>' + [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}" ${s.community === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                 </select>
             </div>
             <div class="info-item"><label>Location</label>
@@ -2266,9 +2266,9 @@ function showCommunityView(communityId) {
     // Build header with parent breadcrumb
     const parent = getParentCommunity(communityId);
     const parentHtml = parent
-        ? `<span class="community-parent-breadcrumb"><span class="clickable" onclick="showCommunity('${parent.id}')">${parent.name}</span> &rsaquo; </span>`
+        ? `<span class="community-parent-breadcrumb"><span class="clickable" onclick="showCommunity('${parent.id}')">${escapeHtml(parent.name)}</span> &rsaquo; </span>`
         : '';
-    document.getElementById('community-name').innerHTML = parentHtml + community.name;
+    document.getElementById('community-name').innerHTML = parentHtml + escapeHtml(community.name);
 
     const tags = getCommunityTags(communityId);
     const badgeContainer = document.getElementById('community-type-badge');
@@ -4314,7 +4314,7 @@ function openAddCommunityModal() {
     const parentSelect = document.getElementById('community-parent-input');
     parentSelect.innerHTML = '<option value="">— None (top-level) —</option>' +
         COMMUNITIES.filter(c => !isChildCommunity(c.id)).map(c =>
-            `<option value="${c.id}">${c.name}</option>`
+            `<option value="${c.id}">${escapeHtml(c.name)}</option>`
         ).join('');
     openModal('modal-add-community');
 }
@@ -4746,7 +4746,7 @@ function populateCommunitySelect(selectId) {
     const select = document.getElementById(selectId);
     const currentVal = select.value;
     select.innerHTML = '<option value="">— Select —</option>' +
-        [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     if (currentVal) select.value = currentVal;
 }
 
@@ -5373,7 +5373,11 @@ document.addEventListener('click', (e) => {
 // ===== EXPORT SPREADSHEET =====
 function localDate() {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: AK_TZ, year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(d);
+    const get = type => (parts.find(p => p.type === type) || {}).value || '00';
+    return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
 function exportSpreadsheet(headers, rows, filename) {
@@ -5512,188 +5516,6 @@ function clearSensorSelection() {
     updateBulkActionButton();
 }
 
-function openBulkActionModal() {
-    if (selectedSensors.size === 0) return;
-    document.getElementById('bulk-action-count').textContent = selectedSensors.size;
-    populateGroupedCommunitySelect('bulk-move-community');
-    renderStatusToggleList('bulk-status-list', []);
-    document.getElementById('bulk-action-notes').value = '';
-    document.getElementById('bulk-action-date').value = nowDatetime();
-    document.getElementById('bulk-do-move').checked = true;
-    document.getElementById('bulk-do-status').checked = false;
-    document.getElementById('bulk-do-collocation').checked = false;
-    document.getElementById('bulk-collocation-start').value = '';
-    document.getElementById('bulk-collocation-end').value = '';
-    document.getElementById('bulk-collocation-end').disabled = false;
-    document.getElementById('bulk-collocation-end-tbd').checked = false;
-    populateBulkCollocationDropdown();
-    toggleBulkFields();
-    openModal('modal-bulk-action');
-}
-
-function populateBulkCollocationDropdown() {
-    const select = document.getElementById('bulk-collocation-location');
-    // Separate regulatory sites from other communities
-    const regulatory = [];
-    const others = [];
-    [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
-        const tags = getCommunityTags(c.id);
-        if (tags.includes('Regulatory Site')) {
-            regulatory.push(c);
-        } else {
-            others.push(c);
-        }
-    });
-    let html = '<option value="">— Select Location —</option>';
-    if (regulatory.length) {
-        html += '<optgroup label="Regulatory Sites">';
-        regulatory.forEach(c => { html += `<option value="${c.name}">${c.name}</option>`; });
-        html += '</optgroup>';
-        html += '<optgroup label="All Communities">';
-        others.forEach(c => { html += `<option value="${c.name}">${c.name}</option>`; });
-        html += '</optgroup>';
-    } else {
-        [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
-            html += `<option value="${c.name}">${c.name}</option>`;
-        });
-    }
-    select.innerHTML = html;
-}
-
-function toggleBulkFields() {
-    const doMove = document.getElementById('bulk-do-move').checked;
-    const doStatus = document.getElementById('bulk-do-status').checked;
-    const doCollocation = document.getElementById('bulk-do-collocation').checked;
-    document.getElementById('bulk-move-community').style.display = doMove ? '' : 'none';
-    document.getElementById('bulk-status-list').style.display = doStatus ? '' : 'none';
-    document.getElementById('bulk-collocation-fields').style.display = doCollocation ? '' : 'none';
-}
-
-function executeBulkAction() {
-    const doMove = document.getElementById('bulk-do-move').checked;
-    const doStatus = document.getElementById('bulk-do-status').checked;
-    const doCollocation = document.getElementById('bulk-do-collocation').checked;
-    if (!doMove && !doStatus && !doCollocation) { showAlert('Validation Error', 'Select at least one action.'); return; }
-
-    const userNotes = document.getElementById('bulk-action-notes').value.trim();
-    const eventDate = document.getElementById('bulk-action-date').value || nowDatetime();
-    const sensorIds = Array.from(selectedSensors);
-    const sensorList = sensorIds.join(', ');
-
-    let toCommunityId = null;
-    let toName = '';
-    let newStatuses = [];
-    let collocationLocation = '';
-    let collocationStart = '';
-    let collocationEnd = '';
-
-    if (doMove) {
-        toCommunityId = document.getElementById('bulk-move-community').value;
-        if (!toCommunityId) { showAlert('Validation Error', 'Select a community.'); return; }
-        toName = getCommunityName(toCommunityId);
-    }
-
-    if (doStatus) {
-        newStatuses = getSelectedStatuses('bulk-status-list');
-        if (newStatuses.length === 0) { showAlert('Validation Error', 'Select at least one status.'); return; }
-    }
-
-    if (doCollocation) {
-        collocationLocation = document.getElementById('bulk-collocation-location').value;
-        collocationStart = document.getElementById('bulk-collocation-start').value;
-        const endTbd = document.getElementById('bulk-collocation-end-tbd').checked;
-        collocationEnd = endTbd ? 'TBD' : document.getElementById('bulk-collocation-end').value;
-        if (!collocationLocation) { showAlert('Validation Error', 'Select a collocation location.'); return; }
-        if (!collocationStart) { showAlert('Validation Error', 'Enter a collocation start date.'); return; }
-        if (!endTbd && !collocationEnd) { showAlert('Validation Error', 'Enter a collocation end date or check TBD.'); return; }
-        if (!endTbd && collocationEnd && new Date(collocationEnd) < new Date(collocationStart)) { showAlert('Validation Error', 'End date must be after start date.'); return; }
-    }
-
-    const sourceCommunities = new Set();
-    // Capture before-state for each sensor before making changes
-    const beforeCollocationDates = {};
-    const beforeStatuses = {};
-    const beforeCommunities = {};
-    const beforeDateInstalled = {};
-    sensorIds.forEach(id => {
-        const s = sensors.find(x => x.id === id);
-        if (!s) return;
-        if (s.community) sourceCommunities.add(s.community);
-        if (doCollocation) beforeCollocationDates[id] = s.collocationDates || '';
-        if (doStatus) beforeStatuses[id] = s.status ? [...s.status] : [];
-        if (doMove) {
-            beforeCommunities[id] = s.community || '';
-            beforeDateInstalled[id] = s.dateInstalled || '';
-        }
-        if (doMove) {
-            s.community = toCommunityId;
-            s.dateInstalled = eventDate.split('T')[0];
-        }
-        if (doStatus) {
-            s.status = newStatuses;
-        }
-        if (doCollocation) {
-            s.collocationDates = `${collocationLocation}: ${formatDate(collocationStart)} - ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}`;
-        }
-        persistSensor(s);
-    });
-
-    if (!setupMode) {
-        const parts = [];
-        if (doMove) parts.push(`moved to ${toName}`);
-        if (doStatus) parts.push(`status set to ${newStatuses.join(', ')}`);
-        if (doCollocation) parts.push(`Collocation at ${collocationLocation}: ${formatDate(collocationStart)} - ${collocationEnd === 'TBD' ? 'TBD' : formatDate(collocationEnd)}`);
-        const noteText = `Bulk action: ${sensorList} ${parts.join(' and ')}.${userNotes ? ' ' + userNotes : ''}`;
-        const taggedComms = [...sourceCommunities];
-        if (toCommunityId && !taggedComms.includes(toCommunityId)) taggedComms.push(toCommunityId);
-
-        // Determine note type based on what actions were taken
-        let noteType = 'General';
-        if (doCollocation) noteType = 'Collocation';
-        else if (doMove) noteType = 'Movement';
-        else if (doStatus) noteType = 'Status Change';
-
-        // Build structured additionalInfo based on action type
-        let structuredAdditionalInfo = {};
-        structuredAdditionalInfo.userNotes = userNotes || '';
-        if (doCollocation) {
-            structuredAdditionalInfo.location = collocationLocation;
-            structuredAdditionalInfo.startDate = collocationStart;
-            structuredAdditionalInfo.endDate = collocationEnd;
-            structuredAdditionalInfo.beforeCollocationDates = beforeCollocationDates;
-        }
-        if (doStatus) {
-            structuredAdditionalInfo.afterStatus = newStatuses;
-            structuredAdditionalInfo.beforeStatuses = beforeStatuses;
-        }
-        if (doMove) {
-            structuredAdditionalInfo.toCommunity = toCommunityId;
-            structuredAdditionalInfo.beforeCommunities = beforeCommunities;
-            structuredAdditionalInfo.beforeDateInstalled = beforeDateInstalled;
-        }
-
-        const note = {
-            id: generateId('n'),
-            date: eventDate,
-            type: noteType,
-            text: noteText,
-            createdBy: getCurrentUserName(), createdById: currentUserId,
-            taggedSensors: sensorIds,
-            taggedCommunities: taggedComms,
-            taggedContacts: [],
-            additionalInfo: JSON.stringify(structuredAdditionalInfo),
-        };
-        notes.push(note); persistNote(note);
-    }
-
-    selectedSensors.clear();
-    document.getElementById('select-all-sensors').checked = false;
-    closeModal('modal-bulk-action');
-    buildSensorSidebar();
-    renderSensors();
-    updateBulkActionButton();
-}
-
 // ===== BACK BUTTON =====
 let viewHistory = []; // Each entry: { viewId, itemId }
 
@@ -5794,7 +5616,7 @@ function openCollocationModal(sensorId) {
     const select = document.getElementById('collocation-location-input');
     select.innerHTML = '<option value="">— Select Community —</option>' +
         [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name))
-        .map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+        .map(c => `<option value="${c.name}">${escapeHtml(c.name)}</option>`).join('');
     openModal('modal-collocation');
 }
 
@@ -5843,8 +5665,8 @@ function openGlobalCollocationModal() {
 
     const select = document.getElementById('global-colloc-location');
     select.innerHTML = '<option value="">— Select Location —</option>' +
-        (regulatory.length > 0 ? `<optgroup label="Regulatory Sites">${regulatory.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</optgroup>` : '') +
-        `<optgroup label="Communities">${others.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</optgroup>`;
+        (regulatory.length > 0 ? `<optgroup label="Regulatory Sites">${regulatory.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>` : '') +
+        `<optgroup label="Communities">${others.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`;
 
     document.getElementById('global-colloc-start').value = '';
     document.getElementById('global-colloc-end').value = '';
@@ -6805,7 +6627,7 @@ function openNewAuditModal(preselectedCommunityId) {
     const auditPods = sensors.filter(s => s.type === 'Audit Pod').sort((a, b) => a.id.localeCompare(b.id));
     document.getElementById('audit-pod-input').innerHTML = '<option value="">— Select Audit Pod —</option>' + auditPods.map(s => `<option value="${s.id}">${s.id}</option>`).join('');
     const auditable = getAuditableCommunities().sort((a, b) => a.name.localeCompare(b.name));
-    document.getElementById('audit-community-input').innerHTML = '<option value="">— Select Community —</option>' + auditable.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    document.getElementById('audit-community-input').innerHTML = '<option value="">— Select Community —</option>' + auditable.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
     document.getElementById('audit-community-pod-input').innerHTML = '<option value="">— Select community first —</option>';
     document.getElementById('audit-start-input').value = '';
     document.getElementById('audit-end-input').value = '';
@@ -6849,7 +6671,7 @@ async function saveNewAudit(event) {
     const doSaveAudit = async () => {
         const conductedBy = [installTeam, takedownTeam].filter(Boolean).join(' / ');
         const audit = { auditPodId, communityPodId, communityId, status: 'Scheduled', scheduledStart, scheduledEnd,
-            actualStart: null, actualEnd: null, conductedBy, notes: auditNotes, analysisResults: {},
+            actualStart: null, actualEnd: null, conductedBy, progressNotes: auditNotes ? [{ text: auditNotes, by: getCurrentUserName(), at: nowDatetime() }] : [], analysisResults: {},
             createdBy: getCurrentUserName(), createdById: currentUserId };
         try { const saved = await db.insertAudit(audit); audits.unshift(saved); }
         catch (err) { handleSaveError(err); audit.id = generateId('aud'); audits.unshift(audit); }
@@ -7507,7 +7329,7 @@ function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collected
     analysisDataCache[auditId].integrityWarnings = integrityWarnings;
 
     // Advance status based on DQO results
-    const allPass = AUDIT_PARAMETERS.every(p => audit.analysisResults[p.key]?.pass);
+    const allPass = AUDIT_PARAMETERS.filter(p => audit.analysisResults[p.key]).every(p => audit.analysisResults[p.key]?.pass) && AUDIT_PARAMETERS.some(p => audit.analysisResults[p.key]);
     if (audit.status === 'Complete' || audit.status === 'Analysis Pending') {
         const oldStatus = audit.status;
         const newStatus = allPass ? 'Audit Complete' : 'Analysis Pending';
@@ -9843,8 +9665,8 @@ function _renderCollocTSChart(parsed, paramKey) {
     });
 
     const allY = traces.flatMap(t => t.y.filter(v => v !== null));
-    const yMin = allY.length > 0 ? Math.min(...allY) : 0;
-    const yMax = allY.length > 0 ? Math.max(...allY) : 1;
+    const yMin = allY.length > 0 ? allY.reduce((a, b) => Math.min(a, b), Infinity) : 0;
+    const yMax = allY.length > 0 ? allY.reduce((a, b) => Math.max(a, b), -Infinity) : 1;
     const dt = _collocNiceDtick(yMin, yMax);
 
     try {
@@ -10190,16 +10012,6 @@ function _getCollocVal(row, sensorId, paramKey, parsed) {
     return Number(row.pods?.[sensorId]?.[paramKey] ?? NaN);
 }
 
-function _switchCollocTab(group, name, btn) {
-    const tabset = btn.closest('#' + group + '-tabset') || btn.closest('[id$="-tabset"]');
-    if (!tabset) return;
-    tabset.querySelectorAll('.colloc-tab-pane').forEach(el => el.classList.remove('active'));
-    tabset.querySelectorAll('.colloc-nav-link').forEach(el => el.classList.remove('active'));
-    const pane = tabset.querySelector('#' + group + '-tab-' + name);
-    if (pane) pane.classList.add('active');
-    btn.classList.add('active');
-    setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
-}
 
 function _renderCollocDataSheet(parsed) {
     const container = document.getElementById('colloc-data-sheet');
@@ -10385,7 +10197,6 @@ function generateCollocationReport(collocId) {
         for (let j = i + 1; j < allPodIds.length; j++) {
             const pairKey = `${allPodIds[j]}_vs_${allPodIds[i]}`;
             regData.interPod[pairKey] = {};
-            const bothHaveGas = !parsed.isPmOnly[allPodIds[i]] && !parsed.isPmOnly[allPodIds[j]] && allPodIds[i] !== parsed.permaPodId || allPodIds[j] !== parsed.permaPodId;
             const keys = (parsed.isPmOnly[allPodIds[i]] || parsed.isPmOnly[allPodIds[j]]) ? ['pm25', 'pm10'] : tsParams;
             keys.forEach(k => {
                 const xArr = [], yArr = [];
@@ -10559,14 +10370,15 @@ PARAMS.forEach(function(pk, pi) {
     }
   });
   var allY = []; traces.forEach(function(t) { t.y.forEach(function(v) { if (v !== null) allY.push(v); }); });
-  var yMin = Math.min.apply(null, allY), yMax = Math.max.apply(null, allY);
+  var yMin = allY.length > 0 ? allY.reduce(function(a, b) { return Math.min(a, b); }, Infinity) : 0;
+  var yMax = allY.length > 0 ? allY.reduce(function(a, b) { return Math.max(a, b); }, -Infinity) : 1;
   var dt = niceDtick(yMin, yMax);
   Plotly.newPlot('ts-' + pk + '-plot', traces, {
     margin: {t: 8, b: 45, l: 80, r: 15}, xaxis: {title: 'Date', type: 'date', gridcolor: '#ddd'},
     yaxis: {title: {text: paramLabels[pk], standoff: 10}, gridcolor: '#ddd', range: [Math.floor(yMin/dt)*dt, Math.ceil(yMax/dt)*dt], dtick: dt, tickfont: {size: 11}},
     legend: {orientation: 'h', y: 1.12, x: 0.5, xanchor: 'center', font: {size: 12}},
     plot_bgcolor: '#fff', paper_bgcolor: 'rgba(0,0,0,0)', font: {family: 'Segoe UI, system-ui, sans-serif', size: 12}, hovermode: 'x unified'
-  }, {responsive: true});
+  }, {responsive: true, displayModeBar: false});
 });
 
 // Regression helper

@@ -4,28 +4,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-function nowDatetime() {
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/Anchorage', year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', hour12: false
-    }).formatToParts(now);
-    const get = type => (parts.find(p => p.type === type) || {}).value || '00';
-    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
-}
-
-// Migrate old quant_notes string to progress notes array
-function parseProgressNotes(raw) {
-    if (!raw) return [];
-    try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-    } catch (_) {}
-    // Old format: plain string — migrate to a single note entry
-    if (raw.trim()) return [{ text: raw.trim(), by: '', at: '' }];
-    return [];
-}
-
 // Parse notes field — handles both old plain text and new JSON array format
 function parseNotesField(raw) {
     if (!raw) return [];
@@ -514,7 +492,7 @@ const db = {
             id: t.id, sensorId: t.sensor_id, ticketType: t.ticket_type, status: t.status,
             rmaNumber: t.rma_number || '', fedexTrackingTo: t.fedex_tracking_to || '',
             fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
-            progressNotes: parseProgressNotes(t.quant_notes), workCompleted: t.work_completed || '',
+            progressNotes: parseNotesField(t.quant_notes), workCompleted: t.work_completed || '',
             createdBy: t.profiles?.name || (t.created_by ? '[Deleted User]' : ''), createdById: t.created_by,
             createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at,
         }));
@@ -534,7 +512,7 @@ const db = {
             id: t.id, sensorId: t.sensor_id, ticketType: t.ticket_type, status: t.status,
             rmaNumber: t.rma_number || '', fedexTrackingTo: t.fedex_tracking_to || '',
             fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
-            progressNotes: parseProgressNotes(t.quant_notes), workCompleted: t.work_completed || '',
+            progressNotes: parseNotesField(t.quant_notes), workCompleted: t.work_completed || '',
             createdBy: t.profiles?.name || '', createdById: t.created_by,
             createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at,
         };

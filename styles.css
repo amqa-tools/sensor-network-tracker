@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
 /* =============================================
    ADEC SENSOR NETWORK TRACKER
    Design: Clean Professional
@@ -32,8 +34,6 @@ button:focus-visible, .btn:focus-visible {
 .skip-nav:focus {
     left: 16px;
 }
-
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ===== DESIGN TOKENS ===== */
 :root {
@@ -391,7 +391,7 @@ body {
     gap: 8px;
     cursor: pointer;
     font-size: 0.9rem;
-    color: var(--text-secondary);
+    color: var(--slate-500);
 }
 
 .contact-email-list-label input[type="checkbox"] {
@@ -3268,7 +3268,7 @@ tr:hover .contact-delete-btn {
 
 .btn-email-list {
     background: var(--gold-500) !important;
-    color: var(--navy-900) !important;
+    color: var(--navy-800) !important;
     font-weight: 600 !important;
     border: 1px solid var(--gold-400) !important;
     padding: 6px 14px !important;
@@ -4055,7 +4055,7 @@ tr:hover .contact-delete-btn {
     font-family: inherit;
     font-size: 0.9rem;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--slate-500);
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
@@ -4076,7 +4076,7 @@ tr:hover .contact-delete-btn {
 .community-tab-count {
     font-size: 0.8rem;
     font-weight: 500;
-    color: var(--text-tertiary);
+    color: var(--slate-400);
     margin-left: 4px;
 }
 
