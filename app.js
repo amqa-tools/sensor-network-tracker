@@ -6835,11 +6835,6 @@ const DQO_THRESHOLDS = {
     rmse: { max: 7 },
 };
 
-const PHYSICAL_RANGES = {
-    pm25: { min: 0, max: 500 }, pm10: { min: 0, max: 1000 },
-    co: { min: 0, max: 50000 }, no: { min: 0, max: 1000 },
-    no2: { min: 0, max: 2000 }, o3: { min: 0, max: 500 },
-};
 const SAMPLE_SIZE_TIERS = { critical: 10, minimum: 24, adequate: 72, ideal: 168 };
 
 // ===== FAILSAFE VALIDATION =====
@@ -6916,43 +6911,7 @@ function runFailsafeValidation(parsed, results, type) {
         }
     });
 
-    // Check 2 — Physical range validation
-    if (parsed.trimmedRows && parsed.trimmedRows.length > 0) {
-        const totalRows = parsed.trimmedRows.length;
-        for (const [key, range] of Object.entries(PHYSICAL_RANGES)) {
-            let outCount = 0;
-            let extremeVal = null;
-            const checkValue = (v) => {
-                if (isNaN(v) || !isFinite(v)) return;
-                if (v < range.min || v > range.max) {
-                    outCount++;
-                    if (extremeVal === null || Math.abs(v) > Math.abs(extremeVal)) extremeVal = v;
-                }
-            };
-            for (const row of parsed.trimmedRows) {
-                if (type === 'audit') {
-                    checkValue(row.values[key]?.a);
-                    checkValue(row.values[key]?.b);
-                } else {
-                    checkValue(Number(row.bam?.[key] ?? NaN));
-                    checkValue(Number(row.perma?.[key] ?? NaN));
-                    if (row.pods) {
-                        for (const podId of Object.keys(row.pods)) {
-                            checkValue(Number(row.pods[podId]?.[key] ?? NaN));
-                        }
-                    }
-                }
-            }
-            const p = AUDIT_PARAMETERS.find(x => x.key === key);
-            const label = p ? p.label : key;
-            const pct = ((outCount / totalRows) * 100).toFixed(1);
-            if (outCount > 0 && (outCount / totalRows) > 0.05) {
-                warnings.push({ category: 'physical-range', severity: 'error', msg: `${label}: ${pct}% of values outside physical range [${range.min}\u2013${range.max}] (extreme: ${extremeVal})` });
-            } else if (outCount > 0) {
-                warnings.push({ category: 'physical-range', severity: 'warning', msg: `${label}: ${outCount} value(s) outside physical range [${range.min}\u2013${range.max}] (extreme: ${extremeVal})` });
-            }
-        }
-    }
+
 
     // Check 3 — Timestamp validation
     if (parsed.trimmedRows && parsed.trimmedRows.length >= 2) {
@@ -7007,38 +6966,6 @@ function runFailsafeValidation(parsed, results, type) {
             warnings.push({ category: 'sample-size', severity: 'warning', msg: `${paramLabel}: ${n} data pairs \u2014 ${SAMPLE_SIZE_TIERS.adequate}+ recommended for robust analysis` });
         } else {
             warnings.push({ category: 'sample-size', severity: 'info', msg: `${paramLabel}: ${n} data pairs` });
-        }
-    });
-
-    // Check 5 — Outlier detection (simplified IQR on residuals)
-    _forEachResult((paramLabel, key, result) => {
-        const pairs = result.pairs;
-        if (!pairs || pairs.length < 10) return;
-        // Compute residuals
-        const residuals = pairs.map(p => p.y - (result.slope * p.x + result.intercept));
-        const sorted = residuals.slice().sort((a, b) => a - b);
-        const q1 = sorted[Math.floor(sorted.length * 0.25)];
-        const q3 = sorted[Math.floor(sorted.length * 0.75)];
-        const iqr = q3 - q1;
-        const lower = q1 - 3 * iqr;
-        const upper = q3 + 3 * iqr;
-        const outlierIndices = [];
-        residuals.forEach((r, i) => { if (r < lower || r > upper) outlierIndices.push(i); });
-        if (outlierIndices.length === 0) return;
-
-        // Check if removing outliers changes DQO verdict
-        const cleanPairsX = [], cleanPairsY = [];
-        pairs.forEach((p, i) => {
-            if (!outlierIndices.includes(i)) { cleanPairsX.push(p.x); cleanPairsY.push(p.y); }
-        });
-        const cleanReg = runLinearRegression(cleanPairsX, cleanPairsY);
-        const originalPass = result.pass;
-        const cleanPass = cleanReg ? checkDQO(cleanReg).pass : originalPass;
-
-        if (originalPass !== cleanPass) {
-            warnings.push({ category: 'outlier', severity: 'error', msg: `${paramLabel}: ${outlierIndices.length} outlier(s) detected \u2014 removing them changes DQO verdict from ${originalPass ? 'PASS' : 'FAIL'} to ${cleanPass ? 'PASS' : 'FAIL'}` });
-        } else {
-            warnings.push({ category: 'outlier', severity: 'warning', msg: `${paramLabel}: ${outlierIndices.length} outlier(s) detected (IQR method, 3x) \u2014 DQO verdict unchanged` });
         }
     });
 
