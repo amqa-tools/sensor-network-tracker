@@ -26,6 +26,21 @@ function parseProgressNotes(raw) {
     return [];
 }
 
+// Parse notes field — handles both old plain text and new JSON array format
+function parseNotesField(raw) {
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+    } catch (_) {}
+    if (raw.trim()) return [{ text: raw.trim(), by: '', at: '' }];
+    return [];
+}
+
+function serializeNotesField(notes) {
+    return JSON.stringify(notes || []);
+}
+
 // ===== AUTH =====
 const db = {
     // --- Auth ---
@@ -370,7 +385,7 @@ const db = {
             communityId: a.community_id, status: a.status,
             scheduledStart: a.scheduled_start, scheduledEnd: a.scheduled_end,
             actualStart: a.actual_start, actualEnd: a.actual_end,
-            conductedBy: a.conducted_by || '', notes: a.notes || '',
+            conductedBy: a.conducted_by || '', progressNotes: parseNotesField(a.notes),
             analysisResults: a.analysis_results || {},
             analysisName: a.analysis_name || '',
             analysisUploadDate: a.analysis_upload_date || null,
@@ -387,7 +402,7 @@ const db = {
             community_id: audit.communityId, status: audit.status || 'Scheduled',
             scheduled_start: audit.scheduledStart || null, scheduled_end: audit.scheduledEnd || null,
             actual_start: audit.actualStart || null, actual_end: audit.actualEnd || null,
-            conducted_by: audit.conductedBy || '', notes: audit.notes || '',
+            conducted_by: audit.conductedBy || '', notes: serializeNotesField(audit.progressNotes),
             analysis_results: audit.analysisResults || {},
             analysis_name: audit.analysisName || '', analysis_upload_date: audit.analysisUploadDate || null,
             analysis_uploaded_by: audit.analysisUploadedBy || '',
@@ -400,7 +415,7 @@ const db = {
             communityId: a.community_id, status: a.status,
             scheduledStart: a.scheduled_start, scheduledEnd: a.scheduled_end,
             actualStart: a.actual_start, actualEnd: a.actual_end,
-            conductedBy: a.conducted_by || '', notes: a.notes || '',
+            conductedBy: a.conducted_by || '', progressNotes: parseNotesField(a.notes),
             analysisResults: a.analysis_results || {},
             analysisName: a.analysis_name || '',
             analysisUploadDate: a.analysis_upload_date || null,
@@ -415,11 +430,14 @@ const db = {
         const row = { updated_at: new Date().toISOString() };
         const map = { status: 'status', scheduledStart: 'scheduled_start', scheduledEnd: 'scheduled_end',
             actualStart: 'actual_start', actualEnd: 'actual_end', conductedBy: 'conducted_by',
-            notes: 'notes', analysisResults: 'analysis_results',
+            analysisResults: 'analysis_results',
             analysisName: 'analysis_name', analysisUploadDate: 'analysis_upload_date',
             analysisUploadedBy: 'analysis_uploaded_by',
             analysisChartData: 'analysis_chart_data' };
-        for (const [k, v] of Object.entries(updates)) { if (map[k]) row[map[k]] = v; }
+        for (const [k, v] of Object.entries(updates)) {
+            if (k === 'progressNotes') { row['notes'] = serializeNotesField(v); continue; }
+            if (map[k]) row[map[k]] = v;
+        }
         const { error } = await supa.from('audits').update(row).eq('id', id);
         if (error) throw error;
     },
@@ -433,7 +451,7 @@ const db = {
             startDate: c.start_date || '', endDate: c.end_date || '',
             sensorIds: c.sensor_ids || [], permanentPodId: c.permanent_pod_id || '',
             bamSource: c.bam_source || '', conductedBy: c.conducted_by || '',
-            notes: c.notes || '', analysisResults: c.analysis_results || {},
+            progressNotes: parseNotesField(c.notes), analysisResults: c.analysis_results || {},
             analysisChartData: c.analysis_chart_data || null,
             analysisName: c.analysis_name || '',
             analysisUploadDate: c.analysis_upload_date || null,
@@ -449,7 +467,7 @@ const db = {
             start_date: colloc.startDate || '', end_date: colloc.endDate || '',
             sensor_ids: colloc.sensorIds || [], permanent_pod_id: colloc.permanentPodId || '',
             bam_source: colloc.bamSource || '', conducted_by: colloc.conductedBy || '',
-            notes: colloc.notes || '', created_by: colloc.createdById || null,
+            notes: serializeNotesField(colloc.progressNotes), created_by: colloc.createdById || null,
         }).select('*, profiles(name)');
         if (error) throw error;
         const c = data[0];
@@ -458,7 +476,7 @@ const db = {
             startDate: c.start_date || '', endDate: c.end_date || '',
             sensorIds: c.sensor_ids || [], permanentPodId: c.permanent_pod_id || '',
             bamSource: c.bam_source || '', conductedBy: c.conducted_by || '',
-            notes: c.notes || '', analysisResults: c.analysis_results || {},
+            progressNotes: parseNotesField(c.notes), analysisResults: c.analysis_results || {},
             analysisChartData: c.analysis_chart_data || null, analysisName: c.analysis_name || '',
             analysisUploadDate: c.analysis_upload_date || null, analysisUploadedBy: c.analysis_uploaded_by || '',
             createdBy: c.profiles?.name || '', createdById: c.created_by,
@@ -471,11 +489,12 @@ const db = {
         const map = {
             locationId: 'location_id', status: 'status', startDate: 'start_date', endDate: 'end_date',
             sensorIds: 'sensor_ids', permanentPodId: 'permanent_pod_id', bamSource: 'bam_source',
-            conductedBy: 'conducted_by', notes: 'notes', analysisResults: 'analysis_results',
+            conductedBy: 'conducted_by', analysisResults: 'analysis_results',
             analysisChartData: 'analysis_chart_data', analysisName: 'analysis_name',
             analysisUploadDate: 'analysis_upload_date', analysisUploadedBy: 'analysis_uploaded_by',
         };
         for (const [k, v] of Object.entries(updates)) {
+            if (k === 'progressNotes') { row['notes'] = serializeNotesField(v); continue; }
             if (map[k]) row[map[k]] = v;
         }
         const { error } = await supa.from('collocations').update(row).eq('id', id);

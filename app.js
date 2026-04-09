@@ -5911,7 +5911,7 @@ async function saveGlobalCollocation(e) {
             endDate: endDate,
             sensorIds: taggedSensors,
             conductedBy: conductedBy,
-            notes: extraNotes,
+            progressNotes: extraNotes ? [{ text: extraNotes, by: getCurrentUserName(), at: nowDatetime() }] : [],
             createdById: currentUserId,
         });
         collocations.push(newColloc);
@@ -6450,20 +6450,7 @@ function openTicketDetail(ticketId) {
             <div class="ticket-field"><label>Return Tracking Info (to QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingTo)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingTo',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingTo) || '—'}</p>`}</div>
             <div class="ticket-field"><label>Return Tracking Info (from QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingFrom)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingFrom',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingFrom) || '—'}</p>`}</div>
             <div class="ticket-field"><label>Closed</label><p>${ticket.closedAt ? formatDate(ticket.closedAt) : '—'}</p></div>
-            <div class="ticket-field full-width"><label>Progress Notes</label>
-                <div id="progress-notes-${ticket.id}">
-                    ${(ticket.progressNotes || []).length > 0
-                        ? ticket.progressNotes.slice().reverse().map((n, i) => `<div style="font-size:13px;padding:6px 0;${i < ticket.progressNotes.length - 1 ? 'border-bottom:1px solid var(--slate-100);' : ''}">
-                            <span style="color:var(--slate-400);font-size:11px">${n.at ? formatDate(n.at) : ''}${n.by ? ' — ' + escapeHtml(n.by) : ''}</span>
-                            <div style="color:var(--slate-700);margin-top:2px">${escapeHtml(n.text)}</div>
-                        </div>`).join('')
-                        : '<p style="color:var(--slate-400);font-size:13px">No progress notes yet.</p>'}
-                </div>
-                ${isOpen ? `<div style="margin-top:8px;display:flex;gap:8px">
-                    <input type="text" id="progress-note-input-${ticket.id}" class="ticket-edit-input" placeholder="Add a progress note..." style="flex:1" onkeydown="if(event.key==='Enter'){addProgressNote('${ticket.id}');event.preventDefault();}">
-                    <button class="btn btn-sm btn-primary" onclick="addProgressNote('${ticket.id}')">Add</button>
-                </div>` : ''}
-            </div>
+            ${renderProgressNotesSection(ticket.progressNotes, ticket.id, 'addProgressNote')}
             <div class="ticket-field full-width"><label>Work Completed</label>${isOpen ? `<textarea class="ticket-edit-input" rows="3" placeholder="Describe work done..." onblur="saveTicketField('${ticket.id}','workCompleted',this.value)">${escapeHtml(ticket.workCompleted)}</textarea>` : `<p>${escapeHtml(ticket.workCompleted) || '—'}</p>`}</div>
         </div>
         <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
@@ -6501,6 +6488,50 @@ function addProgressNote(ticketId) {
     openTicketDetail(ticketId);
     // Also refresh sensor ticket preview if visible
     if (currentSensor) renderSensorTickets(currentSensor);
+}
+
+function renderProgressNotesSection(notes, itemId, addFn) {
+    const notesList = (notes || []).slice().reverse().map((n, i) =>
+        `<div style="font-size:13px;padding:6px 0;${i < (notes || []).length - 1 ? 'border-bottom:1px solid var(--slate-100);' : ''}">
+            <span style="color:var(--slate-400);font-size:11px">${n.at ? formatDate(n.at) : ''}${n.by ? ' — ' + escapeHtml(n.by) : ''}</span>
+            <div style="color:var(--slate-700);margin-top:2px">${escapeHtml(n.text)}</div>
+        </div>`
+    ).join('');
+    return `<div class="ticket-field full-width"><label>Progress Notes</label>
+        <div>${notesList || '<p style="color:var(--slate-400);font-size:13px">No notes yet.</p>'}</div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+            <input type="text" id="progress-note-input-${itemId}" class="ticket-edit-input" placeholder="Add a note..." style="flex:1" onkeydown="if(event.key==='Enter'){${addFn}('${itemId}');event.preventDefault();}">
+            <button class="btn btn-sm btn-primary" onclick="${addFn}('${itemId}')">Add</button>
+        </div>
+    </div>`;
+}
+
+function addAuditProgressNote(auditId) {
+    const input = document.getElementById('progress-note-input-' + auditId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    const audit = audits.find(a => a.id === auditId);
+    if (!audit) return;
+    if (!audit.progressNotes) audit.progressNotes = [];
+    audit.progressNotes.push({ text, by: getCurrentUserName(), at: nowDatetime() });
+    persistAuditUpdate(auditId, { progressNotes: audit.progressNotes });
+    input.value = '';
+    openAuditDetail(auditId);
+}
+
+function addCollocationProgressNote(collocId) {
+    const input = document.getElementById('progress-note-input-' + collocId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    const colloc = collocations.find(c => c.id === collocId);
+    if (!colloc) return;
+    if (!colloc.progressNotes) colloc.progressNotes = [];
+    colloc.progressNotes.push({ text, by: getCurrentUserName(), at: nowDatetime() });
+    persistCollocationUpdate(collocId, { progressNotes: colloc.progressNotes });
+    input.value = '';
+    openCollocationDetail(collocId);
 }
 
 function advanceTicketStatus(ticketId) {
@@ -6881,7 +6912,7 @@ function openAuditDetail(auditId) {
             <div class="ticket-field"><label>Actual End</label><input type="date" class="ticket-edit-input" value="${audit.actualEnd || ''}" onblur="saveAuditField('${audit.id}','actualEnd',this.value)"></div>
             <div class="ticket-field"><label>Install Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[0] || '')}" placeholder="Who installed" onblur="saveAuditConductors('${audit.id}', this.value, null)"></div>
             <div class="ticket-field"><label>Takedown Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)"></div>
-            <div class="ticket-field full-width"><label>Notes</label><textarea class="ticket-edit-input" rows="3" onblur="saveAuditField('${audit.id}','notes',this.value)">${escapeHtml(audit.notes)}</textarea></div>
+            ${renderProgressNotesSection(audit.progressNotes, audit.id, 'addAuditProgressNote')}
         </div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}</div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Photos</label>
@@ -8787,7 +8818,7 @@ function generateAuditReport(auditId) {
         <dt>Audit Pod ID</dt><dd><span class="mono">${escapeHtml(audit.auditPodId)}</span></dd>
         <dt>Community Pod Location</dt><dd>${escapeHtml(communityPodSensor?.location || '\u2014')}</dd>
         <dt>Installation / Removal By</dt><dd>${escapeHtml(audit.conductedBy || '\u2014')}</dd>
-        ${audit.notes ? `<dt>Notes</dt><dd style="grid-column:span 3">${escapeHtml(audit.notes)}</dd>` : ''}
+        ${(audit.progressNotes || []).length > 0 ? `<dt>Notes</dt><dd style="grid-column:span 3">${audit.progressNotes.map(n => escapeHtml(n.text) + (n.by ? ' — ' + escapeHtml(n.by) : '')).join('<br>')}</dd>` : ''}
     </dl>
     </section>
 
@@ -9027,7 +9058,7 @@ function openCollocationDetail(collocId) {
             <div class="ticket-field"><label>End Date</label>${!isComplete ? `<input class="ticket-edit-input" type="date" value="${colloc.endDate === 'TBD' ? '' : colloc.endDate}" onblur="saveCollocationField('${colloc.id}','endDate',this.value)">` : `<p>${colloc.endDate === 'TBD' ? 'TBD' : formatDate(colloc.endDate) || '—'}</p>`}</div>
             <div class="ticket-field full-width"><label>Sensors</label><p>${sensorList || '—'}</p></div>
             <div class="ticket-field"><label>Conducted By</label>${!isComplete ? `<input class="ticket-edit-input" value="${escapeHtml(colloc.conductedBy)}" onblur="saveCollocationField('${colloc.id}','conductedBy',this.value)">` : `<p>${escapeHtml(colloc.conductedBy) || '—'}</p>`}</div>
-            <div class="ticket-field full-width"><label>Notes</label>${!isComplete ? `<textarea class="ticket-edit-input" rows="3" onblur="saveCollocationField('${colloc.id}','notes',this.value)">${escapeHtml(colloc.notes)}</textarea>` : `<p>${escapeHtml(colloc.notes) || '—'}</p>`}</div>
+            ${renderProgressNotesSection(colloc.progressNotes, colloc.id, 'addCollocationProgressNote')}
             ${hasResults ? `<div class="ticket-field full-width"><label>Analysis</label><p style="color:var(--green)">Analysis uploaded ${formatDate(colloc.analysisUploadDate)} by ${escapeHtml(colloc.analysisUploadedBy)}</p></div>` : ''}
         </div>
         <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
