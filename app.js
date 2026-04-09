@@ -7165,12 +7165,12 @@ function beginAnalysis(auditId) {
             </div>
             <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Analysis Name</label>
             <input type="text" class="analysis-name-input" id="analysis-name-input" value="${escapeHtml(defaultName)}" placeholder="e.g. Audit 471 - Kodiak 660, March 4-13 2026">
-            <label class="analysis-upload-zone" id="analysis-drop-zone">
+            <div class="analysis-upload-zone" id="analysis-drop-zone" onclick="this.querySelector('input[type=file]').click()">
                 <div class="analysis-upload-icon">&#128196;</div>
                 <div class="analysis-upload-text">Click to upload Excel file (.xls or .xlsx)</div>
                 <div class="analysis-upload-hint">Hourly data export from AirVision with both sensor columns</div>
                 <input type="file" accept=".xls,.xlsx" onchange="handleAnalysisUpload('${auditId}', this.files[0])">
-            </label>
+            </div>
         `;
     });
     openModal('modal-audit-analysis');
@@ -7916,12 +7916,12 @@ function rerunAnalysisUpload(auditId) {
         </div>
         <label style="font-size:12px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:0.5px">Analysis Name</label>
         <input type="text" class="analysis-name-input" id="analysis-name-input" value="${escapeHtml(defaultName)}">
-        <label class="analysis-upload-zone" id="analysis-drop-zone">
+        <div class="analysis-upload-zone" id="analysis-drop-zone" onclick="this.querySelector('input[type=file]').click()">
             <div class="analysis-upload-icon">&#128196;</div>
             <div class="analysis-upload-text">Click to upload Excel file (.xls or .xlsx)</div>
             <div class="analysis-upload-hint">This will replace the existing analysis results</div>
             <input type="file" accept=".xls,.xlsx" onchange="handleAnalysisUpload('${auditId}', this.files[0])">
-        </label>
+        </div>
     `;
 }
 
@@ -9333,12 +9333,12 @@ function beginCollocationAnalysis(collocId) {
                     </select>
                 </div>
             </div>
-            <label class="analysis-upload-zone" id="analysis-drop-zone" style="margin-top:16px">
+            <div class="analysis-upload-zone" id="analysis-drop-zone" onclick="this.querySelector('input[type=file]').click()" style="margin-top:16px">
                 <div class="analysis-upload-icon">&#128196;</div>
                 <div class="analysis-upload-text">Click to upload Excel file (.xls or .xlsx)</div>
                 <div class="analysis-upload-hint">Hourly data with BAM, permanent pod, and community pod columns</div>
                 <input type="file" accept=".xls,.xlsx" onchange="handleCollocationUpload('${collocId}', this.files[0])">
-            </label>
+            </div>
         `;
     });
     openModal('modal-audit-analysis');

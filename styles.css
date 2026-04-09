@@ -2118,6 +2118,7 @@ tr:hover .contact-delete-btn {
 /* Plotly cleanup is handled in JS by purgeAnalysisPlots() — no CSS hacks needed */
 
 .analysis-upload-zone {
+    display: block;
     border: 2px dashed var(--slate-200);
     border-radius: var(--radius-lg);
     padding: 32px;
@@ -2125,8 +2126,9 @@ tr:hover .contact-delete-btn {
     margin: 16px 0;
     cursor: pointer;
     transition: border-color 0.2s, background 0.2s;
-    position: relative;
-    z-index: 1;
+    outline: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .analysis-upload-zone:hover {
@@ -2134,9 +2136,23 @@ tr:hover .contact-delete-btn {
     background: var(--navy-50, #f0f2f7);
 }
 
-.analysis-upload-zone input[type="file"] {
-    display: none;
+.analysis-upload-zone:focus, .analysis-upload-zone:focus-within {
+    outline: none;
+    box-shadow: none;
 }
+
+.analysis-upload-zone input[type="file"] {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Suppress macOS blue focus outlines on label elements in the analysis modal */
+#audit-analysis-body label { outline: none; }
+#audit-analysis-body label:focus, #audit-analysis-body label:focus-within { outline: none; }
 
 .analysis-upload-icon {
     font-size: 32px;
