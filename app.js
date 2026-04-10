@@ -217,6 +217,9 @@ async function loadAllData() {
     audits = auditsData;
     collocations = collocationsData;
 
+    // Migrate old status names BEFORE any cleanup that depends on status values
+    migrateAuditCollocStatuses();
+
     // Clean up stale service statuses on sensors based on current ticket stage
     cleanupSensorServiceStatuses();
 
@@ -242,6 +245,39 @@ async function loadAllData() {
     rebuildLookupMaps();
 }
 
+function migrateAuditCollocStatuses() {
+    if (localStorage.getItem('snt_statusMigration_v1')) return;
+    let auditCount = 0;
+    audits.forEach(a => {
+        if (a.status === 'Audit Complete') {
+            a.status = 'Complete';
+            db.updateAudit(a.id, { status: 'Complete' }).catch(() => {});
+            auditCount++;
+        } else if (a.status === 'Complete') {
+            // Old "Complete" was intermediate (field done) — now called "Finished"
+            a.status = 'Finished';
+            db.updateAudit(a.id, { status: 'Finished' }).catch(() => {});
+            auditCount++;
+        }
+    });
+    let collocCount = 0;
+    collocations.forEach(c => {
+        if (c.status === 'Collocation Complete') {
+            c.status = 'Complete';
+            db.updateCollocation(c.id, { status: 'Complete' }).catch(() => {});
+            collocCount++;
+        } else if (c.status === 'Complete') {
+            c.status = 'Finished';
+            db.updateCollocation(c.id, { status: 'Finished' }).catch(() => {});
+            collocCount++;
+        }
+    });
+    localStorage.setItem('snt_statusMigration_v1', '1');
+    if (auditCount > 0 || collocCount > 0) {
+        console.log(`Migrated ${auditCount} audit + ${collocCount} collocation statuses to new names`);
+    }
+}
+
 function cleanupSensorServiceStatuses() {
     const allServiceStatuses = ['Shipped to Quant', 'Service at Quant', 'Shipped from Quant'];
     const sensorStatusMap = { 'Shipped to Quant': 'Shipped to Quant', 'At Quant': 'Service at Quant', 'Shipped from Quant': 'Shipped from Quant' };
@@ -263,7 +299,7 @@ function cleanupStaleCollocationStatuses() {
     // Remove "Collocation" status from sensors that have no active (non-complete) collocation
     const activeCollocSensors = new Set();
     collocations.forEach(c => {
-        if (c.status !== 'Collocation Complete') {
+        if (c.status !== 'Complete') {
             (c.sensorIds || []).forEach(id => activeCollocSensors.add(id));
         }
     });
@@ -6638,8 +6674,8 @@ function confirmCloseTicket() {
 }
 
 // ===== AUDITS =====
-const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Complete', 'Analysis Pending', 'Audit Complete'];
-const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Complete': 'as-complete', 'Analysis Pending': 'as-analysis', 'Audit Complete': 'as-verified' };
+const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Finished', 'Analysis Pending', 'Complete'];
+const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Finished': 'as-complete', 'Analysis Pending': 'as-analysis', 'Complete': 'as-verified' };
 const AUDIT_PARAMETERS = [
     { key: 'pm25', label: 'PM2.5', labelHtml: 'PM<sub>2.5</sub>', unit: '\u00B5g/m\u00B3', hasTimeSeries: true },
     { key: 'pm10', label: 'PM10', labelHtml: 'PM<sub>10</sub>', unit: '\u00B5g/m\u00B3', hasTimeSeries: true },
@@ -6748,7 +6784,7 @@ async function saveNewAudit(event) {
 
     // Check for sensor overlap with existing audits
     const conflicts = audits.filter(a => {
-        if (a.status === 'Audit Complete') return false;
+        if (a.status === 'Complete') return false;
         const hasSensorOverlap = a.auditPodId === auditPodId || a.auditPodId === communityPodId || a.communityPodId === auditPodId || a.communityPodId === communityPodId;
         if (!hasSensorOverlap) return false;
         const hasDateOverlap = a.scheduledStart <= scheduledEnd && a.scheduledEnd >= scheduledStart;
@@ -6806,7 +6842,7 @@ function openAuditDetail(auditId) {
             ${nextStatus ? `<button class="btn btn-primary" onclick="advanceAuditStatus('${audit.id}')">Advance to: ${nextStatus}</button>` : ''}
             ${idx > 0 ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
             <span class="action-spacer"></span>
-            ${audit.status === 'Complete' || audit.status === 'Analysis Pending' || audit.status === 'Audit Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
+            ${audit.status === 'Finished' || audit.status === 'Analysis Pending' || audit.status === 'Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
             ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn" onclick="delete analysisDataCache['${audit.id}']; beginAnalysis('${audit.id}')">Re-upload Data</button>` : ''}
             <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
         </div>
@@ -6865,7 +6901,7 @@ function advanceAuditStatus(auditId) {
         const updates = { status: newStatus };
 
         if (newStatus === 'In Progress' && !audit.actualStart) { audit.actualStart = localDate(); updates.actualStart = audit.actualStart; }
-        if (newStatus === 'Complete' && !audit.actualEnd) { audit.actualEnd = localDate(); updates.actualEnd = audit.actualEnd; }
+        if (newStatus === 'Finished' && !audit.actualEnd) { audit.actualEnd = localDate(); updates.actualEnd = audit.actualEnd; }
         persistAuditUpdate(auditId, updates);
 
         const auditStatusPrefix = 'Audit: ';
@@ -6874,7 +6910,7 @@ function advanceAuditStatus(auditId) {
 
         if (communityPod) {
             const cleaned = getStatusArray(communityPod).filter(st => !st.startsWith(auditStatusPrefix));
-            if (newStatus !== 'Audit Complete') {
+            if (newStatus !== 'Complete') {
                 communityPod.status = [...cleaned, auditStatusPrefix + newStatus];
             } else {
                 communityPod.status = cleaned.length > 0 ? cleaned : ['Online'];
@@ -6884,9 +6920,9 @@ function advanceAuditStatus(auditId) {
 
         if (auditPod) {
             const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
-            if (newStatus === 'In Progress' || newStatus === 'Complete') {
+            if (newStatus === 'In Progress' || newStatus === 'Finished') {
                 auditPod.status = [...cleaned, 'Auditing a Community'];
-            } else if (newStatus === 'Analysis Pending' || newStatus === 'Audit Complete') {
+            } else if (newStatus === 'Analysis Pending' || newStatus === 'Complete') {
                 auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
             }
             persistSensor(auditPod);
@@ -6901,7 +6937,7 @@ function advanceAuditStatus(auditId) {
     };
 
     // Warn if skipping analysis
-    if (newStatus === 'Audit Complete' && Object.keys(audit.analysisResults || {}).length === 0) {
+    if (newStatus === 'Complete' && Object.keys(audit.analysisResults || {}).length === 0) {
         showConfirm('No Analysis Data', 'No analysis data has been uploaded for this audit. Are you sure you want to mark it as complete without DQO analysis?', doAdvance);
     } else {
         doAdvance();
@@ -6933,7 +6969,7 @@ function revertAuditStatus(auditId) {
     }
     if (auditPod) {
         const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
-        if (newStatus === 'In Progress' || newStatus === 'Complete') {
+        if (newStatus === 'In Progress' || newStatus === 'Finished') {
             auditPod.status = [...cleaned, 'Auditing a Community'];
         } else {
             auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
@@ -7664,9 +7700,9 @@ function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collected
 
     // Advance status based on DQO results
     const allPass = AUDIT_PARAMETERS.filter(p => audit.analysisResults[p.key]).every(p => audit.analysisResults[p.key]?.pass) && AUDIT_PARAMETERS.some(p => audit.analysisResults[p.key]);
-    if (audit.status === 'Complete' || audit.status === 'Analysis Pending') {
+    if (audit.status === 'Finished' || audit.status === 'Analysis Pending') {
         const oldStatus = audit.status;
-        const newStatus = allPass ? 'Audit Complete' : 'Analysis Pending';
+        const newStatus = allPass ? 'Complete' : 'Analysis Pending';
         audit.status = newStatus;
         persistAuditUpdate(auditId, { status: newStatus });
 
@@ -9146,12 +9182,12 @@ async function uploadAuditPhotos(auditId, communityId, files) {
 }
 
 // ===== COLLOCATION SYSTEM =====
-const COLLOC_STATUSES = ['In Progress', 'Complete', 'Analysis Pending', 'Collocation Complete'];
+const COLLOC_STATUSES = ['In Progress', 'Finished', 'Analysis Pending', 'Complete'];
 const COLLOC_STATUS_CSS = {
     'In Progress': 'cs-in-progress',
-    'Complete': 'cs-complete',
+    'Finished': 'cs-complete',
     'Analysis Pending': 'cs-analysis',
-    'Collocation Complete': 'cs-verified'
+    'Complete': 'cs-verified'
 };
 
 function persistCollocationUpdate(id, updates) {
@@ -9161,12 +9197,12 @@ function persistCollocationUpdate(id, updates) {
 function updateSidebarCollocationCount() {
     const el = document.getElementById('sidebar-colloc-count');
     if (!el) return;
-    const count = collocations.filter(c => c.status !== 'Collocation Complete').length;
+    const count = collocations.filter(c => c.status !== 'Complete').length;
     el.textContent = count > 0 ? `(${count})` : '';
 }
 
 function getActiveCollocationsForSensor(sensorId) {
-    return collocations.filter(c => c.sensorIds.includes(sensorId) && c.status !== 'Collocation Complete');
+    return collocations.filter(c => c.sensorIds.includes(sensorId) && c.status !== 'Complete');
 }
 
 function renderCollocationsView() {
@@ -9211,7 +9247,7 @@ function openCollocationDetail(collocId) {
     const communityName = COMMUNITIES.find(c => c.id === colloc.locationId)?.name || colloc.locationId;
     const statusIndex = COLLOC_STATUSES.indexOf(colloc.status);
     const nextStatus = statusIndex < COLLOC_STATUSES.length - 1 ? COLLOC_STATUSES[statusIndex + 1] : null;
-    const isComplete = colloc.status === 'Collocation Complete';
+    const isComplete = colloc.status === 'Complete';
     const showAnalysis = statusIndex >= 1; // Complete or later
 
     const progressHtml = COLLOC_STATUSES.map((st, i) => {
@@ -9268,7 +9304,7 @@ function advanceCollocationStatus(collocId) {
     persistCollocationUpdate(collocId, { status: newStatus });
 
     // Update sensor statuses
-    if (newStatus === 'Complete' || newStatus === 'Collocation Complete') {
+    if (newStatus === 'Finished' || newStatus === 'Complete') {
         colloc.sensorIds.forEach(sId => {
             const s = sensors.find(x => x.id === sId);
             if (s) {
@@ -9821,9 +9857,9 @@ function finalizeCollocationAnalysis(collocId, colloc, parsed, analysisName, bam
     collocAnalysisCache[collocId].validationWarnings = validationWarnings;
 
     // Auto-advance status and remove Collocation tag from sensors
-    if (colloc.status === 'Complete' || colloc.status === 'Analysis Pending') {
-        colloc.status = 'Collocation Complete';
-        persistCollocationUpdate(collocId, { status: 'Collocation Complete' });
+    if (colloc.status === 'Finished' || colloc.status === 'Analysis Pending') {
+        colloc.status = 'Complete';
+        persistCollocationUpdate(collocId, { status: 'Complete' });
         colloc.sensorIds.forEach(sId => {
             const s = sensors.find(x => x.id === sId);
             if (s) {
