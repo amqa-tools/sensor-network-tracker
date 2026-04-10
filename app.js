@@ -246,33 +246,34 @@ async function loadAllData() {
 }
 
 function migrateAuditCollocStatuses() {
-    if (localStorage.getItem('snt_statusMigration_v1')) return;
+    if (localStorage.getItem('snt_statusMigration_v3')) return;
+    // Map old status values to new combined ones
+    function mapStatus(oldStatus) {
+        if (oldStatus === 'Audit Complete' || oldStatus === 'Collocation Complete') return 'Complete';
+        if (oldStatus === 'Finished' || oldStatus === 'Analysis Pending') return 'Finished, Analysis Pending';
+        // Old intermediate "Complete" (field done) → combined "Finished, Analysis Pending"
+        if (oldStatus === 'Complete') return 'Finished, Analysis Pending';
+        return null; // no migration needed
+    }
     let auditCount = 0;
     audits.forEach(a => {
-        if (a.status === 'Audit Complete') {
-            a.status = 'Complete';
-            db.updateAudit(a.id, { status: 'Complete' }).catch(() => {});
-            auditCount++;
-        } else if (a.status === 'Complete') {
-            // Old "Complete" was intermediate (field done) — now called "Finished"
-            a.status = 'Finished';
-            db.updateAudit(a.id, { status: 'Finished' }).catch(() => {});
+        const newStatus = mapStatus(a.status);
+        if (newStatus && newStatus !== a.status) {
+            a.status = newStatus;
+            db.updateAudit(a.id, { status: newStatus }).catch(() => {});
             auditCount++;
         }
     });
     let collocCount = 0;
     collocations.forEach(c => {
-        if (c.status === 'Collocation Complete') {
-            c.status = 'Complete';
-            db.updateCollocation(c.id, { status: 'Complete' }).catch(() => {});
-            collocCount++;
-        } else if (c.status === 'Complete') {
-            c.status = 'Finished';
-            db.updateCollocation(c.id, { status: 'Finished' }).catch(() => {});
+        const newStatus = mapStatus(c.status);
+        if (newStatus && newStatus !== c.status) {
+            c.status = newStatus;
+            db.updateCollocation(c.id, { status: newStatus }).catch(() => {});
             collocCount++;
         }
     });
-    localStorage.setItem('snt_statusMigration_v1', '1');
+    localStorage.setItem('snt_statusMigration_v3', '1');
     if (auditCount > 0 || collocCount > 0) {
         console.log(`Migrated ${auditCount} audit + ${collocCount} collocation statuses to new names`);
     }
@@ -3719,22 +3720,17 @@ function openAddNoteModal(contextId, contextType) {
     document.querySelectorAll('#note-actions-list input[type="checkbox"]').forEach(cb => cb.checked = false);
     document.getElementById('note-status-change-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
+    document.getElementById('note-move-target-group').style.display = 'none';
 
-    // Show status change action only when on a sensor page
-    const statusLabel = document.getElementById('note-action-status-label');
+    // Pre-populate status list with current sensor's statuses if available
     if (contextType === 'sensor') {
-        statusLabel.style.display = '';
         const s = sensors.find(x => x.id === contextId);
         renderStatusToggleList('note-status-list', s ? getStatusArray(s) : []);
     } else {
-        statusLabel.style.display = 'none';
+        renderStatusToggleList('note-status-list', []);
     }
 
-    // Reset and populate the move sensors dropdown
-    const moveCheckbox = document.getElementById('note-move-sensors');
-    if (moveCheckbox) moveCheckbox.checked = false;
-    const moveTargetGroup = document.getElementById('note-move-target-group');
-    if (moveTargetGroup) moveTargetGroup.style.display = 'none';
+    // Populate the move sensors dropdown
     const moveTargetSelect = document.getElementById('note-move-target-community');
     if (moveTargetSelect) {
         // Sort: regulatory sites first, then alphabetical
@@ -3751,16 +3747,25 @@ function openAddNoteModal(contextId, contextType) {
 
 function onNoteActionsChange() {
     const statusChecked = document.getElementById('note-action-status').checked;
+    const moveChecked = document.getElementById('note-action-move').checked;
 
     // Show/hide status toggle list
     const statusGroup = document.getElementById('note-status-change-group');
-    statusGroup.style.display = statusChecked ? '' : 'none';
+    if (statusGroup) statusGroup.style.display = statusChecked ? '' : 'none';
+
+    // Show/hide move target dropdown
+    const moveTargetGroup = document.getElementById('note-move-target-group');
+    if (moveTargetGroup) moveTargetGroup.style.display = moveChecked ? '' : 'none';
+
+    // Render status toggle list when status checkbox is checked (use full ALL_STATUSES list)
+    if (statusChecked) {
+        renderStatusToggleList('note-status-list', []);
+    }
 }
 
 function getNoteActionsType() {
     const actions = [];
-    if (document.getElementById('note-action-install').checked) actions.push('Sensor Install');
-    if (document.getElementById('note-action-removal').checked) actions.push('Sensor Removal');
+    if (document.getElementById('note-action-move').checked) actions.push('Movement');
     if (document.getElementById('note-action-troubleshooting').checked) actions.push('Troubleshooting');
     if (document.getElementById('note-action-site-work').checked) actions.push('Site Work');
     if (document.getElementById('note-action-status').checked) actions.push('Status Change');
@@ -3808,33 +3813,11 @@ function saveNote(e) {
         taggedContacts: contactTags,
     };
 
-    // Apply status change if checked — merge into the same note
-    const contextType = document.getElementById('note-context-type').value;
-    const contextId = document.getElementById('note-context-id').value;
-    if (contextType === 'sensor' && document.getElementById('note-action-status').checked) {
-        const newStatuses = getSelectedStatuses('note-status-list');
-        const s = sensors.find(x => x.id === contextId);
-        if (s && newStatuses.length > 0) {
-            const oldStatuses = getStatusArray(s);
-            s.status = newStatuses;
-            persistSensor(s);
-
-            if (!setupMode) {
-                const statusText = `${s.id} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
-                note.text = note.text + '\n' + statusText;
-                // note.type already set by getNoteActionsType() which includes 'Status Change'
-                // Ensure sensor and community are tagged
-                if (!note.taggedSensors.includes(s.id)) note.taggedSensors.push(s.id);
-                if (s.community && !note.taggedCommunities.includes(s.community)) note.taggedCommunities.push(s.community);
-            }
-        }
-    }
-
     notes.push(note); persistNote(note);
 
-    // Move tagged sensors if checked
+    // Move tagged sensors if Move Sensors action is checked
     let movedCount = 0;
-    if (document.getElementById('note-move-sensors')?.checked) {
+    if (document.getElementById('note-action-move')?.checked) {
         const targetCommunityId = document.getElementById('note-move-target-community')?.value || '';
         if (targetCommunityId && sensorTags.length > 0) {
             const targetName = getCommunityName(targetCommunityId);
@@ -3846,20 +3829,37 @@ function saveNote(e) {
                 s.community = targetCommunityId;
                 persistSensor(s);
                 movedCount++;
-                // Create a movement note for each sensor
-                if (!setupMode) {
-                    createNote('Movement', `${sId} removed from ${fromName} and brought to ${targetName}.`, {
-                        sensors: [sId],
-                        communities: [s.community, targetCommunityId].filter(Boolean),
-                    });
-                }
             });
             buildSensorSidebar();
+            // Add the move details to the note text
+            note.text = note.text + `\nMoved ${movedCount} sensor${movedCount === 1 ? '' : 's'} to ${targetName}.`;
+            db.updateNote(note.id, { text: note.text }).catch(() => {});
+        }
+    }
+
+    // Apply status change to all tagged sensors if Status Change action is checked
+    let statusChangedCount = 0;
+    if (document.getElementById('note-action-status')?.checked) {
+        const newStatuses = getSelectedStatuses('note-status-list');
+        if (newStatuses.length > 0 && sensorTags.length > 0) {
+            sensorTags.forEach(sId => {
+                const s = sensors.find(x => x.id === sId);
+                if (!s) return;
+                s.status = newStatuses;
+                persistSensor(s);
+                statusChangedCount++;
+            });
+            buildSensorSidebar();
+            note.text = note.text + `\nStatus set to "${newStatuses.join(', ')}" for ${statusChangedCount} sensor${statusChangedCount === 1 ? '' : 's'}.`;
+            db.updateNote(note.id, { text: note.text }).catch(() => {});
         }
     }
 
     closeModal('modal-add-note');
-    showSuccessToast(movedCount > 0 ? `Note added · ${movedCount} sensor${movedCount === 1 ? '' : 's'} moved` : 'Note added');
+    let toastMsg = 'Note added';
+    if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
+    if (statusChangedCount > 0) toastMsg += ` · ${statusChangedCount} status updated`;
+    showSuccessToast(toastMsg);
     refreshCurrentView();
 }
 
@@ -6717,8 +6717,8 @@ function confirmCloseTicket() {
 }
 
 // ===== AUDITS =====
-const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Finished', 'Analysis Pending', 'Complete'];
-const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Finished': 'as-complete', 'Analysis Pending': 'as-analysis', 'Complete': 'as-verified' };
+const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Finished, Analysis Pending', 'Complete'];
+const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Finished, Analysis Pending': 'as-analysis', 'Complete': 'as-verified' };
 const AUDIT_PARAMETERS = [
     { key: 'pm25', label: 'PM2.5', labelHtml: 'PM<sub>2.5</sub>', unit: '\u00B5g/m\u00B3', hasTimeSeries: true },
     { key: 'pm10', label: 'PM10', labelHtml: 'PM<sub>10</sub>', unit: '\u00B5g/m\u00B3', hasTimeSeries: true },
@@ -6885,7 +6885,7 @@ function openAuditDetail(auditId) {
             ${nextStatus ? `<button class="btn btn-primary" onclick="advanceAuditStatus('${audit.id}')">Advance to: ${nextStatus}</button>` : ''}
             ${idx > 0 ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
             <span class="action-spacer"></span>
-            ${audit.status === 'Finished' || audit.status === 'Analysis Pending' || audit.status === 'Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
+            ${audit.status === 'Finished, Analysis Pending' || audit.status === 'Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
             ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn" onclick="delete analysisDataCache['${audit.id}']; beginAnalysis('${audit.id}')">Re-upload Data</button>` : ''}
             <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
         </div>
@@ -6944,7 +6944,7 @@ function advanceAuditStatus(auditId) {
         const updates = { status: newStatus };
 
         if (newStatus === 'In Progress' && !audit.actualStart) { audit.actualStart = localDate(); updates.actualStart = audit.actualStart; }
-        if (newStatus === 'Finished' && !audit.actualEnd) { audit.actualEnd = localDate(); updates.actualEnd = audit.actualEnd; }
+        if (newStatus === 'Finished, Analysis Pending' && !audit.actualEnd) { audit.actualEnd = localDate(); updates.actualEnd = audit.actualEnd; }
         persistAuditUpdate(auditId, updates);
 
         const auditStatusPrefix = 'Audit: ';
@@ -6963,9 +6963,9 @@ function advanceAuditStatus(auditId) {
 
         if (auditPod) {
             const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
-            if (newStatus === 'In Progress' || newStatus === 'Finished') {
+            if (newStatus === 'In Progress') {
                 auditPod.status = [...cleaned, 'Auditing a Community'];
-            } else if (newStatus === 'Analysis Pending' || newStatus === 'Complete') {
+            } else {
                 auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
             }
             persistSensor(auditPod);
@@ -7012,7 +7012,7 @@ function revertAuditStatus(auditId) {
     }
     if (auditPod) {
         const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
-        if (newStatus === 'In Progress' || newStatus === 'Finished') {
+        if (newStatus === 'In Progress') {
             auditPod.status = [...cleaned, 'Auditing a Community'];
         } else {
             auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
@@ -7743,9 +7743,9 @@ function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collected
 
     // Advance status based on DQO results
     const allPass = AUDIT_PARAMETERS.filter(p => audit.analysisResults[p.key]).every(p => audit.analysisResults[p.key]?.pass) && AUDIT_PARAMETERS.some(p => audit.analysisResults[p.key]);
-    if (audit.status === 'Finished' || audit.status === 'Analysis Pending') {
+    if (audit.status === 'Finished, Analysis Pending') {
         const oldStatus = audit.status;
-        const newStatus = allPass ? 'Complete' : 'Analysis Pending';
+        const newStatus = allPass ? 'Complete' : 'Finished, Analysis Pending';
         audit.status = newStatus;
         persistAuditUpdate(auditId, { status: newStatus });
 
@@ -9225,11 +9225,10 @@ async function uploadAuditPhotos(auditId, communityId, files) {
 }
 
 // ===== COLLOCATION SYSTEM =====
-const COLLOC_STATUSES = ['In Progress', 'Finished', 'Analysis Pending', 'Complete'];
+const COLLOC_STATUSES = ['In Progress', 'Finished, Analysis Pending', 'Complete'];
 const COLLOC_STATUS_CSS = {
     'In Progress': 'cs-in-progress',
-    'Finished': 'cs-complete',
-    'Analysis Pending': 'cs-analysis',
+    'Finished, Analysis Pending': 'cs-analysis',
     'Complete': 'cs-verified'
 };
 
@@ -9347,7 +9346,7 @@ function advanceCollocationStatus(collocId) {
     persistCollocationUpdate(collocId, { status: newStatus });
 
     // Update sensor statuses
-    if (newStatus === 'Finished' || newStatus === 'Complete') {
+    if (newStatus === 'Finished, Analysis Pending' || newStatus === 'Complete') {
         colloc.sensorIds.forEach(sId => {
             const s = sensors.find(x => x.id === sId);
             if (s) {
@@ -9900,7 +9899,7 @@ function finalizeCollocationAnalysis(collocId, colloc, parsed, analysisName, bam
     collocAnalysisCache[collocId].validationWarnings = validationWarnings;
 
     // Auto-advance status and remove Collocation tag from sensors
-    if (colloc.status === 'Finished' || colloc.status === 'Analysis Pending') {
+    if (colloc.status === 'Finished, Analysis Pending') {
         colloc.status = 'Complete';
         persistCollocationUpdate(collocId, { status: 'Complete' });
         colloc.sensorIds.forEach(sId => {
