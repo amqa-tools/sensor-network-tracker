@@ -5521,10 +5521,8 @@ function getIssueSensorCount() {
 
 function getSensorTags() {
     return [
-        { label: 'Issue Sensors', id: 'Issue Sensors', count: getIssueSensorCount() },
         { label: 'Community Pod', id: 'Community Pod', count: sensors.filter(s => s.type === 'Community Pod').length },
         { label: 'Audit & Permanent Pods', id: 'Audit & Permanent Pods', count: sensors.filter(s => s.type === 'Audit Pod' || s.type === 'Permanent Pod').length },
-        { label: 'Collocation/Health Check', id: 'Collocation/Health Check', count: sensors.filter(s => s.type === 'Collocation/Health Check').length },
         { label: 'Not Assigned', id: 'Not Assigned', count: sensors.filter(s => s.type === 'Not Assigned').length },
     ];
 }
