@@ -5703,7 +5703,7 @@ function saveCollocation(e) {
     const s = sensors.find(x => x.id === sensorId);
     const communityId = s?.community || '';
     // Create note with structured additionalInfo for getMostRecentCollocation
-    const noteText = `Collocation at ${location}: ${formatDate(startDate)} \u2013 ${formatDate(endDate)}.${extraNotes ? ' ' + extraNotes : ''}`;
+    const noteText = `Collocation at ${location}: ${formatDate(startDate)} \u2013 ${formatDate(endDate)}.`;
     const structuredInfo = JSON.stringify({
         userNotes: extraNotes || '',
         location: location,
@@ -5764,7 +5764,7 @@ async function saveGlobalCollocation(e) {
     if (taggedSensors.length === 0) { showAlert('Validation Error', 'Tag at least one sensor for this collocation.'); return; }
 
     const endDisplay = endTbd ? 'TBD' : formatDate(endDate);
-    const noteText = `Collocation at ${communityName}: ${formatDate(startDate)} \u2013 ${endDisplay}.${conductedBy ? ' Conducted by ' + conductedBy + '.' : ''}${extraNotes ? ' ' + extraNotes : ''}`;
+    const noteText = `Collocation at ${communityName}: ${formatDate(startDate)} \u2013 ${endDisplay}.${conductedBy ? ' Conducted by ' + conductedBy + '.' : ''}`;
 
     const structuredInfo = JSON.stringify({
         userNotes: extraNotes || '',
