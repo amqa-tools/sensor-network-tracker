@@ -4820,16 +4820,18 @@ const FILTER_GROUPS = {
     '_movement': ['Movement', 'Sensor Install', 'Sensor Removal', 'Sensor Install + Sensor Removal'],
     '_troubleshooting': ['Troubleshooting', 'Site Work', 'Issue', 'Maintenance', 'Troubleshooting + Site Work'],
     '_status': ['Status Change'],
-    '_audit': ['Audit', 'Collocation'],
-    '_service': ['Service'],
     '_general': ['General', 'Info Edit'],
 };
+
+// Note types handled by dedicated tabs on the sensor detail page — excluded from the history timeline
+const SENSOR_HISTORY_EXCLUDED_TYPES = ['Audit', 'Collocation', 'Service'];
 
 function filterSensorHistory() {
     if (!currentSensor) return;
     const filterVal = document.getElementById('sensor-history-filter')?.value || '';
 
     let sensorNotes = notes.filter(n => n.taggedSensors && n.taggedSensors.includes(currentSensor));
+    sensorNotes = sensorNotes.filter(n => !SENSOR_HISTORY_EXCLUDED_TYPES.some(t => n.type === t || (n.type && n.type.startsWith(t + ' '))));
 
     if (filterVal && FILTER_GROUPS[filterVal]) {
         const group = FILTER_GROUPS[filterVal];
