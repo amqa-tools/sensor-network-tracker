@@ -1546,7 +1546,7 @@ function getStatusBadgeClass(status) {
     return 'badge-offline';
 }
 
-const SENSOR_TYPES = ['Community Pod', 'Permanent Pod', 'Audit Pod', 'Collocation/Health Check', 'Not Assigned'];
+const SENSOR_TYPES = ['Community Pod', 'Permanent Pod', 'Audit Pod', 'Not Assigned'];
 
 // Get status as array (handles old single-string data and new array data)
 function getStatusArray(s) {
