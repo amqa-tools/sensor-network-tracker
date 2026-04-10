@@ -10823,20 +10823,8 @@ function renderUserGuide() {
     if (!container) return;
     if (container.dataset.loaded) return;
     container.dataset.loaded = '1';
-    fetch('user-guide.html')
-        .then(r => r.text())
-        .then(html => {
-            // Extract just the body content (between <body> and </body>)
-            const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-            if (bodyMatch) {
-                container.innerHTML = bodyMatch[1];
-            } else {
-                container.innerHTML = html;
-            }
-        })
-        .catch(() => {
-            container.innerHTML = '<p style="color:var(--slate-400)">Could not load user guide. Make sure user-guide.html is in the same folder as the app.</p>';
-        });
+    // Use an iframe so the guide renders with its full standalone styles
+    container.innerHTML = '<iframe src="user-guide.html" style="width:100%;height:calc(100vh - 180px);border:none;border-radius:8px;background:#fff" title="User Guide"></iframe>';
 }
 
 function exportUserGuide() {
