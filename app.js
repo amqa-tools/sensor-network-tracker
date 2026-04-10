@@ -3730,6 +3730,22 @@ function openAddNoteModal(contextId, contextType) {
         statusLabel.style.display = 'none';
     }
 
+    // Reset and populate the move sensors dropdown
+    const moveCheckbox = document.getElementById('note-move-sensors');
+    if (moveCheckbox) moveCheckbox.checked = false;
+    const moveTargetGroup = document.getElementById('note-move-target-group');
+    if (moveTargetGroup) moveTargetGroup.style.display = 'none';
+    const moveTargetSelect = document.getElementById('note-move-target-community');
+    if (moveTargetSelect) {
+        // Sort: regulatory sites first, then alphabetical
+        const regulatoryIds = ['anc-garden', 'fbx-ncore', 'jnu-floyd-dryden'];
+        const reg = COMMUNITIES.filter(c => regulatoryIds.includes(c.id));
+        const others = COMMUNITIES.filter(c => !regulatoryIds.includes(c.id)).sort((a, b) => a.name.localeCompare(b.name));
+        moveTargetSelect.innerHTML = '<option value="">— Select destination community —</option>' +
+            (reg.length > 0 ? `<optgroup label="Regulatory Sites">${reg.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>` : '') +
+            `<optgroup label="Communities">${others.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`;
+    }
+
     openModal('modal-add-note');
 }
 
@@ -3816,7 +3832,34 @@ function saveNote(e) {
 
     notes.push(note); persistNote(note);
 
-    closeModal('modal-add-note'); showSuccessToast('Note added');
+    // Move tagged sensors if checked
+    let movedCount = 0;
+    if (document.getElementById('note-move-sensors')?.checked) {
+        const targetCommunityId = document.getElementById('note-move-target-community')?.value || '';
+        if (targetCommunityId && sensorTags.length > 0) {
+            const targetName = getCommunityName(targetCommunityId);
+            sensorTags.forEach(sId => {
+                const s = sensors.find(x => x.id === sId);
+                if (!s) return;
+                const fromName = getCommunityName(s.community);
+                if (s.community === targetCommunityId) return; // already there
+                s.community = targetCommunityId;
+                persistSensor(s);
+                movedCount++;
+                // Create a movement note for each sensor
+                if (!setupMode) {
+                    createNote('Movement', `${sId} removed from ${fromName} and brought to ${targetName}.`, {
+                        sensors: [sId],
+                        communities: [s.community, targetCommunityId].filter(Boolean),
+                    });
+                }
+            });
+            buildSensorSidebar();
+        }
+    }
+
+    closeModal('modal-add-note');
+    showSuccessToast(movedCount > 0 ? `Note added · ${movedCount} sensor${movedCount === 1 ? '' : 's'} moved` : 'Note added');
     refreshCurrentView();
 }
 

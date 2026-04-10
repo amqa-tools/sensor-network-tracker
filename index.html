@@ -159,7 +159,7 @@
                 <div class="view-header">
                     <h1>All Sensors</h1>
                     <button class="btn btn-primary" onclick="openAddSensorModal()">+ Add Sensor</button>
-                    <button class="btn" onclick="openAddNoteModal('', '')">Add Mass Note</button>
+                    <button class="btn" onclick="openAddNoteModal('', '')">Mass Action</button>
                     <a class="import-link" onclick="exportSensors()" style="cursor:pointer">Export as Spreadsheet</a>
                 </div>
                 <div class="filter-bar">
@@ -748,6 +748,12 @@
                             <input type="text" class="tag-chip-input" placeholder="Type to search communities...">
                         </div>
                         <div class="tag-chip-dropdown mention-dropdown"></div>
+                    </div>
+                </div>
+                <div class="form-group" id="note-move-sensors-group">
+                    <label class="note-action-option"><input type="checkbox" id="note-move-sensors" onchange="document.getElementById('note-move-target-group').style.display = this.checked ? '' : 'none'"> Also move tagged sensors to a community</label>
+                    <div id="note-move-target-group" style="display:none;margin-top:8px">
+                        <select id="note-move-target-community" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)"><option value="">— Select destination community —</option></select>
                     </div>
                 </div>
                 <div class="form-group">
