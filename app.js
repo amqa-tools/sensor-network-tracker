@@ -226,6 +226,9 @@ async function loadAllData() {
     // Remove Collocation status from sensors with no active collocation
     cleanupStaleCollocationStatuses();
 
+    // One-time fix: re-apply Collocation tag to sensors in active collocations
+    restoreMissingCollocationStatuses();
+
     // Clean up orphaned Collocation notes (notes tagged to sensors with no matching active collocation)
     cleanupOrphanedCollocationNotes();
 
@@ -312,6 +315,31 @@ function cleanupStaleCollocationStatuses() {
             persistSensor(s);
         }
     });
+}
+
+function restoreMissingCollocationStatuses() {
+    // One-time fix: re-apply Collocation tag to sensors that are in active collocations
+    // but lost the tag (e.g., from Mass Action status overwrites before the merge fix)
+    if (localStorage.getItem('snt_restoreCollocStatus_v1')) return;
+    let count = 0;
+    collocations.forEach(c => {
+        if (c.status === 'Complete') return;
+        (c.sensorIds || []).forEach(id => {
+            const s = sensors.find(x => x.id === id);
+            if (!s) return;
+            const statuses = getStatusArray(s);
+            if (!statuses.includes('Collocation')) {
+                s.status = [...statuses, 'Collocation'];
+                persistSensor(s);
+                count++;
+            }
+        });
+    });
+    if (count > 0) {
+        console.log(`Restored Collocation status on ${count} sensor(s)`);
+        buildSensorSidebar();
+    }
+    localStorage.setItem('snt_restoreCollocStatus_v1', '1');
 }
 
 function cleanupOrphanedCollocationNotes() {
