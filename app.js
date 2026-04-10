@@ -3838,6 +3838,7 @@ function saveNote(e) {
     }
 
     // Apply status change to all tagged sensors if Status Change action is checked
+    // ADDS the selected statuses to existing ones, doesn't replace
     let statusChangedCount = 0;
     if (document.getElementById('note-action-status')?.checked) {
         const newStatuses = getSelectedStatuses('note-status-list');
@@ -3845,12 +3846,21 @@ function saveNote(e) {
             sensorTags.forEach(sId => {
                 const s = sensors.find(x => x.id === sId);
                 if (!s) return;
-                s.status = newStatuses;
+                const existing = getStatusArray(s);
+                // Merge new statuses with existing, preserving Online/Offline mutual exclusion
+                let merged = [...existing];
+                newStatuses.forEach(st => {
+                    // If adding Online, remove Offline (and vice versa)
+                    if (st === 'Online') merged = merged.filter(x => x !== 'Offline');
+                    if (st === 'Offline') merged = merged.filter(x => x !== 'Online');
+                    if (!merged.includes(st)) merged.push(st);
+                });
+                s.status = merged;
                 persistSensor(s);
                 statusChangedCount++;
             });
             buildSensorSidebar();
-            note.text = note.text + `\nStatus set to "${newStatuses.join(', ')}" for ${statusChangedCount} sensor${statusChangedCount === 1 ? '' : 's'}.`;
+            note.text = note.text + `\nAdded status "${newStatuses.join(', ')}" to ${statusChangedCount} sensor${statusChangedCount === 1 ? '' : 's'}.`;
             db.updateNote(note.id, { text: note.text }).catch(() => {});
         }
     }
