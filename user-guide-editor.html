@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADEC Sensor Network Tracker — User Guide (EDITOR)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: #f8f9fb;
+    color: #1a2332;
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  .cover {
+    background: linear-gradient(135deg, #1a2332 0%, #2d3d56 100%);
+    color: white;
+    padding: 80px 40px;
+    text-align: center;
+  }
+  .cover h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #d4a84b;
+  }
+  .cover .subtitle {
+    font-size: 1.1rem;
+    color: #8899aa;
+    margin-bottom: 24px;
+  }
+  .cover .version {
+    font-size: 0.85rem;
+    color: #556677;
+  }
+
+  .container {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 32px;
+  }
+
+  h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #1a2332;
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 3px solid #d4a84b;
+  }
+  h2:first-of-type { margin-top: 0; }
+
+  h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #2d3d56;
+    margin: 28px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+
+  .callout {
+    background: #fff;
+    border-left: 4px solid #d4a84b;
+    padding: 16px 20px;
+    margin: 20px 0;
+    border-radius: 0 8px 8px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .callout.tip { border-left-color: #4caf50; }
+  .callout.heads-up { border-left-color: #e74c3c; }
+  .callout .callout-label {
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .callout.tip .callout-label { color: #4caf50; }
+  .callout.heads-up .callout-label { color: #e74c3c; }
+
+  ul, ol {
+    margin: 10px 0 16px 24px;
+  }
+  li { margin-bottom: 6px; }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .feature-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .feature-card h4 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #d4a84b;
+    margin-bottom: 6px;
+  }
+  .feature-card p {
+    font-size: 0.88rem;
+    color: #556677;
+    margin: 0;
+  }
+
+  .workflow {
+    background: #fff;
+    border-radius: 10px;
+    padding: 24px;
+    margin: 20px 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .workflow-steps {
+    display: flex;
+    gap: 0;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .workflow-step {
+    background: #eef1f5;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #2d3d56;
+  }
+  .workflow-arrow {
+    color: #bbb;
+    font-size: 1.2rem;
+    margin: 0 6px;
+  }
+
+  code {
+    background: #eef1f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .toc {
+    background: #fff;
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin: 24px 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .toc h3 { margin-top: 0; color: #d4a84b; }
+  .toc ol { margin-left: 20px; }
+  .toc li { margin-bottom: 4px; }
+  .toc a { color: #2d3d56; text-decoration: none; }
+  .toc a:hover { color: #d4a84b; text-decoration: underline; }
+
+  .footer {
+    text-align: center;
+    padding: 40px;
+    color: #8899aa;
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 640px) {
+    .feature-grid { grid-template-columns: 1fr; }
+    .cover { padding: 50px 24px; }
+    .cover h1 { font-size: 1.8rem; }
+    .container { padding: 24px 20px; }
+  }
+
+  @media print {
+    .cover { padding: 40px 20px; }
+    .container { max-width: 100%; }
+    h2 { page-break-before: always; }
+    h2:first-of-type { page-break-before: avoid; }
+  }
+</style>
+<style>
+  /* Editor-only styles */
+  body { padding-top: 60px; }
+  #editor-toolbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #1a2332;
+    color: #fff;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 10000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  #editor-toolbar .label {
+    font-weight: 700;
+    color: #d4a84b;
+    font-size: 14px;
+    margin-right: 8px;
+  }
+  #editor-toolbar .help {
+    font-size: 12px;
+    color: #8899aa;
+    flex: 1;
+  }
+  #editor-toolbar button {
+    background: #d4a84b;
+    color: #1a2332;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  #editor-toolbar button:hover { background: #e8c97a; }
+  #editor-toolbar button.secondary {
+    background: transparent;
+    color: #fff;
+    border: 1px solid #556677;
+  }
+  [contenteditable="true"]:hover {
+    outline: 1px dashed #d4a84b;
+    outline-offset: 2px;
+  }
+  [contenteditable="true"]:focus {
+    outline: 2px solid #d4a84b;
+    outline-offset: 2px;
+    background: #fffce8;
+  }
+</style>
+</head>
+<body>
+
+<div id="editor-toolbar">
+  <span class="label">EDITOR MODE</span>
+  <span class="help">Click any text to edit. Hover shows dashed outline. Click "Save Edited HTML" when done.</span>
+  <button class="secondary" onclick="window.location.href='user-guide.html'">View Original</button>
+  <button onclick="saveEditedHTML()">Save Edited HTML</button>
+</div>
+
+<script>
+function saveEditedHTML() {
+    // Disable contenteditable temporarily
+    document.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+    // Remove the editor toolbar and styles from the saved file
+    const toolbar = document.getElementById('editor-toolbar');
+    const editorStyle = document.querySelector('style:first-of-type');
+    // Get a clean clone
+    const clone = document.documentElement.cloneNode(true);
+    // Remove editor-only elements from the clone
+    const cloneToolbar = clone.querySelector('#editor-toolbar');
+    if (cloneToolbar) cloneToolbar.remove();
+    // Remove the editor script and editor styles
+    clone.querySelectorAll('script').forEach(s => s.remove());
+    // Remove the editor-only style block (find by content)
+    clone.querySelectorAll('style').forEach(s => {
+        if (s.textContent.includes('#editor-toolbar')) s.remove();
+    });
+    // Update title back to non-editor
+    const title = clone.querySelector('title');
+    if (title) title.textContent = 'ADEC Sensor Network Tracker — User Guide';
+    // Build the HTML output
+    const html = '<!DOCTYPE html>\n' + clone.outerHTML;
+    // Re-enable contenteditable on this page so user can keep editing
+    enableEditing();
+    // Download
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'user-guide.html';
+    a.click();
+    URL.revokeObjectURL(url);
+    alert('Saved! Replace user-guide.html in the sensor-network-tracker folder with this downloaded file.');
+}
+
+function enableEditing() {
+    // Make all text content editable
+    document.querySelectorAll('h1, h2, h3, h4, p, li, .callout, .feature-card, .workflow-step').forEach(el => {
+        if (el.closest('#editor-toolbar')) return;
+        el.setAttribute('contenteditable', 'true');
+    });
+}
+
+window.addEventListener('DOMContentLoaded', enableEditing);
+</script>
+
+<div class="cover">
+  <h1>Sensor Network Tracker</h1>
+  <div class="subtitle">User Guide &amp; App Overview</div>
+  <div>Alaska Department of Environmental Conservation</div>
+  <div>Air Monitoring &amp; Quality Assurance</div>
+  <div class="version" style="margin-top: 16px">April 2026</div>
+</div>
+
+<div class="container">
+
+<div class="toc">
+  <h3>What's in This Guide</h3>
+  <ol>
+    <li><a href="#overview">What Is This App?</a></li>
+    <li><a href="#getting-started">Getting Started</a></li>
+    <li><a href="#sensors">Working with Sensors</a></li>
+    <li><a href="#communities">Communities</a></li>
+    <li><a href="#notes">Notes &amp; Event History</a></li>
+    <li><a href="#tickets">Service Tickets</a></li>
+    <li><a href="#collocations">Collocations</a></li>
+    <li><a href="#audits">Audits</a></li>
+    <li><a href="#analysis">Data Analysis &amp; Reports</a></li>
+    <li><a href="#contacts">Contacts</a></li>
+    <li><a href="#tips">Tips &amp; Good-to-Knows</a></li>
+  </ol>
+</div>
+
+<!-- ==================== OVERVIEW ==================== -->
+<h2 id="overview">1. What Is This App?</h2>
+
+<p>This is our internal tool for tracking everything related to ADEC's air quality sensor network across Alaska. It replaces the old Salesforce workflow and puts everything in one place — sensors, the communities they're deployed in, contacts at each site, service tickets, collocations, and data analysis.</p>
+
+<div class="feature-grid">
+  <div class="feature-card">
+    <h4>Sensor Management</h4>
+    <p>Track every sensor's location, status, install date, and full event history. Move sensors between communities with automatic logging.</p>
+  </div>
+  <div class="feature-card">
+    <h4>Service Tickets</h4>
+    <p>Track repairs and calibrations with QuantAQ. Follow each ticket from opening through shipping, repair, and return.</p>
+  </div>
+  <div class="feature-card">
+    <h4>Collocations</h4>
+    <p>Manage collocations at regulatory sites. Upload data, run regression analysis, and generate formatted reports — all in the app.</p>
+  </div>
+  <div class="feature-card">
+    <h4>Community Tracking</h4>
+    <p>Keep tabs on each community's sensors, contacts, communications, and files. Organized with parent/child community relationships.</p>
+  </div>
+</div>
+
+<!-- ==================== GETTING STARTED ==================== -->
+<h2 id="getting-started">2. Getting Started</h2>
+
+<p>You access the app in your web browser — no installation needed. Just go to the link and sign in with your email and password. Your account needs to be on the allowed list first, so check with the team if you can't log in.</p>
+
+<h3>The Layout</h3>
+<p>The app has a sidebar on the left with everything organized under:</p>
+<ul>
+  <li><strong>Dashboard</strong> — Quick overview with stat cards and the ArcGIS map</li>
+  <li><strong>Sensors</strong> — Full list of all sensors with search/filter</li>
+  <li><strong>Audits</strong> — The audit pipeline (scheduled → in progress → complete)</li>
+  <li><strong>Collocations</strong> — Same pipeline view for collocations</li>
+  <li><strong>Service Tickets</strong> — Track repairs and calibrations with QuantAQ</li>
+  <li><strong>Communities</strong> — All deployment communities organized by region</li>
+  <li><strong>Contacts</strong> — Community contacts grouped by location</li>
+</ul>
+
+<p>Numbers in parentheses next to Collocations and Service Tickets show how many are currently active.</p>
+
+<div class="callout tip">
+  <div class="callout-label">Tip</div>
+  You can pin frequently-used communities or sensors to the sidebar for quick access. Just click the star icon on any sensor or community detail page.
+</div>
+
+<!-- ==================== SENSORS ==================== -->
+<h2 id="sensors">3. Working with Sensors</h2>
+
+<p>The All Sensors page is your main view. You can search by sensor ID, filter by status, and click any sensor to see its full detail page.</p>
+
+<h3>Sensor Statuses</h3>
+<p>Each sensor can have one or more status tags. The main ones you'll see:</p>
+<ul>
+  <li><strong>Online / Offline</strong> — These are mutually exclusive (selecting one deselects the other)</li>
+  <li><strong>Collocation</strong> — Automatically applied when a sensor is part of an active collocation</li>
+  <li><strong>Quant Ticket in Progress</strong> — Applied when a service ticket is open</li>
+  <li><strong>Lab Storage</strong> — Sensor is at one of our lab locations</li>
+  <li><strong>Shipped to Quant / Service at Quant / Shipped from Quant</strong> — Auto-managed by service ticket progression</li>
+</ul>
+
+<h3>Moving a Sensor</h3>
+<p>When you need to move a sensor to a different community, click "Move" on the sensor detail page. You can:</p>
+<ul>
+  <li>Select the destination community</li>
+  <li>Set the date of the move</li>
+  <li>Optionally change the sensor's status at the same time</li>
+  <li>Tag contacts who helped with the move</li>
+  <li>Add notes about the move</li>
+</ul>
+<p>The app will ask if you want to update the install date (unless you're moving to a lab location — it skips the prompt for those since lab moves aren't installations).</p>
+
+<h3>Sensor Detail Page</h3>
+<p>Each sensor has tabs for:</p>
+<ul>
+  <li><strong>Event History</strong> — Every note, status change, movement, and service event. Filterable by category.</li>
+  <li><strong>Collocations</strong> — All collocations this sensor was part of, plus its initial collocation from the original Salesforce data</li>
+  <li><strong>Audits</strong> — Any audits involving this sensor</li>
+  <li><strong>Service Tickets</strong> — Open and closed tickets with progress notes</li>
+</ul>
+
+<!-- ==================== COMMUNITIES ==================== -->
+<h2 id="communities">4. Communities</h2>
+
+<p>Communities are organized by region tags. Some communities are children of others (like sub-communities under a parent region). You can change these relationships anytime with the "Change Parent" button.</p>
+
+<p>Each community page shows its sensors, contacts, event history, communications, and files. You can add sub-communities, deactivate communities you're no longer working with, and reactivate them later if needed.</p>
+
+<div class="callout">
+  <div class="callout-label">How Community History Works</div>
+  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities.
+</div>
+
+<!-- ==================== NOTES ==================== -->
+<h2 id="notes">5. Notes &amp; Event History</h2>
+
+<p>Notes are how everything gets documented in the app. When you add a note, you can:</p>
+<ul>
+  <li>Select <strong>Actions</strong> — Sensor Install, Sensor Removal, Troubleshooting, Site Work, and/or Sensor Status Change</li>
+  <li>If you check <strong>Sensor Status Change</strong>, you'll get a status picker and the status change gets merged into your note (one entry, not two)</li>
+  <li>Tag sensors, communities, and contacts so the note shows up in the right places</li>
+  <li>Use <strong>@mentions</strong> in the note text to tag contacts inline</li>
+</ul>
+
+<p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — handy for logging things like "Deployed 5 sensors to interior communities."</p>
+
+<h3>Editing Notes</h3>
+<p>Click the pencil icon on any note in the timeline to edit it. The edit modal shows the full text in a textarea so you can make changes without losing any content. Click "Done" to save.</p>
+
+<h3>Event History Filters</h3>
+<p>On sensor pages, the event history dropdown lets you filter by:</p>
+<ul>
+  <li><strong>Sensor Movement</strong> — Installs, removals, relocations</li>
+  <li><strong>Troubleshooting / Site Work</strong> — Field work and issue resolution</li>
+  <li><strong>Status Changes</strong> — Any status modifications</li>
+  <li><strong>Audits / Collocations</strong> — Audit and collocation events</li>
+  <li><strong>Service Tickets</strong> — Ticket-related events</li>
+  <li><strong>Communications</strong> — Logged emails, calls, site visits</li>
+  <li><strong>General Notes</strong> — Everything else</li>
+</ul>
+
+<!-- ==================== TICKETS ==================== -->
+<h2 id="tickets">6. Service Tickets</h2>
+
+<p>Service tickets track the lifecycle of a sensor being sent to QuantAQ for repair or calibration. Each ticket follows this workflow:</p>
+
+<div class="workflow">
+  <div class="workflow-steps">
+    <div class="workflow-step">Ticket Opened</div>
+    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-step">RMA Assigned</div>
+    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-step">Shipped to Quant</div>
+    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-step">At Quant</div>
+    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-step">Shipped from Quant</div>
+    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-step">Received</div>
+  </div>
+</div>
+
+<p>As you advance the ticket through each stage, the sensor's status updates automatically. For example, advancing to "Shipped to Quant" adds that status to the sensor and removes any previous shipping status.</p>
+
+<h3>Progress Notes</h3>
+<p>Each ticket has a Progress Notes section where you can add timestamped updates as things progress. These notes show on both the ticket detail and the sensor page's ticket preview, so you can see the latest status without clicking into the ticket.</p>
+
+<h3>Return Tracking</h3>
+<p>There are fields for return tracking info (to and from QuantAQ). Just enter the carrier and tracking number, like "UPS, 1234567890".</p>
+
+<h3>Closed Tickets</h3>
+<p>Closed tickets appear in their own section at the bottom of the Service Tickets page — just scroll down. No need to toggle a checkbox.</p>
+
+<!-- ==================== COLLOCATIONS ==================== -->
+<h2 id="collocations">7. Collocations</h2>
+
+<p>Collocations are when we place community sensors at a regulatory site (Garden, NCore, or Floyd Dryden) alongside a BAM reference monitor and permanent pod to verify the sensors are reading accurately.</p>
+
+<h3>Starting a Collocation</h3>
+<p>Click "+ Start Collocation" from the Collocations page in the sidebar. You'll pick:</p>
+<ul>
+  <li><strong>Location</strong> — Regulatory sites are listed first, then all other communities alphabetically</li>
+  <li><strong>Sensors</strong> — Tag the sensors being collocated</li>
+  <li><strong>Conducted By</strong> — Who's running it</li>
+  <li><strong>Notes</strong> — Any details</li>
+</ul>
+
+<p>The sensors automatically get a "Collocation" status tag, and it's removed when the collocation completes.</p>
+
+<div class="workflow">
+  <h4 style="margin:0 0 8px;color:#2d3d56">Collocation Workflow</h4>
+  <div class="workflow-steps">
+    <div class="workflow-step">In Progress</div>
+    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-step">Complete</div>
+    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-step">Analysis Pending</div>
+    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-step">Collocation Complete</div>
+  </div>
+</div>
+
+<h3>Progress Notes</h3>
+<p>Just like service tickets, collocations have a progress notes section for tracking updates throughout the process. Add notes anytime from the collocation detail view.</p>
+
+<!-- ==================== AUDITS ==================== -->
+<h2 id="audits">8. Audits</h2>
+
+<p>Audits are similar to collocations but involve sending an audit pod to a community to run alongside the community's sensor for validation. The audit workflow goes: Scheduled &rarr; In Progress &rarr; Complete &rarr; Analysis Pending &rarr; Audit Complete.</p>
+
+<p>Each audit tracks the audit pod, community pod, community, dates, and who installed/removed the equipment. Like collocations, audits have progress notes and a full analysis pipeline.</p>
+
+<!-- ==================== ANALYSIS ==================== -->
+<h2 id="analysis">9. Data Analysis &amp; Reports</h2>
+
+<p>This is the big one. Once a collocation or audit reaches "Complete," you can upload an Excel data file and the app runs the full regression analysis for you.</p>
+
+<h3>Uploading Data</h3>
+<ol>
+  <li>Export hourly data from AirVision for the BAM, permanent pod, and all community pods</li>
+  <li>When selecting regulatory site data, use <strong>PM2.5 and PM10 local conditions</strong></li>
+  <li>Clean up any invalidated data and trim to the collocation dates</li>
+  <li><strong>Don't remove the first 24 hours</strong> — the app handles that automatically</li>
+  <li>Select the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod</li>
+  <li>Upload the Excel file</li>
+</ol>
+
+<h3>What You Get</h3>
+<p>The app automatically:</p>
+<ul>
+  <li>Parses all sensor columns from the spreadsheet</li>
+  <li>Excludes the first 24 hours from regression (the burn-in period)</li>
+  <li>Runs linear regression for each parameter (PM2.5, PM10, CO, NO, NO2, O3)</li>
+  <li>Checks DQO thresholds (R&sup2; &ge; 0.70, slope 0.65-1.35, intercept &plusmn;5)</li>
+  <li>Generates time series charts and regression scatter plots</li>
+  <li>Runs failsafe validation checks to verify the math is correct</li>
+</ul>
+
+<h3>Analysis Tabs</h3>
+<p>The analysis view has tabs matching our standard report format:</p>
+<ul>
+  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM2.5, PM10, CO, etc.)</li>
+  <li><strong>Pods vs BAM</strong> — Each sensor regressed against the BAM (PM only)</li>
+  <li><strong>Quants PM</strong> — Each pod compared against the permanent pod for PM</li>
+  <li><strong>Quants Gaseous</strong> — Same for gas parameters (CO, NO, NO2, O3)</li>
+  <li><strong>Data Sheet</strong> — Full data table with yellow-shaded first 24 hours and red-highlighted missing data</li>
+</ul>
+
+<h3>Saving Reports</h3>
+<p>Click "Save as HTML" to download a standalone report file. It opens in any browser with all the interactive charts — no server needed. The filename follows the format: <code>Garden_Collocation_Analysis_445_451_674_Mar19_Apr1_2026.html</code></p>
+
+<h3>Validation Checks</h3>
+<p>Every analysis includes automated failsafe checks (click the validation dropdown to review):</p>
+<ul>
+  <li><strong>Self-test</strong> — Verifies the regression engine is computing correctly using known test data</li>
+  <li><strong>R&sup2; cross-check</strong> — Independently verifies each R&sup2; value using a different math method</li>
+  <li><strong>Timestamp validation</strong> — Checks for data gaps, short datasets, and date issues</li>
+  <li><strong>Sample size</strong> — Flags if there isn't enough data for reliable results</li>
+  <li><strong>Borderline DQO</strong> — Alerts when a pass/fail result is very close to the threshold</li>
+</ul>
+
+<div class="callout tip">
+  <div class="callout-label">Good to Know</div>
+  X-PM sensors (the Modulair-PM models) only compare PM2.5 and PM10 — gas parameters are automatically skipped for these sensors since they don't measure gases.
+</div>
+
+<!-- ==================== CONTACTS ==================== -->
+<h2 id="contacts">10. Contacts</h2>
+
+<p>Contacts are the people at each community site — tribal administrators, school staff, facility managers, etc. They're grouped by community in the Contacts view.</p>
+
+<p>You can tag contacts in notes using @mentions (type @ and start typing their name), tag them in sensor movements, and add them to the email distribution list. Contacts can be deactivated (not deleted) when they're no longer involved, and reactivated later if needed.</p>
+
+<!-- ==================== TIPS ==================== -->
+<h2 id="tips">11. Tips &amp; Good-to-Knows</h2>
+
+<div class="callout">
+  <div class="callout-label">Timezones</div>
+  Everything in the app runs on Alaska time (America/Anchorage). Dates and times display correctly regardless of what timezone your computer is set to.
+</div>
+
+<div class="callout tip">
+  <div class="callout-label">Online &amp; Offline</div>
+  These two statuses are mutually exclusive everywhere in the app. If you select Online, Offline automatically deselects, and vice versa. No more accidentally having both.
+</div>
+
+<div class="callout">
+  <div class="callout-label">Notes + Status Changes</div>
+  When you add a note and also change the sensor status, they get combined into one entry in the event history — not two separate notes. The status change text gets appended to your note.
+</div>
+
+<div class="callout tip">
+  <div class="callout-label">Community History</div>
+  A community's event history only shows notes explicitly tagged to that community. If a sensor moves in, you won't see its old history from previous communities cluttering things up.
+</div>
+
+<div class="callout">
+  <div class="callout-label">Re-uploading Analysis Data</div>
+  You can re-upload data anytime from the collocation or audit detail view. Just click "Re-upload Data" and it'll clear the old results and let you start fresh. The old analysis is gone once you re-upload — there's no undo.
+</div>
+
+<div class="callout tip">
+  <div class="callout-label">Deleting Things</div>
+  When you delete an audit, collocation, or service ticket, all the auto-generated notes in event histories get cleaned up too. You don't need to manually delete those.
+</div>
+
+<div class="callout">
+  <div class="callout-label">Setup Mode</div>
+  If you see a "Setup Mode" toggle in the sidebar, that's for bulk data entry when first setting up the system. It shows inline edit fields on everything and skips creating history notes for changes. You probably don't need this for day-to-day use.
+</div>
+
+</div>
+
+<div class="footer">
+  ADEC Division of Air Quality &bull; Air Monitoring &amp; Quality Assurance<br>
+  Sensor Network Tracker User Guide &bull; April 2026
+</div>
+
+</body>
+</html>
