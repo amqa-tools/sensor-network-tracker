@@ -162,6 +162,7 @@
                     <button class="btn" onclick="openAddNoteModal('', '')">Mass Action</button>
                     <a class="import-link" onclick="exportSensors()" style="cursor:pointer">Export as Spreadsheet</a>
                 </div>
+                <div id="sensor-type-filters" class="community-tag-filters"></div>
                 <div class="filter-bar">
                     <input type="text" id="sensor-search" placeholder="Search sensors..." oninput="renderSensors()" aria-label="Search sensors">
                     <select id="sensor-status-filter" onchange="renderSensors()" aria-label="Filter by status">

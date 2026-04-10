@@ -1301,7 +1301,7 @@ function showView(viewName) {
     clearTabHighlight();
 
     if (viewName === 'dashboard') renderDashboard();
-    if (viewName === 'all-sensors') renderSensors();
+    if (viewName === 'all-sensors') { renderSensorTypeFilters(); renderSensors(); }
     if (viewName === 'contacts') renderContacts();
     if (viewName === 'communities') renderCommunitiesList();
     if (viewName === 'settings') renderSettings();
@@ -5546,6 +5546,22 @@ function filterSensorsByTag(tag) {
         const link = document.querySelector(`#sensor-tag-list a[data-sensor-tag="${sensorTagFilter}"]`);
         if (link) link.classList.add('active');
     }
+    renderSensorTypeFilters();
+    renderSensors();
+}
+
+function renderSensorTypeFilters() {
+    const container = document.getElementById('sensor-type-filters');
+    if (!container) return;
+    const types = [
+        { label: 'Community Pod', id: 'Community Pod' },
+        { label: 'Audit & Permanent Pods', id: 'Audit & Permanent Pods' },
+        { label: 'Not Assigned', id: 'Not Assigned' },
+    ];
+    container.innerHTML = types.map(t => {
+        const isActive = sensorTagFilter === t.id;
+        return `<button class="community-tag-filter-btn ${isActive ? 'active' : ''}" onclick="filterSensorsByTag('${t.id.replace(/'/g, "\\'")}')">${t.label}</button>`;
+    }).join('');
 }
 
 // ===== SENSOR TABLE SORTING =====
