@@ -235,6 +235,9 @@ async function loadAllData() {
     // One-time migration: convert legacy collocationDates to notes
     cleanupOldMigrationNotes();
 
+    // One-time cleanup: remove duplicated user notes from collocation note titles
+    cleanupDuplicatedCollocationNoteTitles();
+
     // Build O(1) lookup maps
     rebuildLookupMaps();
 }
@@ -459,6 +462,34 @@ function cleanupOldMigrationNotes() {
         console.log('Cleaned up ' + toDelete.length + ' old migration notes');
     }
     localStorage.setItem('snt_collocMigration_cleaned', '1');
+}
+
+function cleanupDuplicatedCollocationNoteTitles() {
+    // One-time fix: trim user-typed notes from the title of collocation notes
+    // The notes already exist in additionalInfo (italics below) — no need to duplicate in title
+    if (localStorage.getItem('snt_collocTitlesCleaned')) return;
+    let count = 0;
+    notes.forEach(n => {
+        if (n.type !== 'Collocation' || !n.text || !n.additionalInfo) return;
+        // Only fix notes that match the auto-generated collocation title pattern
+        if (!/^Collocation at .+:/i.test(n.text)) return;
+        let parsed = null;
+        try { parsed = JSON.parse(n.additionalInfo); } catch (_) {}
+        if (!parsed || !parsed.userNotes) return;
+        const userNotes = parsed.userNotes.trim();
+        if (!userNotes) return;
+        // If the title contains the user notes at the end, strip them
+        if (n.text.includes(userNotes)) {
+            const cleaned = n.text.replace(userNotes, '').replace(/\s+$/, '').replace(/\.\s*$/, '.');
+            if (cleaned !== n.text) {
+                n.text = cleaned;
+                db.updateNote(n.id, { text: cleaned }).catch(() => {});
+                count++;
+            }
+        }
+    });
+    if (count > 0) console.log(`Cleaned ${count} collocation note titles`);
+    localStorage.setItem('snt_collocTitlesCleaned', '1');
 }
 
 
