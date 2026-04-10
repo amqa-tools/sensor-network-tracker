@@ -233,7 +233,7 @@
   </div>
   <div class="feature-card">
     <h4>Collocations and Audits</h4>
-    <p>Manage collocations and audits. Track progress, upload data, run regression analyses, and generate downloadable reports.</p>
+    <p>Manage collocations and audits. Track progress, upload data, run regression analysis, and generate formatted reports — all in the app.</p>
   </div>
   <div class="feature-card">
     <h4>Community Tracking</h4>
@@ -244,7 +244,7 @@
 <!-- ==================== GETTING STARTED ==================== -->
 <h2 id="getting-started">2. Getting Started</h2>
 
-<p>Access the app at [amqa-tools.github.io/sensor-network-tracker] and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.&nbsp;</p>
+<p>You access the app in your web browser — no installation needed. Just go to [amqa-tools.github.io/sensor-network-tracker] and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.&nbsp;</p>
 
 <h3>The Layout</h3>
 <p>The app has a sidebar on the left with everything organized under:</p>
@@ -254,11 +254,9 @@
   <li><strong>Audits</strong> — The audit pipeline (scheduled → in progress → finished, analysis pending&nbsp;→ complete)</li>
   <li><strong>Collocations</strong> — The collocation pipeline (in progress&nbsp;→ finished, analysis pending → complete)</li>
   <li><strong>Service Tickets</strong> — Track repairs and calibrations with QuantAQ, add progress notes, RMA and shipping numbers, etc.</li>
-  <li><strong>Communities</strong> — All involved communities, filterable by sub-network tags</li>
+  <li><strong>Communities</strong> — All deployment communities organized by region, filterable by tags</li>
   <li><strong>Contacts</strong> — Community contacts grouped by location showing primary, active, and inactive statuses for each contact</li>
 </ul>
-
-<p><br></p>
 
 <div class="callout tip">
   <div class="callout-label">Tip</div>
@@ -282,7 +280,7 @@
   <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready to ship or install.</li>
   <li><strong>Needs Repair</strong> — The sensor has a known problem and shouldn't be deployed until it's fixed.</li>
   <li><strong>PM Sensor Issue</strong> — The particulate matter sensor is reporting bad or missing data.</li>
-  <li><strong>Gaseous Sensor Issue</strong> — One of the gas sensors (NO₂, O₃, etc.) is reporting bad or missing data.</li>
+  <li><strong>Gaseous Sensor Issue</strong> — One of the gas sensors (NO<sub>2</sub>, O<sub>3</sub>, etc.) is reporting bad or missing data.</li>
   <li><strong>SD Card Issue</strong> — The pod's SD card is full, missing, or failing.</li>
   <li><strong>Lost Connection</strong> — The sensor isn't reaching the network (covers power loss and connectivity drops).</li>
 </ul>
@@ -309,7 +307,7 @@
 <p>The app will ask if you want to update the install date (unless you're moving to a lab location — it skips the prompt for those since lab moves aren't installations).</p>
 
 <h3>Mass Action — Working with Multiple Sensors at Once</h3>
-<p>If you need to do something with several sensors at once — like installing 5 sensors at Garden after a collocation, or marking a batch of pods as Offline — use the <strong>Mass Action</strong> button at the top of the All Sensors page. It opens a note modal with bulk actions you can apply to all the sensors you tag.</p>
+<p>If you need to do something with several sensors at once — like installing 5 sensors at Garden for a collocation, or marking a batch of pods as Offline — use the <strong>Mass Action</strong> button at the top of the All Sensors page. It opens a note modal with bulk actions you can apply to all the sensors you tag.</p>
 
 <p>Inside the Mass Action modal:</p>
 <ul>
@@ -338,13 +336,13 @@
 <!-- ==================== COMMUNITIES ==================== -->
 <h2 id="communities">4. Communities</h2>
 
-<p>Communities are organized by region tags. Some communities are children of others (like sub-communities under a parent region). You can change these relationships anytime with the "Change Parent" button.</p>
+<p>Communities are organized alphabetically by independent and parent communities, with child communities shown as a subset beneath the parent. You can change community relationships/make a child community independent anytime with the "Change Parent" button in the community details page.</p>
 
 <p>Each community page shows its sensors, contacts, event history, communications, and files. You can add sub-communities, deactivate communities you're no longer working with, and reactivate them later if needed.</p>
 
 <div class="callout">
   <div class="callout-label">How Community History Works</div>
-  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's history.
+  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's own history.
 </div>
 
 <!-- ==================== NOTES ==================== -->
@@ -352,13 +350,13 @@
 
 <p>Notes are how everything gets documented in the app. When you add a note, you can:</p>
 <ul>
-  <li>Select <strong>Actions</strong> — Sensor Install, Sensor Removal, Troubleshooting, Site Work, and/or Sensor Status Change</li>
-  <li>If you check <strong>Sensor Status Change</strong>, you'll get a status picker and the status change gets merged into your note</li>
+  <li>Select <strong>Actions</strong> — Move Sensor, Sensor Status Change, Troubleshooting, Site Work. Select multiple actions as needed.</li>
+  <li>If you check <strong>Sensor Status Change</strong>, select from the status menu and the status change gets merged into your note</li>
   <li>Tag sensors, communities, and contacts so the note shows up in the right places</li>
   <li>Use <strong>@mentions</strong> in the note text to tag contacts inline</li>
 </ul>
 
-<p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — handy for logging things like "Installed 3 sensors at NCore for collocation following their Quant calibration"</p>
+<p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — helpful for logging things like "Installed 3 sensors at NCore for collocation following their Quant calibration"</p>
 
 <h3>Editing Notes</h3>
 <p>Click the pencil icon on any note in the timeline to edit it. The edit modal shows the full text in a text area so you can make changes without losing any content. Click "Done" to save.</p>
@@ -369,8 +367,6 @@
   <li><strong>Sensor Movement</strong> — Installs, removals, relocations</li>
   <li><strong>Troubleshooting / Site Work</strong> — Field work and issue resolution</li>
   <li><strong>Status Changes</strong> — Any status modifications</li>
-  <li><strong>Audits / Collocations</strong> — Audit and collocation events</li>
-  <li><strong>Service Tickets</strong> — Ticket-related events</li>
   <li><strong>Communications</strong> — Logged emails, calls, site visits</li>
   <li><strong>General Notes</strong> — Everything else</li>
 </ul>
@@ -405,7 +401,7 @@
 <p>There are fields for return tracking info (to and from QuantAQ). Just enter the carrier and tracking number, like "UPS, 1234567890".</p>
 
 <h3>Closed Tickets</h3>
-<p>Closed tickets appear in their own section at the bottom of the Service Tickets page</p>
+<p>Closed tickets appear in their own section at the bottom of the Service Tickets page, as well as in the Service Tickets tab on sensor detail pages.</p>
 
 <!-- ==================== COLLOCATIONS ==================== -->
 <h2 id="collocations">7. Collocations</h2>
@@ -465,10 +461,10 @@
 <h3>Uploading Data</h3>
 <ol>
   <li>Export hourly data from AirVision for the BAM, permanent pod, and all community pods</li>
-  <li>When selecting regulatory site data, use <strong>PM2.5 and PM10 local conditions</strong></li>
+  <li>When selecting regulatory site data, use <strong>PM<sub>2.5</sub> and PM<sub>10</sub> local conditions</strong></li>
   <li>Clean up any invalidated data and trim to the collocation dates</li>
   <li><strong>Don't remove the first 24 hours</strong> — the app handles that automatically</li>
-  <li>Select the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod</li>
+  <li>Define the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod (optional) in the upload window</li>
   <li>Upload the Excel file</li>
 </ol>
 
@@ -476,31 +472,31 @@
 <p>The app automatically:</p>
 <ul>
   <li>Parses all sensor columns from the spreadsheet</li>
-  <li>Excludes the first 24 hours from regression (the burn-in period)</li>
-  <li>Runs linear regression for each parameter (PM2.5, PM10, CO, NO, NO2, O3)</li>
+  <li>Excludes the first 24 hours from regression (the settling-in period)</li>
+  <li>Runs linear regression for each parameter (PM<sub>2.5</sub>, PM<sub>10</sub>, CO, NO, NO<sub>2</sub>, O<sub>3</sub>)</li>
   <li>Checks DQO thresholds (R² ≥ 0.70, slope 0.65-1.35, intercept ±5)</li>
   <li>Generates time series charts and regression scatter plots</li>
   <li>Runs failsafe validation checks to verify the math is correct</li>
 </ul>
 
 <h3>Analysis Tabs</h3>
-<p>The analysis view has tabs matching our standard report format:</p>
+<p>The analysis view generates:</p>
 <ul>
-  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM2.5, PM10, CO, etc.)</li>
+  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM<sub>2.5</sub>, PM<sub>10</sub>, CO, etc.)</li>
   <li><strong>Pods vs BAM</strong> — Each sensor regressed against the BAM (PM only)</li>
-  <li><strong>Quants PM</strong> — Each pod compared against the permanent pod for PM</li>
-  <li><strong>Quants Gaseous</strong> — Same for gas parameters (CO, NO, NO2, O3)</li>
-  <li><strong>Data Sheet</strong> — Full data table with yellow-shaded first 24 hours and red-highlighted missing data</li>
+  <li><strong>Quants PM</strong> — Each pod compared against the permanent pod for PM, or each other if no permanent pod is defined</li>
+  <li><strong>Quants Gaseous</strong> — Each pod compared against the permanent pod for gas parameters (CO, NO, NO<sub>2</sub>, O<sub>3</sub>), or each other if no permanent pod is defined</li>
+  <li><strong>Data Sheet</strong> — Full data table with yellow-shaded first 24 hours and red-highlighted missing/removed data</li>
 </ul>
 
 <h3>Saving Reports</h3>
 <p>Click "Save as HTML" to download a standalone report file. It opens in any browser with all the interactive charts — no server needed. The filename follows the format: <code>Garden_Collocation_Analysis_445_451_674_Mar19_Apr1_2026.html</code></p>
 
 <h3>Validation Checks</h3>
-<p>Every analysis includes automated failsafe checks (click the validation dropdown to review):</p>
+<p>Every analysis includes automated failsafe checks (click the validation dropdown in the analysis report to review):</p>
 <ul>
   <li><strong>Self-test</strong> — Verifies the regression engine is computing correctly using known test data</li>
-  <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method</li>
+  <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method. The primary method uses least-squares regression and the cross-check uses Pearson correlation; if the two don't match, the check is flagged.</li>
   <li><strong>Timestamp validation</strong> — Checks for data gaps, short datasets, and date issues</li>
   <li><strong>Sample size</strong> — Flags if there isn't enough data for reliable results</li>
   <li><strong>Borderline DQO</strong> — Alerts when a pass/fail result is very close to the threshold</li>
@@ -508,13 +504,13 @@
 
 <div class="callout tip">
   <div class="callout-label">Good to Know</div>
-  X-PM sensors (the Modulair-PM models) only compare PM2.5 and PM10 — gas parameters are automatically skipped for these sensors since they don't measure gases.
+  X-PM sensors (the Modulair-PM models) only compare PM<sub>2.5</sub> and PM<sub>10</sub> — gas parameters are automatically skipped for these sensors since they don't measure gases.
 </div>
 
 <!-- ==================== CONTACTS ==================== -->
 <h2 id="contacts">10. Contacts</h2>
 
-<p>Contacts are the people at each community site — tribal administrators, school staff, facility managers, etc. They're grouped by community in the Contacts view.</p>
+<p>Contacts include anyone in each community that is involved in the sensor network: tribal administrators, school staff, facility managers, etc. They're grouped by community in the Contacts view.</p>
 
 <p>You can tag contacts in notes using @mentions (type @ and start typing their name), tag them in sensor movements, and add them to the email distribution list. Contacts can be deactivated (not deleted) when they're no longer involved, and reactivated later if needed.</p>
 
@@ -523,12 +519,12 @@
 
 <div class="callout">
   <div class="callout-label">Timezones</div>
-  Everything in the app runs on Alaska time (America/Anchorage). Dates and times display correctly regardless of what timezone your computer is set to.
+  Everything in the app runs on Alaska time (America/Anchorage).
 </div>
 
 <div class="callout tip">
   <div class="callout-label">Online &amp; Offline</div>
-  These two statuses are mutually exclusive everywhere in the app. If you select Online, Offline automatically deselects, and vice versa. No more accidentally having both.
+  These two statuses are mutually exclusive everywhere in the app. If you select Online, Offline automatically deselects, and vice versa.
 </div>
 
 <div class="callout">
@@ -553,7 +549,7 @@
 
 <div class="callout">
   <div class="callout-label">Setup Mode</div>
-  If you see a "Setup Mode" toggle in the sidebar, that's for bulk data entry when first setting up the system. It shows inline edit fields on everything and skips creating history notes for changes. You probably don't need this for day-to-day use.
+  Users with admin rights will see a "Setup Mode" toggle in the sidebar — that's for bulk data entry when first setting up the system. It shows inline edit fields on everything and skips creating history notes for changes. You probably don't need this for day-to-day use.
 </div>
 
 </div>

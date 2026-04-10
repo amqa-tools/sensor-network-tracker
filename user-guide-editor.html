@@ -374,7 +374,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
   <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready to ship or install.</li>
   <li><strong>Needs Repair</strong> — The sensor has a known problem and shouldn't be deployed until it's fixed.</li>
   <li><strong>PM Sensor Issue</strong> — The particulate matter sensor is reporting bad or missing data.</li>
-  <li><strong>Gaseous Sensor Issue</strong> — One of the gas sensors (NO₂, O₃, etc.) is reporting bad or missing data.</li>
+  <li><strong>Gaseous Sensor Issue</strong> — One of the gas sensors (NO<sub>2</sub>, O<sub>3</sub>, etc.) is reporting bad or missing data.</li>
   <li><strong>SD Card Issue</strong> — The pod's SD card is full, missing, or failing.</li>
   <li><strong>Lost Connection</strong> — The sensor isn't reaching the network (covers power loss and connectivity drops).</li>
 </ul>
@@ -461,8 +461,6 @@ window.addEventListener('DOMContentLoaded', enableEditing);
   <li><strong>Sensor Movement</strong> — Installs, removals, relocations</li>
   <li><strong>Troubleshooting / Site Work</strong> — Field work and issue resolution</li>
   <li><strong>Status Changes</strong> — Any status modifications</li>
-  <li><strong>Audits / Collocations</strong> — Audit and collocation events</li>
-  <li><strong>Service Tickets</strong> — Ticket-related events</li>
   <li><strong>Communications</strong> — Logged emails, calls, site visits</li>
   <li><strong>General Notes</strong> — Everything else</li>
 </ul>
@@ -557,7 +555,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <h3>Uploading Data</h3>
 <ol>
   <li>Export hourly data from AirVision for the BAM, permanent pod, and all community pods</li>
-  <li>When selecting regulatory site data, use <strong>PM2.5 and PM10 local conditions</strong></li>
+  <li>When selecting regulatory site data, use <strong>PM<sub>2.5</sub> and PM<sub>10</sub> local conditions</strong></li>
   <li>Clean up any invalidated data and trim to the collocation dates</li>
   <li><strong>Don't remove the first 24 hours</strong> — the app handles that automatically</li>
   <li>Select the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod</li>
@@ -569,7 +567,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <ul>
   <li>Parses all sensor columns from the spreadsheet</li>
   <li>Excludes the first 24 hours from regression (the burn-in period)</li>
-  <li>Runs linear regression for each parameter (PM2.5, PM10, CO, NO, NO2, O3)</li>
+  <li>Runs linear regression for each parameter (PM<sub>2.5</sub>, PM<sub>10</sub>, CO, NO, NO<sub>2</sub>, O<sub>3</sub>)</li>
   <li>Checks DQO thresholds (R² ≥ 0.70, slope 0.65-1.35, intercept ±5)</li>
   <li>Generates time series charts and regression scatter plots</li>
   <li>Runs failsafe validation checks to verify the math is correct</li>
@@ -578,10 +576,10 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <h3>Analysis Tabs</h3>
 <p>The analysis view has tabs matching our standard report format:</p>
 <ul>
-  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM2.5, PM10, CO, etc.)</li>
+  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM<sub>2.5</sub>, PM<sub>10</sub>, CO, etc.)</li>
   <li><strong>Pods vs BAM</strong> — Each sensor regressed against the BAM (PM only)</li>
   <li><strong>Quants PM</strong> — Each pod compared against the permanent pod for PM</li>
-  <li><strong>Quants Gaseous</strong> — Same for gas parameters (CO, NO, NO2, O3)</li>
+  <li><strong>Quants Gaseous</strong> — Same for gas parameters (CO, NO, NO<sub>2</sub>, O<sub>3</sub>)</li>
   <li><strong>Data Sheet</strong> — Full data table with yellow-shaded first 24 hours and red-highlighted missing data</li>
 </ul>
 
@@ -592,7 +590,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <p>Every analysis includes automated failsafe checks (click the validation dropdown to review):</p>
 <ul>
   <li><strong>Self-test</strong> — Verifies the regression engine is computing correctly using known test data</li>
-  <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method</li>
+  <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method. The primary method uses least-squares regression and the cross-check uses Pearson correlation; if the two don't match, the check is flagged.</li>
   <li><strong>Timestamp validation</strong> — Checks for data gaps, short datasets, and date issues</li>
   <li><strong>Sample size</strong> — Flags if there isn't enough data for reliable results</li>
   <li><strong>Borderline DQO</strong> — Alerts when a pass/fail result is very close to the threshold</li>
@@ -600,7 +598,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 
 <div class="callout tip">
   <div class="callout-label">Good to Know</div>
-  X-PM sensors (the Modulair-PM models) only compare PM2.5 and PM10 — gas parameters are automatically skipped for these sensors since they don't measure gases.
+  X-PM sensors (the Modulair-PM models) only compare PM<sub>2.5</sub> and PM<sub>10</sub> — gas parameters are automatically skipped for these sensors since they don't measure gases.
 </div>
 
 <!-- ==================== CONTACTS ==================== -->
