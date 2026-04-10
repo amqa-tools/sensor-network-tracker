@@ -1538,7 +1538,6 @@ function getStatusBadgeClass(status) {
         'PM Sensor Issue': 'badge-issue-orange',
         'Gaseous Sensor Issue': 'badge-issue-orange',
         'SD Card Issue': 'badge-issue-yellow',
-        'Power Failure': 'badge-issue-red',
         'Lost Connection': 'badge-issue-red',
         'Quant Ticket in Progress': 'badge-service-quant',
     };
@@ -4721,21 +4720,26 @@ function addCustomTag() {
 
 // ===== STATUS TOGGLE LIST =====
 const MANUAL_STATUSES = [
-    'Online', 'Offline', 'Lab Storage', 'Ready for Deployment',
-    'Needs Repair', 'PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue',
-    'Power Failure', 'Lost Connection'
+    'Online', 'Offline', 'Lost Connection', 'Lab Storage', 'Ready for Deployment', 'Needs Repair'
 ];
 
-// Statuses that are normally managed by workflows (collocation tool, audit workflow, Quant service tickets).
-// Users can still pick them, but a warning confirms they really want to override the workflow.
-const AUTO_STATUSES = ['Collocation', 'Auditing a Community', 'In Transit Between Audits', 'Service at Quant', 'Quant Ticket in Progress'];
+// Statuses that are normally managed by workflows (collocation tool, audit workflow, Quant service tickets,
+// or detected from sensor data). Users can still pick them, but a warning confirms they really want to override.
+const AUTO_STATUSES = [
+    'Collocation', 'Auditing a Community', 'In Transit Between Audits',
+    'Service at Quant', 'Quant Ticket in Progress',
+    'PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue'
+];
 
 const AUTO_STATUS_WARNINGS = {
-    'Collocation': 'Collocation is typically applied automatically when you start a collocation. Consider using the Collocation tool instead.\n\nApply this status manually anyway?',
-    'Auditing a Community': '"Auditing a Community" is typically applied automatically when an audit begins. Consider starting the audit from the Collocation tool instead.\n\nApply this status manually anyway?',
-    'In Transit Between Audits': '"In Transit Between Audits" is typically applied automatically as audit pods move between communities. Consider using the Collocation/audit workflow instead.\n\nApply this status manually anyway?',
-    'Service at Quant': '"Service at Quant" is typically applied automatically by Quant service ticket progression. Consider opening or advancing a Quant ticket instead.\n\nApply this status manually anyway?',
-    'Quant Ticket in Progress': '"Quant Ticket in Progress" is typically applied automatically when a Quant service ticket is opened. Consider creating a ticket from the Service section instead.\n\nApply this status manually anyway?'
+    'Collocation': '<strong>Collocation</strong> is typically applied automatically when you start a collocation. Consider using the Collocation tool instead.<br><br>Apply this status manually anyway?',
+    'Auditing a Community': '<strong>Auditing a Community</strong> is typically applied automatically when an audit begins. Consider starting the audit from the Collocation tool instead.<br><br>Apply this status manually anyway?',
+    'In Transit Between Audits': '<strong>In Transit Between Audits</strong> is typically applied automatically as audit pods move between communities. Consider using the Collocation/audit workflow instead.<br><br>Apply this status manually anyway?',
+    'Service at Quant': '<strong>Service at Quant</strong> is typically applied automatically by Quant service ticket progression. Consider opening or advancing a Quant ticket instead.<br><br>Apply this status manually anyway?',
+    'Quant Ticket in Progress': '<strong>Quant Ticket in Progress</strong> is typically applied automatically when a Quant service ticket is opened. Consider creating a ticket from the Service section instead.<br><br>Apply this status manually anyway?',
+    'PM Sensor Issue': '<strong>PM Sensor Issue</strong> is typically applied automatically from sensor data QA/audit results. Consider logging the issue through the audit or service workflow instead.<br><br>Apply this status manually anyway?',
+    'Gaseous Sensor Issue': '<strong>Gaseous Sensor Issue</strong> is typically applied automatically from sensor data QA/audit results. Consider logging the issue through the audit or service workflow instead.<br><br>Apply this status manually anyway?',
+    'SD Card Issue': '<strong>SD Card Issue</strong> is typically applied automatically when SD card problems are detected. Consider logging the issue through the audit or service workflow instead.<br><br>Apply this status manually anyway?'
 };
 
 // Combined list preserved for legacy call sites (selects, filters, etc.)
@@ -4769,15 +4773,24 @@ function toggleStatusOption(el) {
 
     // Warn before manually applying a status that's normally auto-managed
     if (isBecomingActive && AUTO_STATUS_WARNINGS[status]) {
-        if (!confirm(AUTO_STATUS_WARNINGS[status])) return;
+        showConfirm(
+            'Auto-applied status',
+            AUTO_STATUS_WARNINGS[status],
+            () => applyStatusToggle(el, status, isBecomingActive),
+            { confirmText: 'Apply manually', cancelText: 'Cancel' }
+        );
+        return;
     }
 
+    applyStatusToggle(el, status, isBecomingActive);
+}
+
+function applyStatusToggle(el, status, isBecomingActive) {
     el.classList.toggle('active');
 
     // Online and Offline are mutually exclusive
     if (isBecomingActive && (status === 'Online' || status === 'Offline')) {
         const opposite = status === 'Online' ? 'Offline' : 'Online';
-        // Search the whole modal/form, not just parentElement (groups are now in separate rows)
         const root = el.closest('.modal, form, body') || document;
         const oppositeEl = root.querySelector(`.status-toggle-option[data-status="${opposite}"]`);
         if (oppositeEl) oppositeEl.classList.remove('active');
@@ -5488,7 +5501,7 @@ async function adminResetMfa(email) {
 }
 
 // ===== SENSOR TAGS & SIDEBAR =====
-const SENSOR_ISSUE_STATUSES = ['PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue', 'Needs Repair', 'Power Failure', 'Lost Connection'];
+const SENSOR_ISSUE_STATUSES = ['PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue', 'Needs Repair', 'Lost Connection'];
 
 function isIssueSensor(s) {
     if (getStatusArray(s).some(st => SENSOR_ISSUE_STATUSES.includes(st))) return true;
