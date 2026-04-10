@@ -5554,7 +5554,7 @@ function renderSensorTypeFilters() {
     const container = document.getElementById('sensor-type-filters');
     if (!container) return;
     const types = [
-        { label: 'Community Pod', id: 'Community Pod' },
+        { label: 'Community Pods', id: 'Community Pod' },
         { label: 'Audit & Permanent Pods', id: 'Audit & Permanent Pods' },
         { label: 'Not Assigned', id: 'Not Assigned' },
     ];
