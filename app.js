@@ -10991,11 +10991,11 @@ function renderUserGuide() {
     if (container.dataset.loaded) return;
     container.dataset.loaded = '1';
     // Use an iframe so the guide renders with its full standalone styles
-    container.innerHTML = '<iframe src="user-guide.html" style="width:100%;height:calc(100vh - 180px);border:none;border-radius:8px;background:#fff" title="User Guide"></iframe>';
+    container.innerHTML = `<iframe src="user-guide.html?v=${Date.now()}" style="width:100%;height:calc(100vh - 180px);border:none;border-radius:8px;background:#fff" title="User Guide"></iframe>`;
 }
 
 function exportUserGuide() {
-    fetch('user-guide.html')
+    fetch('user-guide.html?v=' + Date.now())
         .then(r => r.text())
         .then(html => {
             const blob = new Blob([html], { type: 'text/html' });
