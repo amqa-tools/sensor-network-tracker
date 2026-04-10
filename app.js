@@ -3749,6 +3749,10 @@ function openAddNoteModal(contextId, contextType) {
     document.getElementById('note-audit-link-group').style.display = 'none';
     document.getElementById('note-move-target-group').style.display = 'none';
 
+    // Singularize the Move action label when adding a note from a single sensor
+    const moveLabel = document.getElementById('note-action-move-label');
+    if (moveLabel) moveLabel.textContent = contextType === 'sensor' ? 'Move Sensor' : 'Move Sensors';
+
     // Pre-populate status list with current sensor's statuses if available
     if (contextType === 'sensor') {
         const s = sensors.find(x => x.id === contextId);
