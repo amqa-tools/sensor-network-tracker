@@ -233,7 +233,7 @@
   </div>
   <div class="feature-card">
     <h4>Collocations and Audits</h4>
-    <p>Manage collocations and audits. Track progress, upload data, run regression analysis, and generate formatted reports — all in the app.</p>
+    <p>Manage collocations and audits. Track progress, upload data, run regression analyses, and generate downloadable reports.</p>
   </div>
   <div class="feature-card">
     <h4>Community Tracking</h4>
@@ -244,17 +244,17 @@
 <!-- ==================== GETTING STARTED ==================== -->
 <h2 id="getting-started">2. Getting Started</h2>
 
-<p>You access the app in your web browser — no installation needed. Just go to [amqa-tools.github.io/sensor-network-tracker] and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.&nbsp;</p>
+<p>Access the app at [amqa-tools.github.io/sensor-network-tracker] and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.&nbsp;</p>
 
 <h3>The Layout</h3>
 <p>The app has a sidebar on the left with everything organized under:</p>
 <ul>
   <li><strong>Dashboard</strong> — Quick overview with network stat cards and linked QuantAQ sensor performance alerts</li>
   <li><strong>Sensors</strong> — Full list of all sensors with search/filter</li>
-  <li><strong>Audits</strong> — The audit pipeline (scheduled → finished, analysis pending&nbsp;→ complete</li>
+  <li><strong>Audits</strong> — The audit pipeline (scheduled → in progress → finished, analysis pending&nbsp;→ complete)</li>
   <li><strong>Collocations</strong> — The collocation pipeline (in progress&nbsp;→ finished, analysis pending → complete)</li>
   <li><strong>Service Tickets</strong> — Track repairs and calibrations with QuantAQ, add progress notes, RMA and shipping numbers, etc.</li>
-  <li><strong>Communities</strong> — All deployment communities organized by region, filterable by tags</li>
+  <li><strong>Communities</strong> — All involved communities, filterable by sub-network tags</li>
   <li><strong>Contacts</strong> — Community contacts grouped by location showing primary, active, and inactive statuses for each contact</li>
 </ul>
 
@@ -271,13 +271,31 @@
 <p>The All Sensors page is your main view. You can search by sensor ID, filter by status, and click any sensor to see its full detail page.</p>
 
 <h3>Sensor Statuses</h3>
-<p>Each sensor can have one or more status tags. The main ones you'll see:</p>
+<p>Each sensor can have one or more status tags. Statuses fall into two groups: ones you apply manually, and ones that get applied automatically by workflows (collocations, audits, and Quant service tickets).</p>
+
+<h4>Manually applied statuses</h4>
+<p>You pick these from the status list on a sensor or in a Mass Action note.</p>
 <ul>
-  <li><strong>Online / Offline</strong> — These are mutually exclusive (selecting one deselects the other)</li>
-  <li><strong>Collocation</strong> — Automatically applied when a sensor is part of an active collocation</li>
-  <li><strong>Quant Ticket in Progress</strong> — Applied when a service ticket is open</li>
-  <li><strong>Lab Storage</strong> — Sensor is at one of our lab locations</li>
-  <li><strong>Shipped to Quant / Service at Quant / Shipped from Quant</strong> — Auto-managed by service ticket progression</li>
+  <li><strong>Online</strong> — The sensor is deployed and reporting data. Mutually exclusive with Offline.</li>
+  <li><strong>Offline</strong> — The sensor is not reporting data. Mutually exclusive with Online.</li>
+  <li><strong>Lab Storage</strong> — The sensor is sitting at one of our lab locations, not currently deployed.</li>
+  <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready to ship or install.</li>
+  <li><strong>Needs Repair</strong> — The sensor has a known problem and shouldn't be deployed until it's fixed.</li>
+  <li><strong>PM Sensor Issue</strong> — The particulate matter sensor is reporting bad or missing data.</li>
+  <li><strong>Gaseous Sensor Issue</strong> — One of the gas sensors (NO₂, O₃, etc.) is reporting bad or missing data.</li>
+  <li><strong>SD Card Issue</strong> — The pod's SD card is full, missing, or failing.</li>
+  <li><strong>Power Failure</strong> — The sensor lost power at its site.</li>
+  <li><strong>Lost Connection</strong> — The sensor is powered but not reaching the network.</li>
+</ul>
+
+<h4>Auto-applied statuses</h4>
+<p>These get added and removed automatically as you move sensors through the collocation tool, audit workflow, and Quant service tickets. You <em>can</em> still pick them from the status list, but the app will show a warning asking you to use the proper tool instead — the workflows keep everything in sync (history notes, dates, related records), and applying these by hand can leave the data out of step.</p>
+<ul>
+  <li><strong>Collocation</strong> — Automatically applied when a sensor is part of an active collocation. Removed when the collocation completes. <em>Use the Collocation tool to start one.</em></li>
+  <li><strong>Auditing a Community</strong> — Automatically applied when an audit pod is actively auditing a community. <em>Use the audit workflow (inside the Collocation tool) to start an audit.</em></li>
+  <li><strong>In Transit Between Audits</strong> — Automatically applied to audit pods as they move between community audits. <em>Managed by the audit workflow.</em></li>
+  <li><strong>Service at Quant</strong> — Automatically applied by Quant service ticket progression when a sensor arrives at Quant. <em>Advance the Quant ticket instead of setting this by hand.</em></li>
+  <li><strong>Quant Ticket in Progress</strong> — Automatically applied whenever a Quant service ticket is open for the sensor. Removed when the ticket closes. <em>Open a ticket from the Service section instead.</em></li>
 </ul>
 
 <h3>Moving a Sensor</h3>

@@ -3149,6 +3149,37 @@ tr:hover .contact-delete-btn {
     padding: 8px 0;
 }
 
+.status-toggle-group-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--slate-600, #475569);
+    margin-top: 10px;
+}
+
+.status-toggle-group-label:first-child {
+    margin-top: 0;
+}
+
+.status-toggle-group-label--auto {
+    color: var(--slate-500, #64748b);
+}
+
+.status-toggle-group-hint {
+    display: block;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: var(--slate-400, #94a3b8);
+    margin-top: 2px;
+}
+
+.status-toggle-option.is-auto .badge {
+    box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.35);
+}
+
 .status-toggle-option {
     cursor: pointer;
     opacity: 0.4;

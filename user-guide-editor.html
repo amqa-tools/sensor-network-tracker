@@ -250,30 +250,18 @@
 
 <script>
 function saveEditedHTML() {
-    // Disable contenteditable temporarily
     document.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
-    // Remove the editor toolbar and styles from the saved file
-    const toolbar = document.getElementById('editor-toolbar');
-    const editorStyle = document.querySelector('style:first-of-type');
-    // Get a clean clone
     const clone = document.documentElement.cloneNode(true);
-    // Remove editor-only elements from the clone
     const cloneToolbar = clone.querySelector('#editor-toolbar');
     if (cloneToolbar) cloneToolbar.remove();
-    // Remove the editor script and editor styles
     clone.querySelectorAll('script').forEach(s => s.remove());
-    // Remove the editor-only style block (find by content)
     clone.querySelectorAll('style').forEach(s => {
         if (s.textContent.includes('#editor-toolbar')) s.remove();
     });
-    // Update title back to non-editor
     const title = clone.querySelector('title');
     if (title) title.textContent = 'ADEC Sensor Network Tracker — User Guide';
-    // Build the HTML output
     const html = '<!DOCTYPE html>\n' + clone.outerHTML;
-    // Re-enable contenteditable on this page so user can keep editing
     enableEditing();
-    // Download
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -285,7 +273,6 @@ function saveEditedHTML() {
 }
 
 function enableEditing() {
-    // Make all text content editable
     document.querySelectorAll('h1, h2, h3, h4, p, li, .callout, .feature-card, .workflow-step').forEach(el => {
         if (el.closest('#editor-toolbar')) return;
         el.setAttribute('contenteditable', 'true');
@@ -325,7 +312,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <!-- ==================== OVERVIEW ==================== -->
 <h2 id="overview">1. What Is This App?</h2>
 
-<p>This is our internal tool for tracking everything related to ADEC's air quality sensor network across Alaska. It replaces the old Salesforce workflow and puts everything in one place — sensors, the communities they're deployed in, contacts at each site, service tickets, collocations, and data analysis.</p>
+<p>This is our internal tool for tracking everything related to the Community-Based Sensor Network. It replaces the old Salesforce workflow and puts everything in one place — sensors, the communities they're deployed in, contacts at each site, service tickets, collocations, and audits.</p>
 
 <div class="feature-grid">
   <div class="feature-card">
@@ -334,36 +321,36 @@ window.addEventListener('DOMContentLoaded', enableEditing);
   </div>
   <div class="feature-card">
     <h4>Service Tickets</h4>
-    <p>Track repairs and calibrations with QuantAQ. Follow each ticket from opening through shipping, repair, and return.</p>
+    <p>Track repairs and calibrations with QuantAQ. Log each ticket from opening through shipping, repair, progress notes, and return.</p>
   </div>
   <div class="feature-card">
-    <h4>Collocations</h4>
-    <p>Manage collocations at regulatory sites. Upload data, run regression analysis, and generate formatted reports — all in the app.</p>
+    <h4>Collocations and Audits</h4>
+    <p>Manage collocations and audits. Track progress, upload data, run regression analysis, and generate formatted reports — all in the app.</p>
   </div>
   <div class="feature-card">
     <h4>Community Tracking</h4>
-    <p>Keep tabs on each community's sensors, contacts, communications, and files. Organized with parent/child community relationships.</p>
+    <p>Keep tabs on each community's sensors, contacts, communications, and files. Organized with parent/child community relationships. Optional tagging for sub-networks such as Interior Wildfire Network or Muni of Anchorage Network.</p>
   </div>
 </div>
 
 <!-- ==================== GETTING STARTED ==================== -->
 <h2 id="getting-started">2. Getting Started</h2>
 
-<p>You access the app in your web browser — no installation needed. Just go to the link and sign in with your email and password. Your account needs to be on the allowed list first, so check with the team if you can't log in.</p>
+<p>You access the app in your web browser — no installation needed. Just go to [amqa-tools.github.io/sensor-network-tracker] and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.&nbsp;</p>
 
 <h3>The Layout</h3>
 <p>The app has a sidebar on the left with everything organized under:</p>
 <ul>
-  <li><strong>Dashboard</strong> — Quick overview with stat cards and the ArcGIS map</li>
+  <li><strong>Dashboard</strong> — Quick overview with network stat cards and linked QuantAQ sensor performance alerts</li>
   <li><strong>Sensors</strong> — Full list of all sensors with search/filter</li>
-  <li><strong>Audits</strong> — The audit pipeline (scheduled → in progress → complete)</li>
-  <li><strong>Collocations</strong> — Same pipeline view for collocations</li>
-  <li><strong>Service Tickets</strong> — Track repairs and calibrations with QuantAQ</li>
-  <li><strong>Communities</strong> — All deployment communities organized by region</li>
-  <li><strong>Contacts</strong> — Community contacts grouped by location</li>
+  <li><strong>Audits</strong> — The audit pipeline (scheduled → in progress → finished, analysis pending&nbsp;→ complete)</li>
+  <li><strong>Collocations</strong> — The collocation pipeline (in progress&nbsp;→ finished, analysis pending → complete)</li>
+  <li><strong>Service Tickets</strong> — Track repairs and calibrations with QuantAQ, add progress notes, RMA and shipping numbers, etc.</li>
+  <li><strong>Communities</strong> — All deployment communities organized by region, filterable by tags</li>
+  <li><strong>Contacts</strong> — Community contacts grouped by location showing primary, active, and inactive statuses for each contact</li>
 </ul>
 
-<p>Numbers in parentheses next to Collocations and Service Tickets show how many are currently active.</p>
+<p><br></p>
 
 <div class="callout tip">
   <div class="callout-label">Tip</div>
@@ -376,17 +363,35 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <p>The All Sensors page is your main view. You can search by sensor ID, filter by status, and click any sensor to see its full detail page.</p>
 
 <h3>Sensor Statuses</h3>
-<p>Each sensor can have one or more status tags. The main ones you'll see:</p>
+<p>Each sensor can have one or more status tags. Statuses fall into two groups: ones you apply manually, and ones that get applied automatically by workflows (collocations, audits, and Quant service tickets).</p>
+
+<h4>Manually applied statuses</h4>
+<p>You pick these from the status list on a sensor or in a Mass Action note.</p>
 <ul>
-  <li><strong>Online / Offline</strong> — These are mutually exclusive (selecting one deselects the other)</li>
-  <li><strong>Collocation</strong> — Automatically applied when a sensor is part of an active collocation</li>
-  <li><strong>Quant Ticket in Progress</strong> — Applied when a service ticket is open</li>
-  <li><strong>Lab Storage</strong> — Sensor is at one of our lab locations</li>
-  <li><strong>Shipped to Quant / Service at Quant / Shipped from Quant</strong> — Auto-managed by service ticket progression</li>
+  <li><strong>Online</strong> — The sensor is deployed and reporting data. Mutually exclusive with Offline.</li>
+  <li><strong>Offline</strong> — The sensor is not reporting data. Mutually exclusive with Online.</li>
+  <li><strong>Lab Storage</strong> — The sensor is sitting at one of our lab locations, not currently deployed.</li>
+  <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready to ship or install.</li>
+  <li><strong>Needs Repair</strong> — The sensor has a known problem and shouldn't be deployed until it's fixed.</li>
+  <li><strong>PM Sensor Issue</strong> — The particulate matter sensor is reporting bad or missing data.</li>
+  <li><strong>Gaseous Sensor Issue</strong> — One of the gas sensors (NO₂, O₃, etc.) is reporting bad or missing data.</li>
+  <li><strong>SD Card Issue</strong> — The pod's SD card is full, missing, or failing.</li>
+  <li><strong>Power Failure</strong> — The sensor lost power at its site.</li>
+  <li><strong>Lost Connection</strong> — The sensor is powered but not reaching the network.</li>
+</ul>
+
+<h4>Auto-applied statuses</h4>
+<p>These get added and removed automatically as you move sensors through the collocation tool, audit workflow, and Quant service tickets. You <em>can</em> still pick them from the status list, but the app will show a warning asking you to use the proper tool instead — the workflows keep everything in sync (history notes, dates, related records), and applying these by hand can leave the data out of step.</p>
+<ul>
+  <li><strong>Collocation</strong> — Automatically applied when a sensor is part of an active collocation. Removed when the collocation completes. <em>Use the Collocation tool to start one.</em></li>
+  <li><strong>Auditing a Community</strong> — Automatically applied when an audit pod is actively auditing a community. <em>Use the audit workflow (inside the Collocation tool) to start an audit.</em></li>
+  <li><strong>In Transit Between Audits</strong> — Automatically applied to audit pods as they move between community audits. <em>Managed by the audit workflow.</em></li>
+  <li><strong>Service at Quant</strong> — Automatically applied by Quant service ticket progression when a sensor arrives at Quant. <em>Advance the Quant ticket instead of setting this by hand.</em></li>
+  <li><strong>Quant Ticket in Progress</strong> — Automatically applied whenever a Quant service ticket is open for the sensor. Removed when the ticket closes. <em>Open a ticket from the Service section instead.</em></li>
 </ul>
 
 <h3>Moving a Sensor</h3>
-<p>When you need to move a sensor to a different community, click "Move" on the sensor detail page. You can:</p>
+<p>When you need to move a single sensor to a different community, click "Move" on the sensor detail page. You can:</p>
 <ul>
   <li>Select the destination community</li>
   <li>Set the date of the move</li>
@@ -395,6 +400,24 @@ window.addEventListener('DOMContentLoaded', enableEditing);
   <li>Add notes about the move</li>
 </ul>
 <p>The app will ask if you want to update the install date (unless you're moving to a lab location — it skips the prompt for those since lab moves aren't installations).</p>
+
+<h3>Mass Action — Working with Multiple Sensors at Once</h3>
+<p>If you need to do something with several sensors at once — like installing 5 sensors at Garden after a collocation, or marking a batch of pods as Offline — use the <strong>Mass Action</strong> button at the top of the All Sensors page. It opens a note modal with bulk actions you can apply to all the sensors you tag.</p>
+
+<p>Inside the Mass Action modal:</p>
+<ul>
+  <li><strong>Move Sensors</strong> — Pick a destination community from the dropdown and every tagged sensor moves there in one click</li>
+  <li><strong>Sensor Status Change</strong> — Pick statuses and they get added to every tagged sensor (existing tags like Collocation are preserved, not wiped out)</li>
+  <li><strong>Troubleshooting</strong> / <strong>Site Work</strong> — Tag the action type for tracking</li>
+  <li>Tag the sensors, communities, and contacts involved</li>
+  <li>Write one note that gets attached to all of them</li>
+</ul>
+
+<div class="callout tip">
+  <div class="callout-label">When to use Mass Action vs. the individual Move button</div>
+  <strong>Use Mass Action</strong> when you're doing the same thing to multiple sensors at once — installing a batch at a site, taking a group offline for service, applying the same status change to several pods.<br><br>
+  <strong>Use the individual Move button</strong> on a single sensor's detail page when you're handling just one sensor and want the install-date prompt and per-sensor context.
+</div>
 
 <h3>Sensor Detail Page</h3>
 <p>Each sensor has tabs for:</p>
@@ -414,7 +437,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 
 <div class="callout">
   <div class="callout-label">How Community History Works</div>
-  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities.
+  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's history.
 </div>
 
 <!-- ==================== NOTES ==================== -->
@@ -423,15 +446,15 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <p>Notes are how everything gets documented in the app. When you add a note, you can:</p>
 <ul>
   <li>Select <strong>Actions</strong> — Sensor Install, Sensor Removal, Troubleshooting, Site Work, and/or Sensor Status Change</li>
-  <li>If you check <strong>Sensor Status Change</strong>, you'll get a status picker and the status change gets merged into your note (one entry, not two)</li>
+  <li>If you check <strong>Sensor Status Change</strong>, you'll get a status picker and the status change gets merged into your note</li>
   <li>Tag sensors, communities, and contacts so the note shows up in the right places</li>
   <li>Use <strong>@mentions</strong> in the note text to tag contacts inline</li>
 </ul>
 
-<p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — handy for logging things like "Deployed 5 sensors to interior communities."</p>
+<p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — handy for logging things like "Installed 3 sensors at NCore for collocation following their Quant calibration"</p>
 
 <h3>Editing Notes</h3>
-<p>Click the pencil icon on any note in the timeline to edit it. The edit modal shows the full text in a textarea so you can make changes without losing any content. Click "Done" to save.</p>
+<p>Click the pencil icon on any note in the timeline to edit it. The edit modal shows the full text in a text area so you can make changes without losing any content. Click "Done" to save.</p>
 
 <h3>Event History Filters</h3>
 <p>On sensor pages, the event history dropdown lets you filter by:</p>
@@ -453,15 +476,15 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <div class="workflow">
   <div class="workflow-steps">
     <div class="workflow-step">Ticket Opened</div>
-    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-arrow">→</div>
     <div class="workflow-step">RMA Assigned</div>
-    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-arrow">→</div>
     <div class="workflow-step">Shipped to Quant</div>
-    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-arrow">→</div>
     <div class="workflow-step">At Quant</div>
-    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-arrow">→</div>
     <div class="workflow-step">Shipped from Quant</div>
-    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-arrow">→</div>
     <div class="workflow-step">Received</div>
   </div>
 </div>
@@ -475,12 +498,12 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <p>There are fields for return tracking info (to and from QuantAQ). Just enter the carrier and tracking number, like "UPS, 1234567890".</p>
 
 <h3>Closed Tickets</h3>
-<p>Closed tickets appear in their own section at the bottom of the Service Tickets page — just scroll down. No need to toggle a checkbox.</p>
+<p>Closed tickets appear in their own section at the bottom of the Service Tickets page</p>
 
 <!-- ==================== COLLOCATIONS ==================== -->
 <h2 id="collocations">7. Collocations</h2>
 
-<p>Collocations are when we place community sensors at a regulatory site (Garden, NCore, or Floyd Dryden) alongside a BAM reference monitor and permanent pod to verify the sensors are reading accurately.</p>
+<p>Collocations are when we place community sensors at a regulatory site (Garden, NCore, or Floyd Dryden) alongside a BAM reference monitor and/or permanent pod to verify the sensors are reading accurately.</p>
 
 <h3>Starting a Collocation</h3>
 <p>Click "+ Start Collocation" from the Collocations page in the sidebar. You'll pick:</p>
@@ -497,12 +520,10 @@ window.addEventListener('DOMContentLoaded', enableEditing);
   <h4 style="margin:0 0 8px;color:#2d3d56">Collocation Workflow</h4>
   <div class="workflow-steps">
     <div class="workflow-step">In Progress</div>
-    <div class="workflow-arrow">&rarr;</div>
+    <div class="workflow-arrow">→</div>
+    <div class="workflow-step">Finished, Analysis Pending</div>
+    <div class="workflow-arrow">→</div>
     <div class="workflow-step">Complete</div>
-    <div class="workflow-arrow">&rarr;</div>
-    <div class="workflow-step">Analysis Pending</div>
-    <div class="workflow-arrow">&rarr;</div>
-    <div class="workflow-step">Collocation Complete</div>
   </div>
 </div>
 
@@ -512,7 +533,20 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <!-- ==================== AUDITS ==================== -->
 <h2 id="audits">8. Audits</h2>
 
-<p>Audits are similar to collocations but involve sending an audit pod to a community to run alongside the community's sensor for validation. The audit workflow goes: Scheduled &rarr; In Progress &rarr; Complete &rarr; Analysis Pending &rarr; Audit Complete.</p>
+<p>Audits are similar to collocations but involve sending an audit pod to a community to run alongside the community's sensor for validation. The audit workflow goes: Scheduled → In Progress → Finished, Analysis Pending → Complete.</p>
+
+<div class="workflow">
+  <h4 style="margin:0 0 8px;color:#2d3d56">Audit Workflow</h4>
+  <div class="workflow-steps">
+    <div class="workflow-step">Scheduled</div>
+    <div class="workflow-arrow">→</div>
+    <div class="workflow-step">In Progress</div>
+    <div class="workflow-arrow">→</div>
+    <div class="workflow-step">Finished, Analysis Pending</div>
+    <div class="workflow-arrow">→</div>
+    <div class="workflow-step">Complete</div>
+  </div>
+</div>
 
 <p>Each audit tracks the audit pod, community pod, community, dates, and who installed/removed the equipment. Like collocations, audits have progress notes and a full analysis pipeline.</p>
 
@@ -537,7 +571,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
   <li>Parses all sensor columns from the spreadsheet</li>
   <li>Excludes the first 24 hours from regression (the burn-in period)</li>
   <li>Runs linear regression for each parameter (PM2.5, PM10, CO, NO, NO2, O3)</li>
-  <li>Checks DQO thresholds (R&sup2; &ge; 0.70, slope 0.65-1.35, intercept &plusmn;5)</li>
+  <li>Checks DQO thresholds (R² ≥ 0.70, slope 0.65-1.35, intercept ±5)</li>
   <li>Generates time series charts and regression scatter plots</li>
   <li>Runs failsafe validation checks to verify the math is correct</li>
 </ul>
@@ -559,7 +593,7 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 <p>Every analysis includes automated failsafe checks (click the validation dropdown to review):</p>
 <ul>
   <li><strong>Self-test</strong> — Verifies the regression engine is computing correctly using known test data</li>
-  <li><strong>R&sup2; cross-check</strong> — Independently verifies each R&sup2; value using a different math method</li>
+  <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method</li>
   <li><strong>Timestamp validation</strong> — Checks for data gaps, short datasets, and date issues</li>
   <li><strong>Sample size</strong> — Flags if there isn't enough data for reliable results</li>
   <li><strong>Borderline DQO</strong> — Alerts when a pass/fail result is very close to the threshold</li>
@@ -618,8 +652,8 @@ window.addEventListener('DOMContentLoaded', enableEditing);
 </div>
 
 <div class="footer">
-  ADEC Division of Air Quality &bull; Air Monitoring &amp; Quality Assurance<br>
-  Sensor Network Tracker User Guide &bull; April 2026
+  ADEC Division of Air Quality • Air Monitoring &amp; Quality Assurance<br>
+  Sensor Network Tracker User Guide • April 2026
 </div>
 
 </body>

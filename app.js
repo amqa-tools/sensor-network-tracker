@@ -4720,34 +4720,66 @@ function addCustomTag() {
 }
 
 // ===== STATUS TOGGLE LIST =====
-const ALL_STATUSES = [
-    'Online', 'Offline', 'In Transit Between Audits', 'Service at Quant', 'Collocation',
-    'Auditing a Community', 'Lab Storage', 'Needs Repair', 'Ready for Deployment',
-    'PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue', 'Power Failure', 'Lost Connection',
-    'Quant Ticket in Progress'
+const MANUAL_STATUSES = [
+    'Online', 'Offline', 'Lab Storage', 'Ready for Deployment',
+    'Needs Repair', 'PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue',
+    'Power Failure', 'Lost Connection'
 ];
+
+// Statuses that are normally managed by workflows (collocation tool, audit workflow, Quant service tickets).
+// Users can still pick them, but a warning confirms they really want to override the workflow.
+const AUTO_STATUSES = ['Collocation', 'Auditing a Community', 'In Transit Between Audits', 'Service at Quant', 'Quant Ticket in Progress'];
+
+const AUTO_STATUS_WARNINGS = {
+    'Collocation': 'Collocation is typically applied automatically when you start a collocation. Consider using the Collocation tool instead.\n\nApply this status manually anyway?',
+    'Auditing a Community': '"Auditing a Community" is typically applied automatically when an audit begins. Consider starting the audit from the Collocation tool instead.\n\nApply this status manually anyway?',
+    'In Transit Between Audits': '"In Transit Between Audits" is typically applied automatically as audit pods move between communities. Consider using the Collocation/audit workflow instead.\n\nApply this status manually anyway?',
+    'Service at Quant': '"Service at Quant" is typically applied automatically by Quant service ticket progression. Consider opening or advancing a Quant ticket instead.\n\nApply this status manually anyway?',
+    'Quant Ticket in Progress': '"Quant Ticket in Progress" is typically applied automatically when a Quant service ticket is opened. Consider creating a ticket from the Service section instead.\n\nApply this status manually anyway?'
+};
+
+// Combined list preserved for legacy call sites (selects, filters, etc.)
+const ALL_STATUSES = [...MANUAL_STATUSES, ...AUTO_STATUSES];
 
 function renderStatusToggleList(containerId, selectedStatuses) {
     const container = document.getElementById(containerId);
-    container.innerHTML = ALL_STATUSES.map(st => {
+    const renderGroup = (list) => list.map(st => {
         const isActive = selectedStatuses.includes(st);
         const badgeClass = getStatusBadgeClass(st);
-        return `<span class="status-toggle-option ${isActive ? 'active' : ''}" data-status="${st}" onclick="toggleStatusOption(this)">
+        const isAuto = AUTO_STATUSES.includes(st);
+        return `<span class="status-toggle-option ${isActive ? 'active' : ''}${isAuto ? ' is-auto' : ''}" data-status="${st}" onclick="toggleStatusOption(this)">
             <span class="badge ${badgeClass}" style="pointer-events:none">${st}</span>
         </span>`;
     }).join('');
+
+    container.innerHTML = `
+        <div class="status-toggle-group-label">Manually applied</div>
+        <div class="status-toggle-list">${renderGroup(MANUAL_STATUSES)}</div>
+        <div class="status-toggle-group-label status-toggle-group-label--auto">
+            Typically auto-applied
+            <span class="status-toggle-group-hint">managed by collocation, audit, and service ticket workflows</span>
+        </div>
+        <div class="status-toggle-list">${renderGroup(AUTO_STATUSES)}</div>
+    `;
 }
 
 function toggleStatusOption(el) {
     const status = el.dataset.status;
     const isBecomingActive = !el.classList.contains('active');
+
+    // Warn before manually applying a status that's normally auto-managed
+    if (isBecomingActive && AUTO_STATUS_WARNINGS[status]) {
+        if (!confirm(AUTO_STATUS_WARNINGS[status])) return;
+    }
+
     el.classList.toggle('active');
 
     // Online and Offline are mutually exclusive
     if (isBecomingActive && (status === 'Online' || status === 'Offline')) {
         const opposite = status === 'Online' ? 'Offline' : 'Online';
-        const container = el.parentElement;
-        const oppositeEl = container.querySelector(`.status-toggle-option[data-status="${opposite}"]`);
+        // Search the whole modal/form, not just parentElement (groups are now in separate rows)
+        const root = el.closest('.modal, form, body') || document;
+        const oppositeEl = root.querySelector(`.status-toggle-option[data-status="${opposite}"]`);
         if (oppositeEl) oppositeEl.classList.remove('active');
     }
 }
