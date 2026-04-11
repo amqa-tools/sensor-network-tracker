@@ -1322,13 +1322,10 @@ function renderDashboard() {
     const activeTickets = getActiveTicketCount();
     const activeAudits = audits.filter(a => a.status === 'Scheduled' || a.status === 'In Progress').length;
 
-    // Last check time
-    const lastCheckEl = document.getElementById('dashboard-last-check');
-    if (lastCheckEl && typeof quantaqLastCheck !== 'undefined' && quantaqLastCheck) {
-        lastCheckEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
-    } else if (lastCheckEl) {
-        lastCheckEl.textContent = 'No QuantAQ check has been run yet';
-    }
+    // Render last-check / next-check lines using the live cron info fetched from DB
+    renderQuantAQCronLines();
+    // Refresh the cron info in the background (in case it's stale or not yet loaded)
+    loadQuantAQCronInfo();
 
     // Compact stat bar
     document.getElementById('dashboard-summary').innerHTML = `
@@ -1362,6 +1359,111 @@ function renderDashboard() {
 
     // Render QuantAQ alerts section
     if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
+}
+
+// ===== QUANTAQ CRON INFO (pulled live from cron.* via RPC) =====
+// Cached in memory; loadQuantAQCronInfo() refreshes it.
+let quantaqCronInfo = null;
+
+async function loadQuantAQCronInfo() {
+    try {
+        const { data, error } = await supa.rpc('get_quantaq_cron_info');
+        if (error) throw error;
+        quantaqCronInfo = data?.[0] || null;
+    } catch (err) {
+        console.warn('[QuantAQ] Failed to load cron info:', err);
+        quantaqCronInfo = null;
+    }
+    // Re-render dashboard if it's visible
+    const lastCheckEl = document.getElementById('dashboard-last-check');
+    if (lastCheckEl) renderQuantAQCronLines();
+}
+
+function renderQuantAQCronLines() {
+    const lastEl = document.getElementById('dashboard-last-check');
+    const nextEl = document.getElementById('dashboard-next-check');
+    if (!lastEl || !nextEl) return;
+
+    // "Last check" — authoritative scan completion timestamp from app_settings
+    if (typeof quantaqLastCheck !== 'undefined' && quantaqLastCheck) {
+        lastEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit', timeZone: AK_TZ,
+        });
+    } else {
+        lastEl.textContent = 'No QuantAQ check has been run yet';
+    }
+
+    // "Next scheduled" — parsed from the live cron.job.schedule in the DB
+    if (quantaqCronInfo && quantaqCronInfo.schedule) {
+        const next = nextCronRun(quantaqCronInfo.schedule, new Date());
+        if (next) {
+            nextEl.textContent = 'Next scheduled check: ' + next.toLocaleString('en-US', {
+                weekday: 'short', month: 'short', day: 'numeric',
+                hour: 'numeric', minute: '2-digit', timeZone: AK_TZ,
+            }) + ' AK';
+        } else {
+            nextEl.textContent = 'Next scheduled check: (unsupported schedule ' + quantaqCronInfo.schedule + ')';
+        }
+    } else {
+        nextEl.textContent = 'Next scheduled check: (cron info unavailable)';
+    }
+}
+
+// Parse a pg_cron expression (5 fields: minute hour day-of-month month day-of-week)
+// and compute the next fire time after `fromDate`. Supports N, *, and N-M ranges
+// (with comma lists) in each field. Returns a Date or null if it can't parse.
+function nextCronRun(schedule, fromDate) {
+    const parts = String(schedule).trim().split(/\s+/);
+    if (parts.length !== 5) return null;
+    const [mStr, hStr, domStr, monStr, dowStr] = parts;
+
+    const parseField = (str, min, max) => {
+        if (str === '*') {
+            const set = new Set();
+            for (let i = min; i <= max; i++) set.add(i);
+            return set;
+        }
+        const set = new Set();
+        for (const piece of str.split(',')) {
+            if (piece.includes('-')) {
+                const [a, b] = piece.split('-').map(Number);
+                if (isNaN(a) || isNaN(b)) return null;
+                for (let i = a; i <= b; i++) set.add(i);
+            } else {
+                const n = Number(piece);
+                if (isNaN(n)) return null;
+                set.add(n);
+            }
+        }
+        return set;
+    };
+
+    const minutes = parseField(mStr, 0, 59);
+    const hours = parseField(hStr, 0, 23);
+    const doms = parseField(domStr, 1, 31);
+    const months = parseField(monStr, 1, 12);
+    const dows = parseField(dowStr, 0, 6);
+    if (!minutes || !hours || !doms || !months || !dows) return null;
+
+    // Walk forward minute by minute until we find a match. Cap at 2 weeks.
+    const d = new Date(fromDate);
+    d.setUTCSeconds(0, 0);
+    d.setUTCMinutes(d.getUTCMinutes() + 1);
+    const maxIters = 60 * 24 * 14;
+    for (let i = 0; i < maxIters; i++) {
+        if (
+            minutes.has(d.getUTCMinutes()) &&
+            hours.has(d.getUTCHours()) &&
+            doms.has(d.getUTCDate()) &&
+            months.has(d.getUTCMonth() + 1) &&
+            dows.has(d.getUTCDay())
+        ) {
+            return d;
+        }
+        d.setUTCMinutes(d.getUTCMinutes() + 1);
+    }
+    return null;
 }
 
 // ===== COMMUNITIES LIST VIEW =====

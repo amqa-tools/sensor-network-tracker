@@ -60,6 +60,7 @@ async function initQuantAQ() {
     await Promise.all([
         loadQuantAQAlerts(),
         loadQuantAQLastCheck(),
+        typeof loadQuantAQCronInfo === 'function' ? loadQuantAQCronInfo() : Promise.resolve(),
     ]);
     // Don't call renderDashboard() here — the boot sequence in app.js
     // will call restoreLastView() which renders the appropriate view.
@@ -317,6 +318,7 @@ async function runQuantAQCheck() {
         // Reload and render
         await loadQuantAQAlerts();
         await loadQuantAQLastCheck();
+        if (typeof loadQuantAQCronInfo === 'function') await loadQuantAQCronInfo();
         const elapsed = Math.floor((Date.now() - checkStartTime) / 1000);
         const newActive = newAlerts.filter(a => a.status === 'active').length;
         const newPending = newAlerts.filter(a => a.status === 'pending').length;
@@ -377,11 +379,8 @@ function renderDashboardAlerts() {
     // Update check button and next-check time
     renderCheckButtons();
 
-    // Update last check time
-    const lastCheckEl = document.getElementById('dashboard-last-check');
-    if (lastCheckEl && quantaqLastCheck) {
-        lastCheckEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
-    }
+    // Update last / next check lines from live cron info
+    if (typeof renderQuantAQCronLines === 'function') renderQuantAQCronLines();
 
     const active = quantaqAlerts.filter(a => a.status === 'active' && !a.acknowledgedBy);
     const pending = quantaqAlerts.filter(a => a.status === 'pending');
