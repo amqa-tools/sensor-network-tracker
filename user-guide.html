@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="en"><head>
+<html lang="en">
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ADEC Sensor Network Tracker — User Guide</title>
@@ -182,13 +183,8 @@
     h2:first-of-type { page-break-before: avoid; }
   }
 </style>
-
 </head>
 <body>
-
-
-
-
 
 <div class="cover">
   <h1>Sensor Network Tracker</h1>
@@ -233,7 +229,7 @@
   </div>
   <div class="feature-card">
     <h4>Collocations and Audits</h4>
-    <p>Manage collocations and audits. Track progress, upload data, run regression analysis, and generate formatted reports — all in the app.</p>
+    <p>Manage collocations and audits. Track progress, upload data, run regression analysis, and generate formatted reports.</p>
   </div>
   <div class="feature-card">
     <h4>Community Tracking</h4>
@@ -244,7 +240,7 @@
 <!-- ==================== GETTING STARTED ==================== -->
 <h2 id="getting-started">2. Getting Started</h2>
 
-<p>You access the app in your web browser — no installation needed. Just go to <a href="https://amqa-tools.github.io/sensor-network-tracker" target="_blank" rel="noopener">amqa-tools.github.io/sensor-network-tracker</a> and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.</p>
+<p>To access the app, go to <a href="https://amqa-tools.github.io/sensor-network-tracker" target="_blank" rel="noopener">amqa-tools.github.io/sensor-network-tracker</a> and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.</p>
 
 <h3>The Layout</h3>
 <p>The app has a sidebar on the left with everything organized under:</p>
@@ -279,9 +275,9 @@
   <li><strong>Lab Storage</strong> — The sensor is sitting at one of our lab locations, not currently deployed.</li>
   <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready to ship or install.</li>
   <li><strong>Needs Repair</strong> — The sensor has a known problem and shouldn't be deployed until it's fixed.</li>
-  <li><strong>PM Sensor Issue</strong> — The particulate matter sensor is reporting bad or missing data.</li>
-  <li><strong>Gaseous Sensor Issue</strong> — One of the gas sensors (NO<sub>2</sub>, O<sub>3</sub>, etc.) is reporting bad or missing data.</li>
-  <li><strong>SD Card Issue</strong> — The pod's SD card is full, missing, or failing.</li>
+  <li><strong>PM Sensor Issue</strong> — The particulate matter sensor is malfunctioning.</li>
+  <li><strong>Gaseous Sensor Issue</strong> — One or more of the gas sensors (NO<sub>2</sub>, O<sub>3</sub>, etc.) is malfunctioning.</li>
+  <li><strong>SD Card Issue</strong> — The pod's SD card is malfunctioning.</li>
   <li><strong>Lost Connection</strong> — The sensor isn't reaching the network (covers power loss and connectivity drops).</li>
 </ul>
 
@@ -307,12 +303,12 @@
 <p>The app will ask if you want to update the install date (unless you're moving to a lab location — it skips the prompt for those since lab moves aren't installations).</p>
 
 <h3>Mass Action — Working with Multiple Sensors at Once</h3>
-<p>If you need to do something with several sensors at once — like installing 5 sensors at Garden for a collocation, or marking a batch of pods as Offline — use the <strong>Mass Action</strong> button at the top of the All Sensors page. It opens a note modal with bulk actions you can apply to all the sensors you tag.</p>
+<p>If you need to do something with several sensors at once — like installing 5 sensors at Garden after a collocation, or marking a batch of pods as Offline — use the <strong>Mass Action</strong> button at the top of the All Sensors page. It opens a note modal with bulk actions you can apply to all the sensors you tag.</p>
 
 <p>Inside the Mass Action modal:</p>
 <ul>
   <li><strong>Move Sensors</strong> — Pick a destination community from the dropdown and every tagged sensor moves there in one click</li>
-  <li><strong>Sensor Status Change</strong> — Pick statuses and they get added to every tagged sensor (existing tags like Collocation are preserved, not wiped out)</li>
+  <li><strong>Sensor Status Change</strong> — Pick statuses and they get added to every tagged sensor (existing tags like Collocation are preserved)</li>
   <li><strong>Troubleshooting</strong> / <strong>Site Work</strong> — Tag the action type for tracking</li>
   <li>Tag the sensors, communities, and contacts involved</li>
   <li>Write one note that gets attached to all of them</li>
@@ -336,13 +332,13 @@
 <!-- ==================== COMMUNITIES ==================== -->
 <h2 id="communities">4. Communities</h2>
 
-<p>Communities are organized alphabetically by independent and parent communities, with child communities shown as a subset beneath the parent. You can change community relationships/make a child community independent anytime with the "Change Parent" button in the community details page.</p>
+<p>Communities are organized alphabetically by parent communities, with child communities nested beneath them. You can change parent/child relationships anytime with the "Change Parent" button in each sensor's details page.</p>
 
 <p>Each community page shows its sensors, contacts, event history, communications, and files. You can add sub-communities, deactivate communities you're no longer working with, and reactivate them later if needed.</p>
 
 <div class="callout">
   <div class="callout-label">How Community History Works</div>
-  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's own history.
+  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's individual history.
 </div>
 
 <!-- ==================== NOTES ==================== -->
@@ -350,13 +346,13 @@
 
 <p>Notes are how everything gets documented in the app. When you add a note, you can:</p>
 <ul>
-  <li>Select <strong>Actions</strong> — Move Sensor, Sensor Status Change, Troubleshooting, Site Work. Select multiple actions as needed.</li>
-  <li>If you check <strong>Sensor Status Change</strong>, select from the status menu and the status change gets merged into your note</li>
+  <li>Select <strong>Actions</strong> — Sensor Install, Sensor Removal, Troubleshooting, Site Work, and/or Sensor Status Change</li>
+  <li>If you check <strong>Sensor Status Change</strong>, you'll get a status picker and the status change gets merged into your note</li>
   <li>Tag sensors, communities, and contacts so the note shows up in the right places</li>
   <li>Use <strong>@mentions</strong> in the note text to tag contacts inline</li>
 </ul>
 
-<p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — helpful for logging things like "Installed 3 sensors at NCore for collocation following their Quant calibration"</p>
+<p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — handy for logging things like "Installed 3 sensors at NCore for collocation following their Quant calibration"</p>
 
 <h3>Editing Notes</h3>
 <p>Click the pencil icon on any note in the timeline to edit it. The edit modal shows the full text in a text area so you can make changes without losing any content. Click "Done" to save.</p>
@@ -401,7 +397,7 @@
 <p>There are fields for return tracking info (to and from QuantAQ). Just enter the carrier and tracking number, like "UPS, 1234567890".</p>
 
 <h3>Closed Tickets</h3>
-<p>Closed tickets appear in their own section at the bottom of the Service Tickets page, as well as in the Service Tickets tab on sensor detail pages.</p>
+<p>Closed tickets appear in their own section at the bottom of the Service Tickets page</p>
 
 <!-- ==================== COLLOCATIONS ==================== -->
 <h2 id="collocations">7. Collocations</h2>
@@ -464,7 +460,7 @@
   <li>When selecting regulatory site data, use <strong>PM<sub>2.5</sub> and PM<sub>10</sub> local conditions</strong></li>
   <li>Clean up any invalidated data and trim to the collocation dates</li>
   <li><strong>Don't remove the first 24 hours</strong> — the app handles that automatically</li>
-  <li>Define the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod (optional) in the upload window</li>
+  <li>Define the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod (optional; if no permanent pod is defined, all Quants will be compared against all other Quants instead of all Quants compared against the one permanent pod, all Quants get compared to the BAM data in both cases).</li>
   <li>Upload the Excel file</li>
 </ol>
 
@@ -480,12 +476,12 @@
 </ul>
 
 <h3>Analysis Tabs</h3>
-<p>The analysis view generates:</p>
+<p>The analysis view has tabs matching our standard report format:</p>
 <ul>
-  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM<sub>2.5</sub>, PM<sub>10</sub>, CO, etc.)</li>
-  <li><strong>Pods vs BAM</strong> — Each sensor regressed against the BAM (PM only)</li>
-  <li><strong>Quants PM</strong> — Each pod compared against the permanent pod for PM, or each other if no permanent pod is defined</li>
-  <li><strong>Quants Gaseous</strong> — Each pod compared against the permanent pod for gas parameters (CO, NO, NO<sub>2</sub>, O<sub>3</sub>), or each other if no permanent pod is defined</li>
+  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM<sub>2.5</sub>, PM<sub>10</sub>, CO, etc.). Click sensors in the legend to toggle them off/on in the plot.</li>
+  <li><strong>Pods vs BAM</strong> — Each sensor compared against the BAM (PM only)</li>
+  <li><strong>Quants PM</strong> — Each pod compared against the permanent pod for PM, or each pod compared to each other pod if no permanent pod is defined</li>
+  <li><strong>Quants Gaseous</strong> — Each pod compared against the permanent pod for gases (CO, NO, NO<sub>2</sub>, O<sub>3</sub>), or each pod compared to each other pod if no permanent pod is defined</li>
   <li><strong>Data Sheet</strong> — Full data table with yellow-shaded first 24 hours and red-highlighted missing/removed data</li>
 </ul>
 
@@ -493,10 +489,10 @@
 <p>Click "Save as HTML" to download a standalone report file. It opens in any browser with all the interactive charts — no server needed. The filename follows the format: <code>Garden_Collocation_Analysis_445_451_674_Mar19_Apr1_2026.html</code></p>
 
 <h3>Validation Checks</h3>
-<p>Every analysis includes automated failsafe checks (click the validation dropdown in the analysis report to review):</p>
+<p>Every analysis includes automated failsafe checks (click the validation dropdown to review):</p>
 <ul>
   <li><strong>Self-test</strong> — Verifies the regression engine is computing correctly using known test data</li>
-  <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method. The primary method uses least-squares regression and the cross-check uses Pearson correlation; if the two don't match, the check is flagged.</li>
+  <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method. The primary method uses least-squares regression and the cross-check uses Pearson correlation; if the two don't match, this is flagged in the validation dropdown on the analysis</li>
   <li><strong>Timestamp validation</strong> — Checks for data gaps, short datasets, and date issues</li>
   <li><strong>Sample size</strong> — Flags if there isn't enough data for reliable results</li>
   <li><strong>Borderline DQO</strong> — Alerts when a pass/fail result is very close to the threshold</li>
@@ -510,7 +506,7 @@
 <!-- ==================== CONTACTS ==================== -->
 <h2 id="contacts">10. Contacts</h2>
 
-<p>Contacts include anyone in each community that is involved in the sensor network: tribal administrators, school staff, facility managers, etc. They're grouped by community in the Contacts view.</p>
+<p>Contacts include anyone involved in the sensor network: tribal administrators, school staff, facility managers, etc. They're grouped by community in the Contacts view.</p>
 
 <p>You can tag contacts in notes using @mentions (type @ and start typing their name), tag them in sensor movements, and add them to the email distribution list. Contacts can be deactivated (not deleted) when they're no longer involved, and reactivated later if needed.</p>
 
@@ -524,7 +520,7 @@
 
 <div class="callout tip">
   <div class="callout-label">Online &amp; Offline</div>
-  These two statuses are mutually exclusive everywhere in the app. If you select Online, Offline automatically deselects, and vice versa.
+  These two statuses are mutually exclusive everywhere in the app. If you select Online, Offline automatically deselects, and vice versa. No more accidentally having both.
 </div>
 
 <div class="callout">
@@ -549,7 +545,7 @@
 
 <div class="callout">
   <div class="callout-label">Setup Mode</div>
-  Users with admin rights will see a "Setup Mode" toggle in the sidebar — that's for bulk data entry when first setting up the system. It shows inline edit fields on everything and skips creating history notes for changes. You probably don't need this for day-to-day use.
+  Users with admin rights will see a "Setup Mode" toggle in the sidebar, that's for bulk data entry when first setting up the system. It shows inline edit fields on everything and skips creating history notes for changes. You probably don't need this for day-to-day use.
 </div>
 
 </div>
@@ -559,6 +555,5 @@
   Sensor Network Tracker User Guide • April 2026
 </div>
 
-
-
-</body></html>
+</body>
+</html>
