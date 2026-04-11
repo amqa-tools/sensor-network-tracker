@@ -352,7 +352,7 @@ function renderPendingAlertList(alerts) {
                 </div>
             </div>
             <div class="quantaq-alert-body">
-                <p class="quantaq-alert-detail">${a.detail || ''}</p>
+                <p class="quantaq-alert-detail">${escapeHtml(formatAlertDetail(a.detail || ''))}</p>
                 <p class="quantaq-alert-meta">Detected: ${detectedStr}${a.communityName ? ` &middot; ${a.communityName}` : ''}</p>
             </div>
             <div class="quantaq-alert-actions">
@@ -441,7 +441,7 @@ function renderQuantAQAlertList(alerts, isNew) {
                 </div>
             </div>
             <div class="quantaq-alert-body">
-                <p class="quantaq-alert-detail">${escapeHtml(a.detail)}</p>
+                <p class="quantaq-alert-detail">${escapeHtml(formatAlertDetail(a.detail))}</p>
                 <p class="quantaq-alert-meta">Detected: ${detectedStr}${duration ? ` (${duration})` : ''}${isResolved ? ` · Resolved: ${new Date(a.resolvedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ })}` : ''}</p>
                 ${followUpHtml}
                 <div id="quantaq-note-panel-${a.id}" class="quantaq-note-panel" style="display:none">
