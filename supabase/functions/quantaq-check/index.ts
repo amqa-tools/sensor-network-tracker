@@ -214,8 +214,28 @@ async function runScan(): Promise<Response> {
       const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === "Lost Connection");
       if (existing) {
         stillActiveIds.add(existing.id);
-        const res = await supa.from("quantaq_alerts").update({ last_checked: now, detail, is_new: false }).eq("id", existing.id);
+        // Re-anchor detected_at/grace to the live last_seen on every scan.
+        // Idempotent in the happy path (same last_seen = same values) and
+        // self-heals any rows that were created under older code with the
+        // scan time baked in.
+        const detectedAtIso = lastSeen ? lastSeen.toISOString() : existing.detected_at;
+        const detectedAtMs = lastSeen ? lastSeen.getTime() : new Date(existing.detected_at).getTime();
+        const graceExpiresMs = detectedAtMs + GRACE_PERIODS["Lost Connection"];
+        const graceExpiresIso = new Date(graceExpiresMs).toISOString();
+        const res = await supa.from("quantaq_alerts")
+          .update({
+            last_checked: now,
+            detail,
+            is_new: false,
+            detected_at: detectedAtIso,
+            grace_expires_at: graceExpiresIso,
+          })
+          .eq("id", existing.id);
         check("update lost-connection alert", res);
+        // Keep the in-memory copy in sync so the pending-promotion loop
+        // below sees the corrected grace window this same scan.
+        existing.detected_at = detectedAtIso;
+        existing.grace_expires_at = graceExpiresIso;
       } else {
         // Anchor to QuantAQ's clock: detected_at = last_seen, grace window
         // runs from there. If the sensor has been dark longer than the grace
