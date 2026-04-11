@@ -1308,7 +1308,6 @@ function showView(viewName) {
     if (viewName === 'service') renderServiceView();
     if (viewName === 'audits') renderAuditsView();
     if (viewName === 'collocations') renderCollocationsView();
-    if (viewName === 'quantaq-alerts' && typeof renderQuantAQAlertsView === 'function') renderQuantAQAlertsView();
     if (viewName === 'user-guide') renderUserGuide();
 
     saveLastView('view', viewName);
@@ -5843,7 +5842,6 @@ function goBack() {
     else if (prev.viewId === 'view-settings') showView('settings');
     else if (prev.viewId === 'view-service') showView('service');
     else if (prev.viewId === 'view-audits') showView('audits');
-    else if (prev.viewId === 'view-quantaq-alerts') showView('quantaq-alerts');
     else if (prev.viewId === 'view-community' && prev.itemId) showCommunityView(prev.itemId);
     else if (prev.viewId === 'view-sensor-detail' && prev.itemId) { currentSensor = prev.itemId; showSensorView(prev.itemId); }
     else if (prev.viewId === 'view-contact-detail' && prev.itemId) { currentContact = prev.itemId; showContactView(prev.itemId); }

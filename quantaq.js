@@ -358,9 +358,6 @@ function quantaqTimeSince(dateStr) {
 function updateQuantAQStatus(msg) {
     const el = document.getElementById('quantaq-status');
     if (el) el.textContent = msg;
-    // Also update the alerts view status (separate element to avoid duplicate IDs)
-    const el2 = document.getElementById('quantaq-alerts-view-status');
-    if (el2) el2.textContent = msg;
 }
 
 function renderCheckButtons() {
@@ -508,85 +505,6 @@ function renderDashboardAlerts() {
         </div>`;
     }
 
-
-    container.innerHTML = html;
-}
-
-// ===== FULL ALERTS VIEW =====
-
-function renderQuantAQAlertsView() {
-    const container = document.getElementById('quantaq-alerts-content');
-    if (!container) return;
-
-    const active = quantaqAlerts.filter(a => a.status === 'active' && !a.acknowledgedBy);
-    const pending = quantaqAlerts.filter(a => a.status === 'pending');
-    const newActive = active.filter(a => a.isNew);
-    const ongoingActive = active.filter(a => !a.isNew);
-    const resolved = quantaqAlerts.filter(a => a.status === 'resolved' && a.isNew);
-
-    const lastCheckStr = quantaqLastCheck
-        ? new Date(quantaqLastCheck).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ })
-        : 'Never';
-
-    let html = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <div>
-                <p style="font-size:13px;color:var(--slate-500)">Last check: ${lastCheckStr}</p>
-                <span id="quantaq-alerts-view-status" style="font-size:11px;color:var(--slate-400)"></span>
-            </div>
-            <button class="btn btn-primary" onclick="runQuantAQCheck()" ${quantaqChecking ? 'disabled' : ''}>
-                ${quantaqChecking ? 'Checking...' : 'Run Check Now'}
-            </button>
-        </div>
-    `;
-
-    // Summary counts
-    const offline = active.filter(a => a.issueType === 'Lost Connection');
-    const pmIssues = active.filter(a => a.issueType === 'PM Sensor Issue');
-    const gasIssues = active.filter(a => a.issueType === 'Gaseous Sensor Issue');
-    const sdIssues = active.filter(a => a.issueType === 'SD Card Issue');
-
-    html += `<div class="quantaq-summary-row">
-        <div class="quantaq-summary-card"><span class="quantaq-summary-num ${active.length > 0 ? 'alert' : 'ok'}">${active.length}</span><span class="quantaq-summary-label">Active Alerts</span></div>
-        <div class="quantaq-summary-card"><span class="quantaq-summary-num" style="color:var(--gold-600)">${pending.length}</span><span class="quantaq-summary-label">Pending</span></div>
-        <div class="quantaq-summary-card"><span class="quantaq-summary-num ${offline.length > 0 ? 'alert' : ''}">${offline.length}</span><span class="quantaq-summary-label">Offline</span></div>
-        <div class="quantaq-summary-card"><span class="quantaq-summary-num ${pmIssues.length > 0 ? 'alert' : ''}">${pmIssues.length}</span><span class="quantaq-summary-label">PM Issues</span></div>
-        <div class="quantaq-summary-card"><span class="quantaq-summary-num ${gasIssues.length > 0 ? 'alert' : ''}">${gasIssues.length}</span><span class="quantaq-summary-label">Gas Issues</span></div>
-        <div class="quantaq-summary-card"><span class="quantaq-summary-num ${sdIssues.length > 0 ? 'alert' : ''}">${sdIssues.length}</span><span class="quantaq-summary-label">SD Card</span></div>
-        <div class="quantaq-summary-card"><span class="quantaq-summary-num ok">${resolved.length}</span><span class="quantaq-summary-label">Resolved</span></div>
-    </div>`;
-
-    // New alerts
-    if (newActive.length > 0) {
-        html += `<h3 class="quantaq-section-title" style="color:#dc2626">New Since Last Check (${newActive.length})</h3>`;
-        html += renderQuantAQAlertList(newActive, true);
-    }
-
-    // Ongoing alerts
-    if (ongoingActive.length > 0) {
-        html += `<h3 class="quantaq-section-title">Ongoing (${ongoingActive.length})</h3>`;
-        html += renderQuantAQAlertList(ongoingActive, false);
-    }
-
-    // Pending
-    if (pending.length > 0) {
-        html += `<h3 class="quantaq-section-title" style="color:var(--gold-600)">Pending — Grace Period (${pending.length})</h3>`;
-        html += renderPendingAlertList(pending);
-    }
-
-    // Resolved
-    if (resolved.length > 0) {
-        html += `<h3 class="quantaq-section-title" style="color:#16a34a">Resolved Since Last Check (${resolved.length})</h3>`;
-        html += renderQuantAQAlertList(resolved, false);
-    }
-
-    if (active.length === 0 && pending.length === 0 && resolved.length === 0) {
-        html += `<div class="quantaq-empty">
-            <span style="font-size:36px">&#10003;</span>
-            <p style="font-size:15px;font-weight:600;color:var(--navy-500);margin-top:8px">All Clear</p>
-            <p style="font-size:13px;color:var(--slate-400)">No active or pending alerts. All sensors are online and healthy.</p>
-        </div>`;
-    }
 
     container.innerHTML = html;
 }
@@ -764,9 +682,6 @@ function switchQuantAQTab(tab) {
 function filterQuantAQAlerts(type) {
     quantaqFilter = quantaqFilter === type ? '' : type; // toggle
     renderDashboardAlerts();
-    if (document.getElementById('view-quantaq-alerts')?.classList.contains('active')) {
-        renderQuantAQAlertsView();
-    }
 }
 
 // ===== ALERT ACTIONS (persisted to database) =====
@@ -811,7 +726,6 @@ async function confirmDismissQuantAQAlert(alertId) {
         alert.acknowledgedBy = null;
     }
 
-    renderQuantAQAlertsView();
     renderDashboardAlerts();
 }
 
@@ -853,7 +767,6 @@ async function confirmUndismissQuantAQAlert(alertId) {
         await supa.from('quantaq_alerts').update({ acknowledged_by: null }).eq('id', alertId);
     } catch (err) {}
 
-    renderQuantAQAlertsView();
     renderDashboardAlerts();
 }
 
@@ -898,7 +811,6 @@ async function promoteAlert(alertId) {
         alert.isNew = true;
         showSuccessToast(`Alert promoted — event note created for ${alert.sensorSn}`);
         renderDashboardAlerts();
-        renderQuantAQAlertsView();
         buildSensorSidebar();
     } catch (err) {
         console.error('[QuantAQ] Failed to promote alert:', err);
@@ -914,7 +826,6 @@ async function silentDismissPendingAlert(alertId) {
         quantaqAlerts = quantaqAlerts.filter(a => a.id !== alertId);
         showSuccessToast(`Pending alert dismissed — no note created`);
         renderDashboardAlerts();
-        renderQuantAQAlertsView();
     } catch (err) {
         console.error('[QuantAQ] Failed to dismiss pending alert:', err);
     }
