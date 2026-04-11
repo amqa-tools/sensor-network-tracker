@@ -91,6 +91,14 @@ async function runWithConcurrency<T, R>(
   return results;
 }
 
+// Every DB write goes through this so nothing fails silently.
+function check(label: string, { error }: { error: any }) {
+  if (error) {
+    console.error(`[QAQ] DB error on ${label}:`, error);
+    throw new Error(`${label}: ${error.message || JSON.stringify(error)}`);
+  }
+}
+
 // ----- Note insert helper (matches db.insertNote shape) -----
 async function insertAutoFlagNote(
   supa: any,
@@ -99,7 +107,7 @@ async function insertAutoFlagNote(
   communityId: string | null,
 ) {
   const nowIso = new Date().toISOString();
-  const { data, error } = await supa
+  const noteRes = await supa
     .from("notes")
     .insert({
       date: nowIso,
@@ -109,11 +117,13 @@ async function insertAutoFlagNote(
       created_by: null,
     })
     .select();
-  if (error || !data?.[0]) return;
-  const noteId = data[0].id;
+  check("insert note", noteRes);
+  const noteId = noteRes.data?.[0]?.id;
+  if (!noteId) return;
   const tagRows: any[] = [{ note_id: noteId, tag_type: "sensor", tag_id: String(sensorSn) }];
   if (communityId) tagRows.push({ note_id: noteId, tag_type: "community", tag_id: String(communityId) });
-  await supa.from("note_tags").insert(tagRows);
+  const tagRes = await supa.from("note_tags").insert(tagRows);
+  check("insert note_tags", tagRes);
 }
 
 // ----- Main scan -----
@@ -184,7 +194,8 @@ async function runScan(): Promise<Response> {
       const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === "Lost Connection");
       if (existing) {
         stillActiveIds.add(existing.id);
-        await supa.from("quantaq_alerts").update({ last_checked: now, detail, is_new: false }).eq("id", existing.id);
+        const res = await supa.from("quantaq_alerts").update({ last_checked: now, detail, is_new: false }).eq("id", existing.id);
+        check("update lost-connection alert", res);
       } else {
         const graceExpires = new Date(Date.now() + GRACE_PERIODS["Lost Connection"]).toISOString();
         newAlerts.push({
@@ -216,9 +227,10 @@ async function runScan(): Promise<Response> {
         const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === issueType);
         if (existing) {
           stillActiveIds.add(existing.id);
-          await supa.from("quantaq_alerts")
+          const res = await supa.from("quantaq_alerts")
             .update({ last_checked: now, detail: `Flags: ${flagDesc} (raw: ${raw.flag})`, is_new: false })
             .eq("id", existing.id);
+          check("update existing flag alert", res);
         } else {
           const severity = ALERT_SEVERITY[issueType] || "warning";
           const graceMs = GRACE_PERIODS[issueType];
@@ -248,7 +260,7 @@ async function runScan(): Promise<Response> {
 
   // --- Insert new alerts + create event notes for critical ones ---
   if (newAlerts.length > 0) {
-    await supa.from("quantaq_alerts").insert(newAlerts);
+    check("insert new alerts", await supa.from("quantaq_alerts").insert(newAlerts));
     for (const alert of newAlerts) {
       if (alert.status !== "active") continue;
       const appSensor = sensorById.get(alert.sensor_sn);
@@ -268,12 +280,15 @@ async function runScan(): Promise<Response> {
     const stillActive = stillActiveIds.has(alert.id);
     const graceExpired = alert.grace_expires_at && new Date(alert.grace_expires_at) <= new Date();
     if (!stillActive) {
-      await supa.from("quantaq_alerts").delete().eq("id", alert.id);
+      check("delete silently-dismissed pending", await supa.from("quantaq_alerts").delete().eq("id", alert.id));
       silentDismissCount++;
     } else if (graceExpired) {
-      await supa.from("quantaq_alerts")
-        .update({ status: "active", is_new: true, last_checked: now })
-        .eq("id", alert.id);
+      check(
+        "promote pending to active",
+        await supa.from("quantaq_alerts")
+          .update({ status: "active", is_new: true, last_checked: now })
+          .eq("id", alert.id),
+      );
       promotedCount++;
       const appSensor = sensorById.get(alert.sensor_sn);
       const communityId = appSensor?.community_id || null;
@@ -289,7 +304,10 @@ async function runScan(): Promise<Response> {
         merged.delete("Online");
         const final = [...merged];
         if (final.slice().sort().join(",") !== cur.slice().sort().join(",")) {
-          await supa.from("sensors").update({ status: final, updated_at: now }).eq("id", appSensor.id);
+          check(
+            "update sensor status (promote)",
+            await supa.from("sensors").update({ status: final, updated_at: now }).eq("id", appSensor.id),
+          );
           appSensor.status = final;
         }
       }
@@ -301,9 +319,12 @@ async function runScan(): Promise<Response> {
   const toResolve = activeExisting.filter((a) => !stillActiveIds.has(a.id));
   if (toResolve.length > 0) {
     const ids = toResolve.map((a) => a.id);
-    await supa.from("quantaq_alerts")
-      .update({ status: "resolved", resolved_at: now, is_new: true, last_checked: now })
-      .in("id", ids);
+    check(
+      "resolve cleared alerts",
+      await supa.from("quantaq_alerts")
+        .update({ status: "resolved", resolved_at: now, is_new: true, last_checked: now })
+        .in("id", ids),
+    );
     for (const alert of toResolve) {
       const appSensor = sensorById.get(alert.sensor_sn);
       const communityId = appSensor?.community_id || null;
@@ -316,7 +337,10 @@ async function runScan(): Promise<Response> {
       if (appSensor && alert.issue_type !== "Lost Connection") {
         const cur = getStatusArray(appSensor).filter((s) => s !== alert.issue_type);
         const next = cur.length > 0 ? cur : ["Online"];
-        await supa.from("sensors").update({ status: next, updated_at: now }).eq("id", appSensor.id);
+        check(
+          "clear sensor status (resolve)",
+          await supa.from("sensors").update({ status: next, updated_at: now }).eq("id", appSensor.id),
+        );
         appSensor.status = next;
       }
     }
@@ -331,14 +355,20 @@ async function runScan(): Promise<Response> {
     merged.delete("Online");
     const final = [...merged];
     if (final.slice().sort().join(",") !== cur.slice().sort().join(",")) {
-      await supa.from("sensors").update({ status: final, updated_at: now }).eq("id", s.id);
+      check(
+        "update sensor status (new critical)",
+        await supa.from("sensors").update({ status: final, updated_at: now }).eq("id", s.id),
+      );
       s.status = final;
     }
   }
 
   // --- Stamp last check time ---
-  await supa.from("app_settings")
-    .upsert({ key: "quantaq_last_check", value: now }, { onConflict: "key" });
+  check(
+    "stamp quantaq_last_check",
+    await supa.from("app_settings")
+      .upsert({ key: "quantaq_last_check", value: now }, { onConflict: "key" }),
+  );
 
   const durationMs = Date.now() - scanStart;
   const summary = {

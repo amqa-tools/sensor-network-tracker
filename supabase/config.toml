@@ -1,5 +1,5 @@
-[project]
-id = "uejryzioxogquflijgyf"
+# Supabase CLI project config.
+# Generated for sensor-network-tracker.
+# Only fields the CLI actually needs — don't bloat this unless a command asks for it.
 
-[functions.quantaq-check]
-verify_jwt = false
+project_id = "uejryzioxogquflijgyf"
