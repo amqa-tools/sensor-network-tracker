@@ -200,11 +200,26 @@ async function runScan(): Promise<Response> {
         const res = await supa.from("quantaq_alerts").update({ last_checked: now, detail, is_new: false }).eq("id", existing.id);
         check("update lost-connection alert", res);
       } else {
-        const graceExpires = new Date(Date.now() + GRACE_PERIODS["Lost Connection"]).toISOString();
+        // Anchor to QuantAQ's clock: detected_at = last_seen, grace window
+        // runs from there. If the sensor has been dark longer than the grace
+        // window already, the alert goes straight to active on first detect.
+        const detectedAtIso = lastSeen ? lastSeen.toISOString() : now;
+        const detectedAtMs = lastSeen ? lastSeen.getTime() : Date.now();
+        const graceMs = GRACE_PERIODS["Lost Connection"];
+        const graceExpiresMs = detectedAtMs + graceMs;
+        const graceExpiresIso = new Date(graceExpiresMs).toISOString();
+        const alreadyExpired = graceExpiresMs <= Date.now();
+
         newAlerts.push({
           sensor_sn: d.sn, sensor_model: d.model, community_name: community,
-          issue_type: "Lost Connection", detail, status: "pending", severity: "info",
-          grace_expires_at: graceExpires, is_new: true, detected_at: now, last_checked: now, notes: [],
+          issue_type: "Lost Connection", detail,
+          status: alreadyExpired ? "active" : "pending",
+          severity: "info",
+          grace_expires_at: graceExpiresIso,
+          is_new: true,
+          detected_at: detectedAtIso,
+          last_checked: now,
+          notes: [],
         });
       }
     } else {
@@ -235,24 +250,45 @@ async function runScan(): Promise<Response> {
             .eq("id", existing.id);
           check("update existing flag alert", res);
         } else {
+          // Anchor detected_at to QuantAQ's raw reading timestamp, not our
+          // scan time. If the raw timestamp is missing or unparseable, fall
+          // back to now so we never lose the alert.
+          const rawTsStr = raw.timestamp
+            ? (String(raw.timestamp).endsWith("Z") ? String(raw.timestamp) : String(raw.timestamp) + "Z")
+            : null;
+          const rawTs = rawTsStr ? new Date(rawTsStr) : null;
+          const detectedAtIso = rawTs && !isNaN(rawTs.getTime()) ? rawTs.toISOString() : now;
+          const detectedAtMs = rawTs && !isNaN(rawTs.getTime()) ? rawTs.getTime() : Date.now();
+
           const severity = ALERT_SEVERITY[issueType] || "warning";
-          const graceMs = GRACE_PERIODS[issueType];
           if (severity === "critical") {
+            // Critical skips the grace window entirely — straight to active.
             newAlerts.push({
               sensor_sn: d.sn, sensor_model: d.model, community_name: community,
               issue_type: issueType, detail: `Flags: ${flagDesc} (raw: ${raw.flag})`,
               status: "active", severity, is_new: true,
-              detected_at: now, last_checked: now, notes: [],
+              detected_at: detectedAtIso, last_checked: now, notes: [],
             });
             statusUpdates.push({ sn: d.sn, statuses: [issueType] });
           } else {
-            const graceExpires = new Date(Date.now() + graceMs).toISOString();
+            const graceMs = GRACE_PERIODS[issueType];
+            const graceExpiresMs = detectedAtMs + graceMs;
+            const graceExpiresIso = new Date(graceExpiresMs).toISOString();
+            const alreadyExpired = graceExpiresMs <= Date.now();
             newAlerts.push({
               sensor_sn: d.sn, sensor_model: d.model, community_name: community,
               issue_type: issueType, detail: `Flags: ${flagDesc} (raw: ${raw.flag})`,
-              status: "pending", severity, grace_expires_at: graceExpires, is_new: true,
-              detected_at: now, last_checked: now, notes: [],
+              status: alreadyExpired ? "active" : "pending",
+              severity,
+              grace_expires_at: graceExpiresIso,
+              is_new: true,
+              detected_at: detectedAtIso,
+              last_checked: now,
+              notes: [],
             });
+            if (alreadyExpired) {
+              statusUpdates.push({ sn: d.sn, statuses: [issueType] });
+            }
           }
         }
       }
