@@ -73,6 +73,16 @@
         </div>
     </div>
 
+    <div id="sandbox-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#d4a84b;color:#1a2332;text-align:center;padding:8px 16px;font-weight:700;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,0.15);font-family:var(--font-sans,sans-serif)">
+        SANDBOX MODE — nothing you do here is saved. Refresh to reset. <a href="?" style="color:#1a2332;text-decoration:underline;margin-left:8px">Exit sandbox</a>
+    </div>
+    <script>
+        if (window.SANDBOX_MODE || new URLSearchParams(location.search).has('sandbox')) {
+            document.getElementById('sandbox-banner').style.display = 'block';
+            document.body.style.paddingTop = '36px';
+        }
+    </script>
+
     <div id="app" style="display:none">
         <div class="mobile-header" id="mobile-header">
             <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">&#9776;</button>

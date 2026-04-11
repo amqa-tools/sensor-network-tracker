@@ -529,3 +529,32 @@ const db = {
         if (error) throw error;
     },
 };
+
+// ===== SANDBOX MODE =====
+// Activated by ?sandbox=1 — reads still hit Supabase, writes are no-ops.
+// Nothing you do in sandbox mode persists; refresh and it's gone.
+window.SANDBOX_MODE = new URLSearchParams(location.search).has('sandbox');
+if (window.SANDBOX_MODE) {
+    const WRITE_METHODS = [
+        'setAppSetting',
+        'insertCommunity', 'updateCommunity', 'deleteCommunity',
+        'setCommunityTags',
+        'upsertSensor', 'deleteSensor',
+        'upsertContact', 'deleteContact',
+        'insertNote', 'updateNote',
+        'insertComm',
+        'uploadFile', 'deleteFile',
+        'insertAudit', 'updateAudit',
+        'insertCollocation', 'updateCollocation', 'deleteCollocation',
+        'insertServiceTicket', 'updateServiceTicket',
+    ];
+    for (const name of WRITE_METHODS) {
+        if (typeof db[name] !== 'function') continue;
+        db[name] = async function(...args) {
+            console.log(`[sandbox] ${name} no-op`, args);
+            // Return the first arg (usually the record being written) so callers
+            // that expect the inserted row back still get something reasonable.
+            return args[0] ?? null;
+        };
+    }
+}
