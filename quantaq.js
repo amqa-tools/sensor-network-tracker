@@ -155,6 +155,23 @@ function updateQuantAQStatus(msg) {
     if (el) el.textContent = msg;
 }
 
+// Replace "Last seen <ISO>" in an alert's detail string with a friendly
+// AK-local timestamp + relative age. Leaves other detail strings alone.
+function formatAlertDetail(detail) {
+    if (!detail) return '';
+    const match = detail.match(/^Last seen (\S+)/);
+    if (!match) return detail;
+    const iso = match[1];
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return detail;
+    const absolute = d.toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZone: AK_TZ,
+    });
+    const relative = quantaqTimeSince(iso);
+    return `Last seen ${absolute} AK${relative ? ` (${relative})` : ''}`;
+}
+
 function renderCheckButtons() {
     const dashBtn = document.getElementById('dashboard-check-btn');
     if (dashBtn) {

@@ -52,19 +52,36 @@ const GRACE_PERIODS: Record<string, number> = {
 };
 
 // ----- QuantAQ HTTP client -----
+// Deno's fetch has no default timeout — if QuantAQ stalls on even one
+// request, the entire scan hangs until the edge runtime's 150s wall
+// clock kills it. AbortController keeps us honest.
+const QAQ_TIMEOUT_MS = 20_000;
+
 async function qaqFetch(apiKey: string, path: string): Promise<any> {
   const url = `https://api.quant-aq.com/v1${path}`;
-  const resp = await fetch(url, {
-    headers: {
-      Authorization: `Basic ${btoa(apiKey + ":")}`,
-      Accept: "application/json",
-    },
-    redirect: "follow",
-  });
-  if (!resp.ok) {
-    throw new Error(`QuantAQ ${resp.status} on ${path}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), QAQ_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        Authorization: `Basic ${btoa(apiKey + ":")}`,
+        Accept: "application/json",
+      },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      throw new Error(`QuantAQ ${resp.status} on ${path}`);
+    }
+    return await resp.json();
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`QuantAQ timeout (${QAQ_TIMEOUT_MS}ms) on ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return resp.json();
 }
 
 // Run N promises at a time
@@ -150,9 +167,9 @@ async function runScan(): Promise<Response> {
     supa.from("communities").select("id, name"),
     supa.from("quantaq_alerts").select("*").in("status", ["active", "pending"]),
   ]);
-  if (sensorsRes.error) throw sensorsRes.error;
-  if (communitiesRes.error) throw communitiesRes.error;
-  if (existingRes.error) throw existingRes.error;
+  check("load sensors", sensorsRes);
+  check("load communities", communitiesRes);
+  check("load existing alerts", existingRes);
 
   const sensors: any[] = sensorsRes.data || [];
   const communities: any[] = communitiesRes.data || [];
