@@ -92,10 +92,13 @@ async function runWithConcurrency<T, R>(
 }
 
 // Every DB write goes through this so nothing fails silently.
-function check(label: string, { error }: { error: any }) {
-  if (error) {
-    console.error(`[QAQ] DB error on ${label}:`, error);
-    throw new Error(`${label}: ${error.message || JSON.stringify(error)}`);
+function check(label: string, res: any) {
+  if (!res) {
+    throw new Error(`${label}: response was undefined (likely a typo in the query)`);
+  }
+  if (res.error) {
+    console.error(`[QAQ] DB error on ${label}:`, res.error);
+    throw new Error(`${label}: ${res.error.message || JSON.stringify(res.error)}`);
   }
 }
 
