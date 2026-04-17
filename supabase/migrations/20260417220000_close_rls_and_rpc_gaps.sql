@@ -20,21 +20,30 @@
 --   6) run_quantaq_check was executable by any authenticated user, letting a
 --      signed-in user force unbounded QuantAQ API calls. Now requires admin.
 
+-- DROP IF EXISTS guards make this migration idempotent — the live DB may have
+-- had one or more of these policies created ad-hoc through the dashboard,
+-- and Postgres errors out on a plain CREATE POLICY against an existing name.
+
 -- -- 1. notes DELETE --------------------------------------------------------
+DROP POLICY IF EXISTS "Authenticated users can delete notes" ON notes;
 CREATE POLICY "Authenticated users can delete notes"
     ON notes FOR DELETE TO authenticated USING (true);
 
 -- -- 2. comms UPDATE + DELETE ----------------------------------------------
+DROP POLICY IF EXISTS "Authenticated users can update comms" ON comms;
 CREATE POLICY "Authenticated users can update comms"
     ON comms FOR UPDATE TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated users can delete comms" ON comms;
 CREATE POLICY "Authenticated users can delete comms"
     ON comms FOR DELETE TO authenticated USING (true);
 
 -- -- 3. comm_tags DELETE ---------------------------------------------------
+DROP POLICY IF EXISTS "Authenticated users can delete comm_tags" ON comm_tags;
 CREATE POLICY "Authenticated users can delete comm_tags"
     ON comm_tags FOR DELETE TO authenticated USING (true);
 
 -- -- 4. community_files UPDATE ---------------------------------------------
+DROP POLICY IF EXISTS "Authenticated users can update community_files" ON community_files;
 CREATE POLICY "Authenticated users can update community_files"
     ON community_files FOR UPDATE TO authenticated USING (true);
 
