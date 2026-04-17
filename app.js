@@ -6941,12 +6941,19 @@ function advanceTicketStatus(ticketId) {
             s.status = [...current, ...sensorStatusMap[newStatus]];
             persistSensor(s); buildSensorSidebar();
         } else if (newStatus === 'Received') {
-            // Sensor is physically back in our hands. Drop any lingering shipping
-            // status ("Shipped from Quant") and the "Quant Ticket in Progress" tag
-            // so the list accurately reflects that it's ready to be re-deployed.
-            // If nothing else remains, fall back to "Online" — it just returned.
-            const filtered = getStatusArray(s).filter(st => st !== 'Quant Ticket in Progress' && !allServiceStatuses.includes(st));
-            s.status = filtered.length > 0 ? filtered : ['Online'];
+            // Sensor is physically back in our hands at the office/lab — it's
+            // not deployed, so it's Offline (not Online). Drop any lingering
+            // shipping status ("Shipped from Quant") and the "Quant Ticket
+            // in Progress" tag, then ensure the sensor is marked Offline and
+            // not Online (they're mutually exclusive).
+            const filtered = getStatusArray(s).filter(st =>
+                st !== 'Quant Ticket in Progress' &&
+                st !== 'Online' &&
+                !allServiceStatuses.includes(st)
+            );
+            const next = new Set(filtered);
+            next.add('Offline');
+            s.status = [...next];
             persistSensor(s); buildSensorSidebar();
         }
     }
