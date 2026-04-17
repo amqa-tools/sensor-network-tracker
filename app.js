@@ -11258,6 +11258,15 @@ let _userGuideOriginalText = null;
 // "never fetched"; `null` means "fetched, no saved body"; a string is the
 // saved body. Invalidated explicitly on save.
 let _userGuideBodyCache = undefined;
+// Track the currently-loaded blob URL so we can revoke it when we replace
+// the iframe source, avoiding memory leaks as users navigate in and out.
+let _userGuideBlobUrl = null;
+// Debounced autosave for edit drafts — every keystroke shouldn't hit
+// localStorage, but we want a recent snapshot if the browser crashes or the
+// tab is closed mid-edit.
+let _userGuideDraftTimer = null;
+const USER_GUIDE_DRAFT_KEY = 'snt_user_guide_draft';
+const USER_GUIDE_LAST_SAVE_KEY = 'snt_user_guide_last_save';
 
 async function _fetchUserGuideBody() {
     if (_userGuideBodyCache !== undefined) return _userGuideBodyCache;
@@ -11304,11 +11313,24 @@ async function renderUserGuide() {
     const body = await _fetchUserGuideBody();
 
     container.innerHTML = '';
+    // Revoke any previous blob URL before we overwrite the reference. Leaking
+    // these across navigations is cheap but untidy.
+    if (_userGuideBlobUrl) {
+        try { URL.revokeObjectURL(_userGuideBlobUrl); } catch (_) {}
+        _userGuideBlobUrl = null;
+    }
     const iframe = document.createElement('iframe');
     iframe.style.cssText = 'width:100%;height:calc(100vh - 180px);border:none;border-radius:8px;background:#fff';
     iframe.title = 'User Guide';
     if (body) {
-        iframe.srcdoc = body;
+        // Use a blob URL, not srcdoc. In a srcdoc iframe, anchor links like
+        // #overview resolve against the PARENT page's URL (not the iframe's),
+        // which reloads the whole app inside the iframe the moment a user
+        // clicks a TOC link. Giving the iframe a real blob URL keeps anchor
+        // navigation local to the iframe, the way the static file works.
+        const blob = new Blob([body], { type: 'text/html' });
+        _userGuideBlobUrl = URL.createObjectURL(blob);
+        iframe.src = _userGuideBlobUrl;
     } else {
         iframe.src = 'user-guide.html?v=' + Date.now();
     }
@@ -11333,23 +11355,92 @@ async function openUserGuideEditor() {
         }
     }
     _userGuideOriginalText = body;
+
     const ta = document.getElementById('user-guide-editor-textarea');
-    if (ta) ta.value = body;
+    if (ta) {
+        ta.value = body;
+        // Wire keystroke-driven autosave. Every few seconds of typing, the
+        // current textarea value is snapshotted to localStorage so a browser
+        // crash, a network blip, or (human error) can never lose work silently.
+        ta.oninput = _scheduleUserGuideDraftSave;
+    }
+
+    // If there's a local draft that's newer than (and different from) what
+    // we just seeded, offer to restore it. This is the safety net for
+    // "I was editing, something went wrong, please don't lose my work."
+    _maybeOfferDraftRestore(ta, body);
 
     document.getElementById('user-guide-content').style.display = 'none';
     document.getElementById('user-guide-editor-panel').style.display = '';
+}
+
+function _scheduleUserGuideDraftSave() {
+    clearTimeout(_userGuideDraftTimer);
+    _userGuideDraftTimer = setTimeout(() => {
+        const ta = document.getElementById('user-guide-editor-textarea');
+        if (!ta) return;
+        try {
+            localStorage.setItem(USER_GUIDE_DRAFT_KEY, JSON.stringify({
+                content: ta.value,
+                timestamp: Date.now(),
+            }));
+            const status = document.getElementById('user-guide-draft-status');
+            if (status) {
+                const t = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                status.textContent = `Draft auto-saved locally at ${t}`;
+            }
+        } catch (err) {
+            console.warn('[user guide] Draft autosave failed:', err);
+        }
+    }, 1500);
+}
+
+function _loadUserGuideDraft() {
+    try {
+        const raw = localStorage.getItem(USER_GUIDE_DRAFT_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed?.content ? parsed : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function _maybeOfferDraftRestore(ta, seededBody) {
+    if (!ta) return;
+    const draft = _loadUserGuideDraft();
+    if (!draft || !draft.content || draft.content === seededBody) return;
+    const ago = Math.max(1, Math.round((Date.now() - draft.timestamp) / 60000));
+    const msg = `You have an unsaved local draft from ${ago} minute${ago === 1 ? '' : 's'} ago that differs from the currently-published version.\n\nRestore the draft into the editor? (You can still click Cancel afterwards to keep the published version.)`;
+    if (confirm(msg)) {
+        ta.value = draft.content;
+        const status = document.getElementById('user-guide-draft-status');
+        if (status) status.textContent = 'Restored local draft. Review, then Save & Publish or Cancel.';
+    }
 }
 
 async function saveUserGuide() {
     if (!currentUserCanEditGuide) return;
     const ta = document.getElementById('user-guide-editor-textarea');
     const body = ta ? ta.value : '';
+    // Snapshot the last-known-good version to localStorage BEFORE the network
+    // write so the client always keeps a copy of what it just tried to send.
+    // This is the recovery path if Supabase (or I) ever eats the row.
+    try {
+        localStorage.setItem(USER_GUIDE_LAST_SAVE_KEY, JSON.stringify({
+            content: body,
+            timestamp: Date.now(),
+        }));
+    } catch (err) {
+        console.warn('[user guide] Could not write local last-save snapshot:', err);
+    }
     try {
         await db.setAppSetting('user_guide_body', body);
-        // Invalidate the cache so the next render re-reads (cheaper: just
-        // prime it with what we just wrote so the next render skips a
-        // round-trip).
+        // Prime the in-memory cache so the next render skips the DB round-trip.
         _userGuideBodyCache = body;
+        // We successfully persisted — the draft is no longer useful, clear it
+        // so a future Edit session starts clean.
+        try { localStorage.removeItem(USER_GUIDE_DRAFT_KEY); } catch (_) {}
         showSuccessToast('User guide published');
         await renderUserGuide();
     } catch (err) {
