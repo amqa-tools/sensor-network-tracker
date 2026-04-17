@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-
+<html lang="en">
+<head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ADEC Sensor Network Tracker — User Guide</title>
+<title>ADEC Sensor Network Tracker — User Guide (Editor)</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
@@ -14,7 +15,67 @@
     color: #1a2332;
     line-height: 1.7;
     font-size: 15px;
+    padding-top: 56px; /* leave room for the fixed toolbar */
   }
+
+  /* ===== EDITOR TOOLBAR ===== */
+  .editor-toolbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: #1a2332;
+    color: #fff;
+    padding: 10px 20px;
+    z-index: 1000;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    font-size: 13px;
+  }
+  .editor-toolbar .brand {
+    font-weight: 700;
+    color: #d4a84b;
+    margin-right: 8px;
+  }
+  .editor-toolbar button {
+    background: #d4a84b;
+    color: #1a2332;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .editor-toolbar button:hover { background: #c19938; }
+  .editor-toolbar button.secondary {
+    background: transparent;
+    color: #d4a84b;
+    border: 1px solid #d4a84b;
+  }
+  .editor-toolbar button.secondary:hover { background: rgba(212,168,75,0.1); }
+  .editor-toolbar .status {
+    margin-left: auto;
+    font-size: 12px;
+    color: #8899aa;
+  }
+  .editor-toolbar .status.ok { color: #7ec97e; }
+
+  /* Dashed outline on the focused editable region so it's obvious what you're editing */
+  [contenteditable="true"]:focus {
+    outline: 2px dashed #d4a84b;
+    outline-offset: 4px;
+    background: rgba(212, 168, 75, 0.04);
+  }
+
+  /* Disable the TOC links during editing — clicking them should not navigate */
+  body.editor-mode .toc a { pointer-events: none; cursor: text; }
+
+  /* ====================================================== */
+  /* Below is IDENTICAL to user-guide.html so what you see   */
+  /* here matches exactly what users see after publish.      */
+  /* ====================================================== */
 
   .cover {
     background: linear-gradient(135deg, #1a2332 0%, #2d3d56 100%);
@@ -173,22 +234,22 @@
     .cover { padding: 50px 24px; }
     .cover h1 { font-size: 1.8rem; }
     .container { padding: 24px 20px; }
-  }
-
-  @media print {
-    .cover { padding: 40px 20px; }
-    .container { max-width: 100%; }
-    h2 { page-break-before: always; }
-    h2:first-of-type { page-break-before: avoid; }
+    .editor-toolbar { flex-wrap: wrap; }
   }
 </style>
-
 </head>
-<body>
+<body class="editor-mode">
 
+<div class="editor-toolbar">
+  <span class="brand">Guide Editor</span>
+  <button onclick="copyFullHtml()">Copy Full HTML</button>
+  <button class="secondary" onclick="downloadHtml()">Download .html</button>
+  <button class="secondary" onclick="restoreOriginal()" title="Discard your changes in this browser and reload the committed version">Discard Changes</button>
+  <span class="status" id="editor-status">Click any text to edit. Changes auto-save to this browser.</span>
+</div>
 
-
-
+<!-- Everything inside #editable is click-to-edit. Structure matches user-guide.html exactly. -->
+<div id="editable" contenteditable="true">
 
 <div class="cover">
   <h1>Sensor Network Tracker</h1>
@@ -203,21 +264,23 @@
 <div class="toc">
   <h3>What's in This Guide</h3>
   <ol>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#overview">What Is This App?</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#getting-started">Getting Started</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#sensors">Working with Sensors</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#communities">Communities</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#notes">Notes &amp; Event History</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#tickets">Service Tickets</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#collocations">Collocations</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#audits">Audits</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#analysis">Data Analysis &amp; Reports</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#contacts">Contacts</a></li>
-    <li><a href="file:///Users/aylacrosby/sensor-network-tracker/user-guide-editor.html#tips">Tips &amp; Good-to-Knows</a></li>
+    <li><a href="#overview">What Is This App?</a></li>
+    <li><a href="#getting-started">Getting Started</a></li>
+    <li><a href="#dashboard">Dashboard &amp; QuantAQ Alerts</a></li>
+    <li><a href="#sensors">Working with Sensors</a></li>
+    <li><a href="#communities">Communities</a></li>
+    <li><a href="#notes">Notes &amp; Event History</a></li>
+    <li><a href="#tickets">Service Tickets</a></li>
+    <li><a href="#collocations">Collocations</a></li>
+    <li><a href="#audits">Audits</a></li>
+    <li><a href="#analysis">Data Analysis &amp; Reports</a></li>
+    <li><a href="#contacts">Contacts</a></li>
+    <li><a href="#exporting">Exporting Data</a></li>
+    <li><a href="#admin-modes">Admin Modes (Setup &amp; Sandbox)</a></li>
+    <li><a href="#tips">Tips &amp; Good-to-Knows</a></li>
   </ol>
 </div>
 
-<!-- ==================== OVERVIEW ==================== -->
 <h2 id="overview">1. What Is This App?</h2>
 
 <p>This is our internal tool for tracking everything related to the Community-Based Sensor Network. It replaces the old Salesforce workflow and puts everything in one place — sensors, the communities they're deployed in, contacts at each site, service tickets, collocations, and audits.</p>
@@ -241,7 +304,6 @@
   </div>
 </div>
 
-<!-- ==================== GETTING STARTED ==================== -->
 <h2 id="getting-started">2. Getting Started</h2>
 
 <p>To access the app, go to <a href="https://amqa-tools.github.io/sensor-network-tracker" target="_blank" rel="noopener">amqa-tools.github.io/sensor-network-tracker</a> and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.</p>
@@ -263,8 +325,44 @@
   You can pin frequently-used communities or sensors to the sidebar for quick access. Just click the star icon on any sensor or community detail page.
 </div>
 
-<!-- ==================== SENSORS ==================== -->
-<h2 id="sensors">3. Working with Sensors</h2>
+<h2 id="dashboard">3. Dashboard &amp; QuantAQ Alerts</h2>
+
+<p>The Dashboard is the landing page when you open the app. It gives you a quick network health snapshot: counts of active sensors, deployed communities, open service tickets, audits in progress, and the live feed of QuantAQ performance alerts.</p>
+
+<h3>How QuantAQ Alerts Work</h3>
+<p>The app automatically scans QuantAQ's API on a cron schedule to catch sensor problems you'd otherwise only notice by logging into QuantAQ directly. Every scan pulls a window of recent raw readings per sensor and decodes the flag bitmask — just like QuantAQ's own dashboard does — so intermittent faults get caught, not just ones where every reading is flagged.</p>
+
+<p>Four kinds of alerts can fire:</p>
+<ul>
+  <li><strong>PM Sensor Issue</strong> (critical) — The optical particle counter or nephelometer is malfunctioning. Fires immediately when detected.</li>
+  <li><strong>SD Card Issue</strong> (critical) — The pod's onboard storage is faulting. Fires immediately.</li>
+  <li><strong>Gaseous Sensor Issue</strong> (warning) — One or more gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is flagged. Sits in a pending state for a 6-hour grace window before escalating, because gas sensors look "broken" during warm-up after any power cycle and we don't want to spam you with false alarms.</li>
+  <li><strong>Lost Connection</strong> (info) — The sensor hasn't reported to QuantAQ in over an hour. Also has a 2-hour grace window to filter out brief network blips.</li>
+</ul>
+
+<h3>Pending vs. Active vs. Resolved</h3>
+<p>Alerts with a grace period start in <strong>pending</strong> and only promote to <strong>active</strong> if the issue is still present after the window elapses. If the problem clears before the grace window ends, the alert silently disappears — you never see it. That's intentional: routine power cycles that look scary for a few minutes shouldn't page anyone.</p>
+
+<p>Active alerts stay on the dashboard until the underlying issue clears in QuantAQ's data, at which point the alert is marked <strong>resolved</strong>.</p>
+
+<h3>Sensors Can Have More Than One Alert at Once</h3>
+<p>Lost Connection and PM/SD/Gas alerts fire independently. A sensor that's offline right now but whose last reported batch of readings was flagged for a PM fault will show <em>both</em> a Lost Connection alert and a PM Sensor Issue alert — matching what QuantAQ's dashboard shows. They won't mask each other.</p>
+
+<h3>What Happens to the Sensor's Status</h3>
+<p>When a PM, SD, or Gas alert becomes active, the corresponding status tag (e.g., "PM Sensor Issue") is automatically added to the sensor's status — but <strong>"Online" stays</strong>. The sensor is still reporting data, just with a fault flagged alongside. Only a Lost Connection alert (or a manual status change you make yourself) removes the "Online" tag.</p>
+
+<h3>Acknowledging &amp; Linking to History</h3>
+<p>Click an alert card to acknowledge it, write a follow-up note, or jump to the sensor's detail page. Writing a follow-up creates a row in the sensor's event history so the alert and your response are linked — useful when you're reviewing a sensor weeks later and want to know what happened.</p>
+
+<h3>Run Check Now</h3>
+<p>The dashboard has a "Run Check Now" button that kicks off a scan on demand if you don't want to wait for the next cron run. The scan runs server-side and takes a minute or two. The "last check" / "next check" timestamps next to the button reflect the live cron schedule.</p>
+
+<div class="callout tip">
+  <div class="callout-label">Expected Offline Statuses</div>
+  Sensors in "Lab Storage," "In Transit," "Service at Quant," "Ready for Deployment," or "Needs Repair" are <strong>never</strong> alerted about. The app assumes these are deliberately offline and skips them during the scan.
+</div>
+
+<h2 id="sensors">4. Working with Sensors</h2>
 
 <p>The All Sensors page is your main view. You can search by sensor ID, filter by status, and click any sensor to see its full detail page.</p>
 
@@ -279,10 +377,15 @@
   <li><strong>Lab Storage</strong> — The sensor is sitting at one of our lab locations, not currently deployed.</li>
   <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready to ship or install.</li>
   <li><strong>Needs Repair</strong> — The sensor has a known problem and shouldn't be deployed until it's fixed.</li>
-  <li><strong>PM Sensor Issue</strong> — The particulate matter sensor is malfunctioning.</li>
-  <li><strong>Gaseous Sensor Issue</strong> — One or more of the gas sensors (NO<sub>2</sub>, O<sub>3</sub>, etc.) is malfunctioning.</li>
+</ul>
+
+<h4>Auto-applied by the QuantAQ alert system</h4>
+<p>These statuses are normally set and cleared automatically by the alert scanner described in <a href="#dashboard">Section 3. Dashboard &amp; QuantAQ Alerts</a>. You <em>can</em> set them by hand, but the scanner will generally drive them on its own.</p>
+<ul>
+  <li><strong>PM Sensor Issue</strong> — The particulate matter sensor (OPC or nephelometer) is malfunctioning.</li>
+  <li><strong>Gaseous Sensor Issue</strong> — One or more of the gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is malfunctioning.</li>
   <li><strong>SD Card Issue</strong> — The pod's SD card is malfunctioning.</li>
-  <li><strong>Lost Connection</strong> — The sensor isn't reaching the network (covers power loss and connectivity drops).</li>
+  <li><strong>Lost Connection</strong> — The sensor hasn't reported to QuantAQ in over an hour. PM/Gas/SD faults keep "Online" alongside the fault tag; only Lost Connection removes "Online."</li>
 </ul>
 
 <h4>Auto-applied statuses</h4>
@@ -333,8 +436,7 @@
   <li><strong>Service Tickets</strong> — Open and closed tickets with progress notes</li>
 </ul>
 
-<!-- ==================== COMMUNITIES ==================== -->
-<h2 id="communities">4. Communities</h2>
+<h2 id="communities">5. Communities</h2>
 
 <p>Communities are organized alphabetically by parent communities, with child communities nested beneath them. You can change parent/child relationships anytime with the "Change Parent" button in each sensor's details page.</p>
 
@@ -345,8 +447,7 @@
   The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's individual history.
 </div>
 
-<!-- ==================== NOTES ==================== -->
-<h2 id="notes">5. Notes &amp; Event History</h2>
+<h2 id="notes">6. Notes &amp; Event History</h2>
 
 <p>Notes are how everything gets documented in the app. When you add a note, you can:</p>
 <ul>
@@ -371,8 +472,7 @@
   <li><strong>General Notes</strong> — Everything else</li>
 </ul>
 
-<!-- ==================== TICKETS ==================== -->
-<h2 id="tickets">6. Service Tickets</h2>
+<h2 id="tickets">7. Service Tickets</h2>
 
 <p>Service tickets track the lifecycle of a sensor being sent to QuantAQ for repair or calibration. Each ticket follows this workflow:</p>
 
@@ -403,8 +503,7 @@
 <h3>Closed Tickets</h3>
 <p>Closed tickets appear in their own section at the bottom of the Service Tickets page</p>
 
-<!-- ==================== COLLOCATIONS ==================== -->
-<h2 id="collocations">7. Collocations</h2>
+<h2 id="collocations">8. Collocations</h2>
 
 <p>Collocations are when we place community sensors at a regulatory site (Garden, NCore, or Floyd Dryden) alongside a BAM reference monitor and/or permanent pod to verify the sensors are reading accurately.</p>
 
@@ -433,8 +532,7 @@
 <h3>Progress Notes</h3>
 <p>Just like service tickets, collocations have a progress notes section for tracking updates throughout the process. Add notes anytime from the collocation detail view.</p>
 
-<!-- ==================== AUDITS ==================== -->
-<h2 id="audits">8. Audits</h2>
+<h2 id="audits">9. Audits</h2>
 
 <p>Audits are similar to collocations but involve sending an audit pod to a community to run alongside the community's sensor for validation. The audit workflow goes: Scheduled → In Progress → Finished, Analysis Pending → Complete.</p>
 
@@ -453,8 +551,7 @@
 
 <p>Each audit tracks the audit pod, community pod, community, dates, and who installed/removed the equipment. Like collocations, audits have progress notes and a full analysis pipeline.</p>
 
-<!-- ==================== ANALYSIS ==================== -->
-<h2 id="analysis">9. Data Analysis &amp; Reports</h2>
+<h2 id="analysis">10. Data Analysis &amp; Reports</h2>
 
 <p>This is the big one. Once a collocation or audit reaches "Complete," you can upload an Excel data file and the app runs the full regression analysis for you.</p>
 
@@ -482,7 +579,7 @@
 <h3>Analysis Tabs</h3>
 <p>The analysis view has tabs matching our standard report format:</p>
 <ul>
-  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM<sub>2.5</sub>, PM<sub>10</sub>, CO, etc.). Click sensors in the legend to toggle them off/on in the plot.&nbsp;</li>
+  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM<sub>2.5</sub>, PM<sub>10</sub>, CO, etc.). Click sensors in the legend to toggle them off/on in the plot.</li>
   <li><strong>Pods vs BAM</strong> — Each sensor compared against the BAM (PM only)</li>
   <li><strong>Quants PM</strong> — Each pod compared against the permanent pod for PM, or each pod compared to each other pod if no permanent pod is defined</li>
   <li><strong>Quants Gaseous</strong> — Each pod compared against the permanent pod for gases (CO, NO, NO<sub>2</sub>, O<sub>3</sub>), or each pod compared to each other pod if no permanent pod is defined</li>
@@ -507,19 +604,77 @@
   X-PM sensors (the Modulair-PM models) only compare PM<sub>2.5</sub> and PM<sub>10</sub> — gas parameters are automatically skipped for these sensors since they don't measure gases.
 </div>
 
-<!-- ==================== CONTACTS ==================== -->
-<h2 id="contacts">10. Contacts</h2>
+<h2 id="contacts">11. Contacts</h2>
 
 <p>Contacts include anyone involved in the sensor network: tribal administrators, school staff, facility managers, etc. They're grouped by community in the Contacts view.</p>
 
 <p>You can tag contacts in notes using @mentions (type @ and start typing their name), tag them in sensor movements, and add them to the email distribution list. Contacts can be deactivated (not deleted) when they're no longer involved, and reactivated later if needed.</p>
 
-<!-- ==================== TIPS ==================== -->
-<h2 id="tips">11. Tips &amp; Good-to-Knows</h2>
+<h2 id="exporting">12. Exporting Data</h2>
+
+<p>Each of the three main lists — Sensors, Communities, and Contacts — has an <strong>Export as Spreadsheet</strong> button at the top of the page. They all work the same way and open the same field-picker popup.</p>
+
+<ol>
+  <li>Click <strong>Export as Spreadsheet</strong>.</li>
+  <li>Check or uncheck the fields you want in the spreadsheet. Every field is on by default.</li>
+  <li>For Contacts and Communities, there's an extra checkbox to include inactive records. Active-only is the default.</li>
+  <li>Click <strong>Download</strong>. An <code>.xlsx</code> file named for the list and the current date downloads automatically.</li>
+</ol>
+
+<p>Fields vary by list:</p>
+<ul>
+  <li><strong>Sensors</strong> — ID, type, status, community, location, install date, SOA tag, purchase date. Custom sensor fields (added in Setup Mode) are included automatically.</li>
+  <li><strong>Communities</strong> — Name, parent community, tags, status, sensor count, sensor IDs, sub-community count, contact count.</li>
+  <li><strong>Contacts</strong> — Name, role, community, organization, email, phone, mass-email-list flag, status.</li>
+</ul>
+
+<h2 id="admin-modes">13. Admin Modes (Setup &amp; Sandbox)</h2>
+
+<p>Admins see two extra toggles in the sidebar footer: <strong>Setup Mode</strong> and <strong>Sandbox Mode</strong>. They look similar but do very different things, so don't confuse them.</p>
+
+<h3>Setup Mode</h3>
+<p>Setup Mode is for <strong>bulk data entry and backfilling</strong>. Use it when you're correcting or adding a lot of records at once and don't want the app to clutter sensor/community/contact history with an auto-generated note for every single edit.</p>
+
+<p>While Setup Mode is on:</p>
+<ul>
+  <li>Edits still save to the real database the same way — this is <strong>not</strong> a practice mode.</li>
+  <li>The app stops writing automatic history notes for status changes, community moves, contact edits, etc.</li>
+  <li>The "Date of change" and "Notes" prompts on the status-change and move modals are hidden so you can move through records faster.</li>
+  <li>Extra admin controls appear on the sensors table: add custom fields, edit sensor IDs inline, and restore hidden columns.</li>
+</ul>
+
+<p>Clicking the toggle opens a popup that explains the above. Click "Enter Setup Mode" to confirm. Turn it off again when you're done — normal editing re-enables the automatic history trail. Setup Mode auto-resets when you sign out or close the browser.</p>
+
+<div class="callout heads-up">
+  <div class="callout-label">Heads Up</div>
+  If you forget to turn Setup Mode off, your day-to-day edits will stop writing history notes. Watch for the amber "Setup Mode ON" pill in the sidebar.
+</div>
+
+<h3>Sandbox Mode</h3>
+<p>Sandbox Mode is a <strong>safe practice space</strong>. You can click around, add/edit/delete sensors, communities, contacts, notes — anything — and nothing you do will save to the real database. Use it to try new features, train yourself on a workflow, or show someone around without any risk.</p>
+
+<p>How it works:</p>
+<ul>
+  <li>You still see the real, current data from Supabase.</li>
+  <li>Any change you make only lives in your browser.</li>
+  <li>Refreshing the page, signing out, or clicking "Exit sandbox" reverts everything instantly.</li>
+  <li>A bright amber banner stays at the top of the screen the whole time so you never forget you're in sandbox.</li>
+</ul>
+
+<p>Clicking the toggle opens a popup that explains the above. Click "Enter Sandbox" to confirm — the page reloads with the sandbox safety net active.</p>
+
+<div class="callout tip">
+  <div class="callout-label">Which One Do I Want?</div>
+  <strong>Practicing, exploring, or training?</strong> Sandbox Mode. Nothing persists.<br>
+  <strong>Doing a lot of real cleanup/backfill and want to skip the auto-notes?</strong> Setup Mode. Everything persists.
+</div>
+
+<h2 id="tips">14. Tips &amp; Good-to-Knows</h2>
 
 <div class="callout">
   <div class="callout-label">Timezones</div>
-  Everything in the app runs on Alaska time (America/Anchorage).&nbsp;</div>
+  Everything in the app runs on Alaska time (America/Anchorage).
+</div>
 
 <div class="callout tip">
   <div class="callout-label">Online &amp; Offline</div>
@@ -546,11 +701,6 @@
   When you delete an audit, collocation, or service ticket, all the auto-generated notes in event histories get cleaned up too. You don't need to manually delete those.
 </div>
 
-<div class="callout">
-  <div class="callout-label">Setup Mode</div>
-  Users with admin rights will see a "Setup Mode" toggle in the sidebar, that's for bulk data entry when first setting up the system. It shows inline edit fields on everything and skips creating history notes for changes. You probably don't need this for day-to-day use.
-</div>
-
 </div>
 
 <div class="footer">
@@ -558,6 +708,144 @@
   Sensor Network Tracker User Guide • April 2026
 </div>
 
+</div><!-- /#editable -->
 
+<script>
+  // ===== EDITOR BEHAVIOR =====
+  // Snapshot of the committed-to-repo content, captured on initial load. Used
+  // by the Discard Changes button and by the restore-on-reload logic.
+  const DRAFT_KEY = 'snt_guide_editor_draft';
+  const editable = document.getElementById('editable');
+  const status = document.getElementById('editor-status');
+  const ORIGINAL_HTML = editable.innerHTML;
 
-</body></html>
+  // Restore a local draft if one exists from a previous session. Autosave is
+  // the safety net that makes "close the tab, come back tomorrow, nothing is
+  // lost" possible.
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (raw) {
+      const { html, timestamp } = JSON.parse(raw);
+      if (html && html !== ORIGINAL_HTML) {
+        const minsAgo = Math.max(1, Math.round((Date.now() - timestamp) / 60000));
+        if (confirm(`You have a local draft from ${minsAgo} minute${minsAgo === 1 ? '' : 's'} ago.\n\nRestore it? (Cancel to start from the currently-published version.)`)) {
+          editable.innerHTML = html;
+          status.textContent = 'Restored local draft. Keep editing or Discard Changes.';
+          status.classList.add('ok');
+        }
+      }
+    }
+  } catch (_) {}
+
+  // Debounced autosave — every edit triggers a save 1s after you stop typing.
+  let saveTimer = null;
+  editable.addEventListener('input', () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
+          html: editable.innerHTML,
+          timestamp: Date.now(),
+        }));
+        const t = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+        status.textContent = `Auto-saved locally at ${t}`;
+        status.classList.add('ok');
+      } catch (err) {
+        status.textContent = 'Auto-save failed — browser storage may be full. Copy your work out with "Copy Full HTML" as a backup.';
+        status.classList.remove('ok');
+      }
+    }, 1000);
+  });
+
+  // ===== COMPOSE OUTPUT HTML =====
+  // Rebuild a standalone HTML document from the current edited DOM. The output
+  // is byte-compatible with user-guide.html — same structure, same styles, so
+  // publishing it is a drop-in replacement.
+  function buildOutputHtml() {
+    // Snapshot the editable region, minus the editor-only outline styles.
+    const bodyHtml = editable.innerHTML.trim();
+    // Reuse the same <style> block as user-guide.html. We read it out of this
+    // page's <head>, stripping the editor-specific rules.
+    const styleEl = document.querySelector('head style');
+    let css = styleEl ? styleEl.textContent : '';
+    // Strip editor-only CSS blocks (toolbar, contenteditable outline, etc.).
+    css = css
+      .replace(/\n?\s*\/\*\s*===== EDITOR TOOLBAR[^]*?}\s*(?=\n\s*\/\*)/m, '\n')
+      .replace(/\[contenteditable="true"\]:focus\s*\{[^}]*\}\s*/g, '')
+      .replace(/body\.editor-mode[^}]*\{[^}]*\}\s*/g, '')
+      .replace(/padding-top:\s*56px;.*?leave room for the fixed toolbar.*?\n/, '')
+      .replace(/\.editor-toolbar[^}]*\{[^}]*\}/g, '')
+      .trim();
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADEC Sensor Network Tracker — User Guide</title>
+<style>
+${css}
+</style>
+</head>
+<body>
+
+${bodyHtml}
+
+</body>
+</html>
+`;
+  }
+
+  // ===== TOOLBAR ACTIONS =====
+  async function copyFullHtml() {
+    const html = buildOutputHtml();
+    try {
+      await navigator.clipboard.writeText(html);
+      status.textContent = `Copied ${html.length.toLocaleString()} characters to clipboard. Paste to Ayla / into the chat.`;
+      status.classList.add('ok');
+    } catch (err) {
+      // Clipboard API can be blocked on non-HTTPS or restricted contexts;
+      // fall back to a selection+execCommand path that still works.
+      const ta = document.createElement('textarea');
+      ta.value = html;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      ta.remove();
+      status.textContent = 'Copied (fallback). Paste it wherever you need.';
+    }
+  }
+
+  function downloadHtml() {
+    const html = buildOutputHtml();
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'user-guide.html';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    status.textContent = 'Downloaded user-guide.html — drop it into the repo to publish.';
+    status.classList.add('ok');
+  }
+
+  function restoreOriginal() {
+    if (!confirm('Discard all your local edits and reload the currently-published version?')) return;
+    editable.innerHTML = ORIGINAL_HTML;
+    try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+    status.textContent = 'Edits discarded.';
+    status.classList.remove('ok');
+  }
+
+  // Warn before closing a page with unsaved differences (handles the "I hit
+  // Cmd-W before copying my HTML" case).
+  window.addEventListener('beforeunload', (e) => {
+    if (editable.innerHTML !== ORIGINAL_HTML) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+</script>
+</body>
+</html>
