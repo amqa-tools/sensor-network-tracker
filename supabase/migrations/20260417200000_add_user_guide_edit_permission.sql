@@ -9,4 +9,4 @@ ALTER TABLE allowed_emails
 
 UPDATE allowed_emails
   SET can_edit_user_guide = true
-  WHERE lower(email) = 'jessealloy@gmail.com';
+  WHERE lower(email) = 'ayla.crosby@alaska.gov';
