@@ -984,7 +984,7 @@ async function enterApp() {
     document.getElementById('app').style.display = 'flex';
     document.getElementById('sidebar-user').innerHTML =
         `<span class="user-name">${currentUser}</span><span class="sidebar-user-actions"><span class="sidebar-settings-btn" onclick="event.stopPropagation(); showView('settings')" title="Settings">&#9881;</span><span class="user-logout" onclick="logoutUser()">Sign out</span></span>`;
-    renderSetupModeIndicator();
+    renderModeIndicators();
     buildSidebar();
     buildSensorSidebar();
     renderPinnedSidebar();
@@ -1035,6 +1035,7 @@ async function logoutUser() {
     currentUserId = null;
     currentUserRole = 'user';
     currentUserCanEditGuide = false;
+    _userGuideBodyCache = undefined;
     selectedSensors.clear();
     viewHistory = [];
     setupMode = false;
@@ -1066,7 +1067,7 @@ function toggleSetupMode() {
         // Leaving setup mode — no confirmation needed, just flip it off.
         setupMode = false;
         sessionStorage.setItem('snt_setupMode', setupMode);
-        renderSetupModeIndicator();
+        renderModeIndicators();
         refreshCurrentView();
         return;
     }
@@ -1079,12 +1080,16 @@ function enterSetupMode() {
     if (currentUserRole !== 'admin') return;
     setupMode = true;
     sessionStorage.setItem('snt_setupMode', setupMode);
-    renderSetupModeIndicator();
+    renderModeIndicators();
     refreshCurrentView();
     closeModal('modal-setup-explainer');
 }
 
-function renderSetupModeIndicator() {
+// Repaints both the Setup Mode and Sandbox Mode sidebar toggles (visibility,
+// active state, and label) in one call. Each mode has its own toggle; this
+// function is a single entry point so the two never drift out of sync when
+// role/state changes.
+function renderModeIndicators() {
     const el = document.getElementById('setup-mode-toggle');
     if (el) {
         // Only admins can see setup mode
@@ -1094,6 +1099,10 @@ function renderSetupModeIndicator() {
     }
     renderSandboxModeIndicator();
 }
+
+// Backwards-compatible alias — there are call sites elsewhere in the codebase
+// (or stale browser tabs) that still use the old name; this keeps them working.
+const renderSetupModeIndicator = renderModeIndicators;
 
 // ===== SANDBOX MODE =====
 // window.SANDBOX_MODE is set in supabase-client.js based on a ?sandbox=1 URL
@@ -11244,6 +11253,22 @@ var gasPairs = interPairs.filter(function(pk) { return REG.interPod[pk].co || RE
 // ===== USER GUIDE =====
 let _userGuideMode = 'view'; // 'view' or 'edit'
 let _userGuideOriginalText = null;
+// Cache the Supabase-stored guide body across view navigations so we don't
+// hit the DB every time the user clicks into User Guide. `undefined` means
+// "never fetched"; `null` means "fetched, no saved body"; a string is the
+// saved body. Invalidated explicitly on save.
+let _userGuideBodyCache = undefined;
+
+async function _fetchUserGuideBody() {
+    if (_userGuideBodyCache !== undefined) return _userGuideBodyCache;
+    try {
+        _userGuideBodyCache = await db.getAppSetting('user_guide_body');
+    } catch (err) {
+        console.warn('[user guide] Could not load saved body, falling back to static file:', err);
+        _userGuideBodyCache = null;
+    }
+    return _userGuideBodyCache;
+}
 
 function _renderUserGuideButtons() {
     // Guide-edit permission is independent from admin role — see the
@@ -11276,12 +11301,7 @@ async function renderUserGuide() {
     // Prefer the admin-edited version stored in Supabase so in-app edits are
     // live for everyone instantly. Fall back to the static user-guide.html
     // file shipped with the repo when no custom content exists.
-    let body = null;
-    try {
-        body = await db.getAppSetting('user_guide_body');
-    } catch (err) {
-        console.warn('[user guide] Could not load saved body, falling back to static file:', err);
-    }
+    const body = await _fetchUserGuideBody();
 
     container.innerHTML = '';
     const iframe = document.createElement('iframe');
@@ -11300,12 +11320,7 @@ async function openUserGuideEditor() {
     _userGuideMode = 'edit';
     _renderUserGuideButtons();
 
-    let body = null;
-    try {
-        body = await db.getAppSetting('user_guide_body');
-    } catch (err) {
-        console.warn('[user guide] Editor load from Supabase failed; will seed from static file:', err);
-    }
+    let body = await _fetchUserGuideBody();
     if (!body) {
         // First edit — seed the textarea from the static file so the admin
         // can iterate from the current published version, not a blank page.
@@ -11331,6 +11346,10 @@ async function saveUserGuide() {
     const body = ta ? ta.value : '';
     try {
         await db.setAppSetting('user_guide_body', body);
+        // Invalidate the cache so the next render re-reads (cheaper: just
+        // prime it with what we just wrote so the next render skips a
+        // round-trip).
+        _userGuideBodyCache = body;
         showSuccessToast('User guide published');
         await renderUserGuide();
     } catch (err) {
@@ -11362,12 +11381,7 @@ function cancelUserGuideEdit() {
 async function exportUserGuide() {
     // Prefer the admin-edited version from Supabase so the downloaded file
     // matches what users actually see in the app.
-    let html = null;
-    try {
-        html = await db.getAppSetting('user_guide_body');
-    } catch (err) {
-        console.warn('[user guide] Export: could not load saved body, using static file:', err);
-    }
+    let html = await _fetchUserGuideBody();
     if (!html) {
         try {
             const r = await fetch('user-guide.html?v=' + Date.now());

@@ -215,6 +215,19 @@ async function runScan(): Promise<Response> {
   const newAlerts: any[] = [];
   const statusUpdates: { sn: string; statuses: string[] }[] = [];
 
+  // Index the existing active/pending alerts by (sensor_sn, issue_type) so each
+  // worker can look up "is there already an alert for this sensor+issue?" in
+  // O(1) rather than scanning the whole list — the scan is hot on this lookup
+  // (every candidate sensor × every possible issue type).
+  const existingKey = (sn: string, issueType: string) => `${sn}|${issueType}`;
+  const existingByKey = new Map<string, any>();
+  const existingBySensor = new Map<string, any[]>();
+  for (const a of existingAlerts) {
+    existingByKey.set(existingKey(a.sensor_sn, a.issue_type), a);
+    if (!existingBySensor.has(a.sensor_sn)) existingBySensor.set(a.sensor_sn, []);
+    existingBySensor.get(a.sensor_sn)!.push(a);
+  }
+
   // --- Pre-filter out sensors we're intentionally ignoring ---
   // EXPECTED_OFFLINE sensors (Lab Storage, In Transit, etc.) are never
   // checked — raw OR lost-connection.
@@ -279,7 +292,7 @@ async function runScan(): Promise<Response> {
     if (msSince > OFFLINE_MS) {
       if (appSensor && appSensor.community_id) {
         const detail = effectiveLastSeen ? `Last seen ${effectiveLastSeen.toISOString()}` : "Never seen";
-        const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === "Lost Connection");
+        const existing = existingByKey.get(existingKey(d.sn, "Lost Connection"));
         if (existing) {
           stillActiveIds.add(existing.id);
           const detectedAtIso = effectiveLastSeen ? effectiveLastSeen.toISOString() : existing.detected_at;
@@ -332,10 +345,8 @@ async function runScan(): Promise<Response> {
     if (rows.length === 0) return;
     const rawFreshnessMs = Number.isFinite(latestRawMs) ? Date.now() - latestRawMs : Infinity;
     if (rawFreshnessMs > FLAG_MAX_STALENESS_MS) {
-      for (const a of existingAlerts) {
-        if (a.sensor_sn === d.sn && a.issue_type !== "Lost Connection") {
-          stillActiveIds.add(a.id);
-        }
+      for (const a of existingBySensor.get(d.sn) || []) {
+        if (a.issue_type !== "Lost Connection") stillActiveIds.add(a.id);
       }
       return;
     }
@@ -370,7 +381,7 @@ async function runScan(): Promise<Response> {
     const detectedAtIso = new Date(detectedAtMs).toISOString();
 
     for (const issueType of issues) {
-      const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === issueType);
+      const existing = existingByKey.get(existingKey(d.sn, issueType));
       if (existing) {
         stillActiveIds.add(existing.id);
         const res = await supa.from("quantaq_alerts")
