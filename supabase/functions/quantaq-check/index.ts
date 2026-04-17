@@ -202,9 +202,13 @@ async function runScan(): Promise<Response> {
   const getStatusArray = (s: any): string[] => Array.isArray(s?.status) ? s.status : [];
 
   // --- Fetch all devices from QuantAQ ---
+  // Cap pagination so a misbehaving pages count from the API can't serialize
+  // dozens of slow fetches into our 150s edge-function budget. At 100 per
+  // page, 5 pages == 500 devices, far beyond what we actually manage.
+  const MAX_DEVICE_PAGES = 5;
   const devices: any[] = [];
   let page = 1, pages = 1;
-  while (page <= pages) {
+  while (page <= pages && page <= MAX_DEVICE_PAGES) {
     const json = await qaqFetch(apiKey, `/devices/?per_page=100&org_id=1250&page=${page}`);
     devices.push(...(json.data || []));
     pages = json.meta?.pages || 1;
@@ -248,15 +252,29 @@ async function runScan(): Promise<Response> {
   //   "offline" purely because /devices/ hadn't updated yet, and its flag
   //   malfunction would never surface. We now use max(device.last_seen,
   //   latest raw timestamp) as the real "last activity" signal.
+  // Helper: when we can't evaluate flag state for a sensor (raw fetch failed,
+  // empty response, or raw data too stale), preserve any EXISTING flag alerts
+  // so the later resolve-cleared pass doesn't wrongly declare them "cleared."
+  // Lost Connection is not included — it's evaluated from last_seen, which
+  // doesn't depend on the raw fetch.
+  const preserveFlagAlertsFor = (sn: string) => {
+    for (const a of existingBySensor.get(sn) || []) {
+      if (a.issue_type !== "Lost Connection") stillActiveIds.add(a.id);
+    }
+  };
+
   await runWithConcurrency(candidateDevices, 30, async (d) => {
     let rows: any[] = [];
+    let rawFetchFailed = false;
     try {
       const json = await qaqFetch(apiKey, `/devices/${d.sn}/data/raw/?per_page=${RAW_WINDOW_SIZE}&sort=timestamp,desc`);
       rows = Array.isArray(json.data) ? json.data : [];
     } catch (e) {
+      rawFetchFailed = true;
       console.warn(`[QAQ] Raw error for ${d.sn}:`, e);
-      // Fall through — raw fetch failed, device last_seen still drives
-      // Lost Connection detection. We just can't check flags this scan.
+      // Fall through — raw fetch failed, device last_seen still drives Lost
+      // Connection detection. We keep existing flag alerts alive below so a
+      // transient QuantAQ outage doesn't flip every flag alert to resolved.
     }
 
     const appSensor = sensorById.get(d.sn);
@@ -341,13 +359,14 @@ async function runScan(): Promise<Response> {
     // already active must be kept alive in stillActiveIds so the later
     // "resolve cleared" pass doesn't auto-resolve it and write a misleading
     // "has cleared" note — we're just choosing not to refresh, not declaring
-    // the fault gone.
-    if (rows.length === 0) return;
+    // the fault gone. Same rule applies to fetch failures and empty responses.
+    if (rawFetchFailed || rows.length === 0) {
+      preserveFlagAlertsFor(d.sn);
+      return;
+    }
     const rawFreshnessMs = Number.isFinite(latestRawMs) ? Date.now() - latestRawMs : Infinity;
     if (rawFreshnessMs > FLAG_MAX_STALENESS_MS) {
-      for (const a of existingBySensor.get(d.sn) || []) {
-        if (a.issue_type !== "Lost Connection") stillActiveIds.add(a.id);
-      }
+      preserveFlagAlertsFor(d.sn);
       return;
     }
     let flagUnion = 0;
@@ -492,15 +511,18 @@ async function runScan(): Promise<Response> {
         .update({ status: "resolved", resolved_at: now, is_new: true, last_checked: now })
         .in("id", ids),
     );
+    // Figure out which sensors actually disappeared from QuantAQ's device list
+    // so we can word the auto-resolution note honestly. "cleared" implies the
+    // fault went away; if the sensor is just gone from QuantAQ, say so.
+    const knownSns = new Set(devices.map((d) => d.sn));
     for (const alert of toResolve) {
       const appSensor = sensorById.get(alert.sensor_sn);
       const communityId = appSensor?.community_id || null;
-      await insertAutoFlagNote(
-        supa,
-        `QuantAQ Auto-Resolved: ${alert.issue_type} on ${alert.sensor_sn} has cleared.`,
-        alert.sensor_sn,
-        communityId,
-      );
+      const sensorStillReported = knownSns.has(alert.sensor_sn);
+      const wording = sensorStillReported
+        ? `QuantAQ Auto-Resolved: ${alert.issue_type} on ${alert.sensor_sn} has cleared.`
+        : `QuantAQ Auto-Resolved: ${alert.issue_type} on ${alert.sensor_sn} closed — sensor no longer reported by QuantAQ.`;
+      await insertAutoFlagNote(supa, wording, alert.sensor_sn, communityId);
       if (appSensor) {
         const filtered = getStatusArray(appSensor).filter((s) => s !== alert.issue_type);
         let next: string[];

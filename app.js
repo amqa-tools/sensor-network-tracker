@@ -925,7 +925,24 @@ async function enterApp() {
         // Keep the archived-check query on the original minimal column set so
         // it can never fail because of a not-yet-applied migration. We fetch
         // the granular permission column separately and tolerate its absence.
-        const { data: emailRow } = await supa.from('allowed_emails').select('role, status').eq('email', checkEmail).maybeSingle();
+        // ilike is case-insensitive — guards against mixed-case emails in
+        // allowed_emails that would otherwise cause a silent miss (and the
+        // user would be wrongly treated as archived + signed out).
+        //
+        // Fetch role+status+can_edit_user_guide in one query. If the
+        // can_edit_user_guide column doesn't exist yet (migration not
+        // applied), Supabase rejects the whole select — we catch that and
+        // fall back to a minimal query so users aren't locked out.
+        let emailRow = null;
+        try {
+            ({ data: emailRow } = await supa.from('allowed_emails')
+                .select('role, status, can_edit_user_guide')
+                .ilike('email', checkEmail).maybeSingle());
+        } catch (_) {
+            ({ data: emailRow } = await supa.from('allowed_emails')
+                .select('role, status')
+                .ilike('email', checkEmail).maybeSingle());
+        }
         if (!emailRow || emailRow.status === 'archived' || emailRow.status === 'revoked') {
             await db.signOut();
             document.getElementById('login-loading').style.display = 'none';
@@ -934,17 +951,12 @@ async function enterApp() {
             showLoginError('Your account has been archived. Please contact an admin if you need access restored.');
             return;
         }
-        // Load role and granular permissions
         currentUserRole = profile?.role || emailRow?.role || 'user';
-        try {
-            const { data: permRow } = await supa.from('allowed_emails').select('can_edit_user_guide').eq('email', checkEmail).maybeSingle();
-            currentUserCanEditGuide = !!permRow?.can_edit_user_guide;
-        } catch (_) {
-            // Column may not exist yet (migration not applied). Default to the
-            // pre-permission behavior: treat any admin as a guide editor so
-            // nobody is locked out before the migration runs.
-            currentUserCanEditGuide = currentUserRole === 'admin';
-        }
+        // If the column is missing, default to admins-can-edit-guide so nobody
+        // is locked out between the code deploy and the db push.
+        currentUserCanEditGuide = 'can_edit_user_guide' in emailRow
+            ? !!emailRow.can_edit_user_guide
+            : currentUserRole === 'admin';
 
         // Repair profile if it was previously anonymized by deletion
         if (profile && (profile.name === '[Deleted User]' || !profile.email) && checkEmail) {
@@ -1012,11 +1024,13 @@ function startInactivityTimer() {
 function resetInactivityTimer() {
     if (inactivityTimeout) clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(async () => {
+        // Sign out FIRST so a backgrounded tab still loses its session. If we
+        // waited for the user to dismiss the alert, a tab the user never comes
+        // back to would keep the auth session alive indefinitely.
         sessionStorage.removeItem('mfa_verified_at');
         sessionStorage.removeItem('mfa_verified_user');
-        showAlert('Session Expired', 'You have been signed out due to inactivity.', async () => {
-            await logoutUser();
-        });
+        await logoutUser();
+        showAlert('Session Expired', 'You have been signed out due to inactivity.');
     }, INACTIVITY_LIMIT);
 }
 
@@ -1091,9 +1105,6 @@ function renderModeIndicators() {
     renderSandboxModeIndicator();
 }
 
-// Backwards-compatible alias — there are call sites elsewhere in the codebase
-// (or stale browser tabs) that still use the old name; this keeps them working.
-const renderSetupModeIndicator = renderModeIndicators;
 
 // ===== SANDBOX MODE =====
 // window.SANDBOX_MODE is set in supabase-client.js based on a ?sandbox=1 URL
@@ -1815,11 +1826,6 @@ function getVisibleColumns() {
     return buildColumnList().filter(c => !hiddenColumns.includes(c.key));
 }
 
-function saveColumnOrder() {
-    columnOrder = buildColumnList().map(c => c.key);
-    saveData('sensorColumnOrder', columnOrder);
-}
-
 function renderSensorTableHeader() {
     const cols = getVisibleColumns();
     const colHeaders = cols.map((col, i) => {
@@ -2081,6 +2087,9 @@ function openAddSensorModal() {
     document.getElementById('sensor-modal-title').textContent = 'Add New Sensor';
     document.getElementById('sensor-form').reset();
     document.getElementById('sensor-edit-id').value = '';
+    const idInput = document.getElementById('sensor-id-input');
+    idInput.readOnly = false;
+    idInput.removeAttribute('title');
     populateGroupedCommunitySelect('sensor-community-input');
     renderStatusToggleList('sensor-status-input', []);
     openModal('modal-add-sensor');
@@ -2091,7 +2100,14 @@ function openEditSensorModal(sensorId) {
     if (!s) return;
     document.getElementById('sensor-modal-title').textContent = 'Edit Sensor';
     document.getElementById('sensor-edit-id').value = s.id;
-    document.getElementById('sensor-id-input').value = s.id;
+    const idInput = document.getElementById('sensor-id-input');
+    idInput.value = s.id;
+    // Lock the Sensor ID during edit. Renaming the primary key here would
+    // orphan the old DB row (upsert writes by id, doesn't move it), and if
+    // the new ID collided with another sensor's, two rows would fight.
+    // Admins can still change IDs inline via the table in Setup Mode.
+    idInput.readOnly = true;
+    idInput.title = 'Sensor ID is not editable here. Use Setup Mode on the sensor table to rename.';
     document.getElementById('sensor-soa-input').value = s.soaTagId || '';
     document.getElementById('sensor-type-input').value = s.type;
     renderStatusToggleList('sensor-status-input', getStatusArray(s));
@@ -2133,6 +2149,14 @@ function saveSensor(e) {
     if (editId) {
         const oldSensor = sensors.find(s => s.id === editId);
         if (!oldSensor) return;
+
+        // Defense in depth: even though the ID input is readOnly during edit,
+        // reject a rename attempt here so a spoofed DOM can't produce orphaned
+        // rows (upsert would write a new row without deleting the old one).
+        if (data.id !== editId) {
+            showAlert('Sensor ID Locked', 'Sensor IDs can\'t be changed from the edit modal. Delete and re-add the sensor, or use Setup Mode on the table to rename it inline.');
+            return;
+        }
 
         // Detect changes
         const fieldLabels = {
@@ -2374,7 +2398,7 @@ function confirmDeleteSensor(sensorId) {
         renderSensors();
         buildSensorSidebar();
         showSuccessToast(`Sensor ${s.id} deleted`);
-        db.deleteSensor(sensorId).catch(err => console.error('Delete sensor DB error:', err));
+        db.deleteSensor(sensorId).catch(handleSaveError);
     }, { danger: true });
 }
 
@@ -2471,9 +2495,13 @@ function moveSensor(e) {
     closeModal('modal-move-sensor');
     refreshCurrentView();
 
-    // Prompt to update install date after move (skip lab locations)
+    // Prompt to update install date after move, except when moving into a
+    // lab-storage community (those moves aren't installations). We use the
+    // canonical community id list instead of a substring match because
+    // substrings like "lab" also hit real village names (e.g. Labouchere Bay).
     if (!setupMode) {
-        const isLabLocation = toCommunityId.includes('lab') || toName.toLowerCase().includes('lab');
+        const LAB_COMMUNITY_IDS = new Set(['anc-lab', 'fbx-lab', 'jnu-lab']);
+        const isLabLocation = LAB_COMMUNITY_IDS.has(toCommunityId);
         if (!isLabLocation) {
             const suggestedDate = moveDate.split('T')[0] || nowDatetime().split('T')[0];
             promptInstallDateUpdate(sensorId, suggestedDate, `${s.id} was moved to ${toName}.`);
@@ -3641,7 +3669,7 @@ function confirmDeleteContact(contactId) {
             <strong style="color:var(--gold-700)">Tip:</strong> If this person is no longer involved but may be relevant later, consider setting them to <strong>Inactive</strong> instead. Inactive contacts are preserved in the system but hidden from active lists.
          </p>`,
         () => {
-            db.deleteContact(contactId).catch(err => console.error('Delete error:', err));
+            db.deleteContact(contactId).catch(handleSaveError);
             contacts = contacts.filter(x => x.id !== contactId);
             showSuccessToast(`${c.name} deleted`);
 
@@ -3884,6 +3912,22 @@ function openQuickEmail(contactId) {
 }
 
 // ===== NOTES =====
+// Mass Action button on the sensors view: if any row-checkboxes are
+// selected, pre-fill the note's tagged-sensors with them so the user doesn't
+// have to retype the IDs. Previously the button just opened a blank note,
+// making the row checkboxes useless.
+function openMassActionNote() {
+    openAddNoteModal('', '');
+    if (selectedSensors.size === 0) return;
+    const container = document.getElementById('tag-sensors-container');
+    if (!container) return;
+    // Clear existing placeholder chips, then add one per selected sensor.
+    container.querySelectorAll('.tag-chip').forEach(c => c.remove());
+    for (const sid of selectedSensors) {
+        prefillChip('tag-sensors-container', sid);
+    }
+}
+
 function openAddNoteModal(contextId, contextType) {
     document.getElementById('note-form').reset();
     document.getElementById('note-context-id').value = contextId;
@@ -4773,6 +4817,15 @@ function saveCommunity(e) {
 
     const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
+    // A name made of only punctuation/emoji would derive to empty, which
+    // would collide with any existing empty-id row (or make sensors tagged
+    // later un-referenceable). Require the derived id to have at least one
+    // character.
+    if (!id) {
+        showAlert('Invalid Community Name', 'Community name must contain at least one letter or number so we can generate a valid identifier.');
+        return;
+    }
+
     // Check for duplicates (by ID or exact name)
     const dupById = COMMUNITIES.find(c => c.id === id);
     const dupByName = COMMUNITIES.find(c => c.name.toLowerCase() === name.toLowerCase());
@@ -5267,11 +5320,15 @@ function editProfileName(el) {
 
 async function renderAllowedUsers(currentEmail) {
     const isAdmin = currentUserRole === 'admin';
-    const { data, error } = await supa.from('allowed_emails').select('*').order('email');
+    // Fetch allowed_emails + profiles in parallel — they don't depend on each
+    // other. Saves a round-trip on every Settings render.
+    const [{ data, error }, { data: profiles }] = await Promise.all([
+        supa.from('allowed_emails').select('*').order('email'),
+        supa.from('profiles').select('email'),
+    ]);
     if (error) { console.error(error); return; }
 
     // Get profiles to determine who has actually signed up
-    const { data: profiles } = await supa.from('profiles').select('email');
     const signedUpEmails = new Set((profiles || []).map(p => (p.email || '').toLowerCase()).filter(Boolean));
 
     // Show/hide admin-only controls
@@ -6034,15 +6091,22 @@ function toggleAllSensorCheckboxes(checked) {
 }
 
 function updateBulkActionButton() {
+    // Guards: these IDs are placeholders from an older UI iteration that
+    // isn't in index.html yet. Guarding means clicking a sensor-row
+    // checkbox doesn't throw a TypeError on a null element reference.
     const count = selectedSensors.size;
-    document.getElementById('bulk-count').textContent = count;
-    document.getElementById('bulk-action-btn').style.display = count > 0 ? '' : 'none';
-    document.getElementById('bulk-clear-btn').style.display = count > 0 ? '' : 'none';
+    const countEl = document.getElementById('bulk-count');
+    const btnEl = document.getElementById('bulk-action-btn');
+    const clearEl = document.getElementById('bulk-clear-btn');
+    if (countEl) countEl.textContent = count;
+    if (btnEl) btnEl.style.display = count > 0 ? '' : 'none';
+    if (clearEl) clearEl.style.display = count > 0 ? '' : 'none';
 }
 
 function clearSensorSelection() {
     selectedSensors.clear();
-    document.getElementById('select-all-sensors').checked = false;
+    const selectAll = document.getElementById('select-all-sensors');
+    if (selectAll) selectAll.checked = false;
     document.querySelectorAll('.sensor-checkbox').forEach(cb => cb.checked = false);
     updateBulkActionButton();
 }
@@ -6096,21 +6160,6 @@ function goBack() {
     else if (prev.viewId === 'view-contact-detail' && prev.itemId) { currentContact = prev.itemId; showContactView(prev.itemId); }
     isNavigatingBack = false;
     updateBackButton();
-}
-
-// ===== VIEW INSTALLATION HISTORY =====
-function viewInstallHistory() {
-    const filterEl = document.getElementById('sensor-history-filter');
-    if (filterEl) filterEl.value = '_changes';
-    filterSensorHistory();
-    document.getElementById('tab-sensor-history').scrollIntoView({ behavior: 'smooth' });
-}
-
-function viewCollocationHistory() {
-    const filterEl = document.getElementById('sensor-history-filter');
-    if (filterEl) filterEl.value = 'Audit';
-    filterSensorHistory();
-    document.getElementById('tab-sensor-history').scrollIntoView({ behavior: 'smooth' });
 }
 
 function getMostRecentCollocation(sensorId) {
@@ -6338,7 +6387,7 @@ function editCommunityName() {
     const oldName = c.name;
     c.name = trimmedName;
     communityNameMap[currentCommunity] = trimmedName;
-    db.updateCommunity(currentCommunity, { name: c.name }).catch(err => console.error(err));
+    db.updateCommunity(currentCommunity, { name: c.name }).catch(handleSaveError);
 
     if (!setupMode) {
         createNote('Info Edit', `Community renamed from "${oldName}" to "${c.name}".`, {
@@ -6398,7 +6447,7 @@ function openChangeParentModal(communityId) {
         }
 
         // Persist to DB
-        db.updateCommunity(communityId, { parent_id: newParentId || null }).catch(err => console.error('Change parent error:', err));
+        db.updateCommunity(communityId, { parent_id: newParentId || null }).catch(handleSaveError);
 
         // Log note
         if (!setupMode) {
@@ -6426,13 +6475,6 @@ function openChangeParentModal(communityId) {
     }, { confirmText: 'Save' });
 }
 
-function pinTag(tag) {
-    if (pinnedItems.find(p => p.type === 'tag' && p.id === tag)) return;
-    pinnedItems.push({ type: 'tag', id: tag, label: tag });
-    saveData('pinnedItems', pinnedItems);
-    renderPinnedSidebar();
-}
-
 function unpinItem(type, id) {
     pinnedItems = pinnedItems.filter(p => !(p.type === type && p.id === id));
     saveData('pinnedItems', pinnedItems);
@@ -6455,7 +6497,7 @@ function deactivateCommunity(communityId) {
             deactivatedCommunities.push(communityId);
         }
         // Persist to Supabase
-        db.updateCommunity(communityId, { active: false }).catch(err => console.error('Deactivate error:', err));
+        db.updateCommunity(communityId, { active: false }).catch(handleSaveError);
 
         // Also deactivate child communities
         const children = COMMUNITIES.filter(c => communityParents[c.id] === communityId);
@@ -6463,7 +6505,7 @@ function deactivateCommunity(communityId) {
             if (!deactivatedCommunities.includes(child.id)) {
                 deactivatedCommunities.push(child.id);
             }
-            db.updateCommunity(child.id, { active: false }).catch(err => console.error('Deactivate child error:', err));
+            db.updateCommunity(child.id, { active: false }).catch(handleSaveError);
         });
 
         // Auto-inactivate contacts in this community (and children)
@@ -6485,16 +6527,26 @@ function reactivateCommunity(communityId) {
     const communityName = community ? community.name : communityId;
 
     deactivatedCommunities = deactivatedCommunities.filter(id => id !== communityId);
-    db.updateCommunity(communityId, { active: true }).catch(err => console.error('Reactivate error:', err));
+    db.updateCommunity(communityId, { active: true }).catch(handleSaveError);
 
     // Also reactivate child communities
     const children = COMMUNITIES.filter(c => communityParents[c.id] === communityId);
     children.forEach(child => {
         deactivatedCommunities = deactivatedCommunities.filter(id => id !== child.id);
-        db.updateCommunity(child.id, { active: true }).catch(err => console.error('Reactivate child error:', err));
+        db.updateCommunity(child.id, { active: true }).catch(handleSaveError);
     });
 
-    showSuccessToast(`${communityName} reactivated`);
+    // Deactivating a community auto-deactivates its contacts, but reactivation
+    // intentionally doesn't re-activate them (some may have genuinely left).
+    // Surface a heads-up with a count so the user knows to review.
+    const inactiveContactCount = contacts.filter(c =>
+        (c.community === communityId || children.some(ch => c.community === ch.id))
+        && c.active === false
+    ).length;
+    const suffix = inactiveContactCount > 0
+        ? ` — ${inactiveContactCount} contact${inactiveContactCount === 1 ? ' is' : 's are'} still inactive (review manually).`
+        : '';
+    showSuccessToast(`${communityName} reactivated${suffix}`);
     showView('communities');
 }
 
@@ -6881,12 +6933,20 @@ function advanceTicketStatus(ticketId) {
 
     const sensorStatusMap = { 'Shipped to Quant': ['Shipped to Quant'], 'At Quant': ['Service at Quant'], 'Shipped from Quant': ['Shipped from Quant'] };
     const allServiceStatuses = ['Shipped to Quant', 'Service at Quant', 'Shipped from Quant'];
-    if (sensorStatusMap[newStatus]) {
-        const s = sensors.find(x => x.id === ticket.sensorId);
-        if (s) {
-            // Strip ALL service-related statuses, then apply only the current stage's status
+    const s = sensors.find(x => x.id === ticket.sensorId);
+    if (s) {
+        if (sensorStatusMap[newStatus]) {
+            // Strip ALL service-related statuses, then apply only the current stage's status.
             const current = getStatusArray(s).filter(st => st !== 'Quant Ticket in Progress' && !allServiceStatuses.includes(st));
             s.status = [...current, ...sensorStatusMap[newStatus]];
+            persistSensor(s); buildSensorSidebar();
+        } else if (newStatus === 'Received') {
+            // Sensor is physically back in our hands. Drop any lingering shipping
+            // status ("Shipped from Quant") and the "Quant Ticket in Progress" tag
+            // so the list accurately reflects that it's ready to be re-deployed.
+            // If nothing else remains, fall back to "Online" — it just returned.
+            const filtered = getStatusArray(s).filter(st => st !== 'Quant Ticket in Progress' && !allServiceStatuses.includes(st));
+            s.status = filtered.length > 0 ? filtered : ['Online'];
             persistSensor(s); buildSensorSidebar();
         }
     }
@@ -7082,11 +7142,6 @@ const NON_AUDITABLE_COMMUNITIES = ['anchorage', 'fairbanks', 'juneau', 'anc-lab'
 
 function getAuditableCommunities() {
     return COMMUNITIES.filter(c => !NON_AUDITABLE_COMMUNITIES.includes(c.id) && !isCommunityDeactivated(c.id));
-}
-
-function getUnauditedCommunities() {
-    const auditedIds = new Set(audits.map(a => a.communityId));
-    return getAuditableCommunities().filter(c => !auditedIds.has(c.id));
 }
 
 function updateSidebarAuditCount() {
@@ -9560,11 +9615,17 @@ async function uploadAuditPhotos(auditId, communityId, files) {
     for (const file of files) {
         try {
             const path = `${auditId}/${Date.now()}_${file.name}`;
-            await supa.storage.from('community-files').upload(path, file);
-            const { data: fileData } = await supa.from('community_files').insert({
+            // Check BOTH the storage upload and the DB insert. Previously the
+            // upload's `{error}` was discarded and a failed upload still wrote
+            // a DB row, producing a broken-thumbnail file pointing at a blob
+            // that wasn't there.
+            const { error: uploadError } = await supa.storage.from('community-files').upload(path, file);
+            if (uploadError) throw uploadError;
+            const { data: fileData, error: insertError } = await supa.from('community_files').insert({
                 community_id: communityId, file_name: displayName, file_type: file.type,
                 storage_path: path, uploaded_by: currentUserId,
             }).select();
+            if (insertError) throw insertError;
             if (!communityFiles[communityId]) communityFiles[communityId] = [];
             communityFiles[communityId].push({ id: fileData?.[0]?.id || generateId('f'), name: displayName, type: file.type, storagePath: path, date: nowDatetime() });
         } catch (err) { handleSaveError(err); }
@@ -11499,73 +11560,6 @@ function closeSidebar() {
 }
 
 // ===== BATCH IMPORT =====
-async function importSensors(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-        const data = await file.arrayBuffer();
-        const wb = XLSX.read(data);
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws);
-
-        let imported = 0;
-        let skipped = 0;
-
-        for (const row of rows) {
-            const id = row['Sensor ID'] || row['sensor_id'] || row['id'];
-            if (!id) { skipped++; continue; }
-            if (sensors.find(s => s.id === id)) { skipped++; continue; }
-
-            const sensor = {
-                id: String(id).trim(),
-                soaTagId: String(row['SOA Tag ID'] || row['soa_tag_id'] || '').trim(),
-                type: row['Type'] || row['type'] || 'Community Pod',
-                status: [],
-                community: '',
-                location: String(row['Location'] || row['location'] || '').trim(),
-                datePurchased: String(row['Purchase Date'] || row['date_purchased'] || '').trim(),
-                collocationDates: String(row['Initial Collocation'] || row['collocation_dates'] || '').trim(),
-                dateInstalled: '',
-            };
-
-            // Try to match community by name
-            const commName = row['Community'] || row['community'] || '';
-            if (commName) {
-                const match = COMMUNITIES.find(c => c.name.toLowerCase() === String(commName).toLowerCase().trim());
-                if (match) sensor.community = match.id;
-            }
-
-            // Parse status
-            const statusStr = row['Status'] || row['status'] || '';
-            if (statusStr) {
-                sensor.status = String(statusStr).split(';').map(s => s.trim()).filter(Boolean);
-            }
-
-            // Check SOA Tag ID uniqueness
-            if (sensor.soaTagId) {
-                const soaDup = sensors.find(s => s.soaTagId === sensor.soaTagId);
-                if (soaDup) {
-                    skipped++;
-                    continue;
-                }
-            }
-
-            sensors.push(sensor);
-            persistSensor(sensor);
-            imported++;
-        }
-
-        showAlert('Import Complete', `${imported} sensors added, ${skipped} skipped (duplicate ID, duplicate SOA Tag, or missing ID).`);
-        event.target.value = '';
-        renderSensors();
-        buildSensorSidebar();
-    } catch (err) {
-        showAlert('Error', 'Import failed: ' + err.message);
-        console.error('Import error:', err);
-    }
-}
-
 // ===== INIT =====
 
 (async function init() {
