@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ADEC Sensor Network Tracker — User Guide</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -15,7 +15,14 @@
     color: #1a2332;
     line-height: 1.7;
     font-size: 15px;
-  }
+      }
+
+  /* Dashed outline on the focused editable region so it's obvious what you're editing */
+  /* Disable the TOC links during editing — clicking them should not navigate */
+  /* ====================================================== */
+  /* Below is IDENTICAL to user-guide.html so what you see   */
+  /* here matches exactly what users see after publish.      */
+  /* ====================================================== */
 
   .cover {
     background: linear-gradient(135deg, #1a2332 0%, #2d3d56 100%);
@@ -174,13 +181,7 @@
     .cover { padding: 50px 24px; }
     .cover h1 { font-size: 1.8rem; }
     .container { padding: 24px 20px; }
-  }
-
-  @media print {
-    .cover { padding: 40px 20px; }
-    .container { max-width: 100%; }
-    h2 { page-break-before: always; }
-    h2:first-of-type { page-break-before: avoid; }
+    
   }
 </style>
 </head>
@@ -216,7 +217,6 @@
   </ol>
 </div>
 
-<!-- ==================== OVERVIEW ==================== -->
 <h2 id="overview">1. What Is This App?</h2>
 
 <p>This is our internal tool for tracking everything related to the Community-Based Sensor Network. It replaces the old Salesforce workflow and puts everything in one place — sensors, the communities they're deployed in, contacts at each site, service tickets, collocations, and audits.</p>
@@ -240,7 +240,6 @@
   </div>
 </div>
 
-<!-- ==================== GETTING STARTED ==================== -->
 <h2 id="getting-started">2. Getting Started</h2>
 
 <p>To access the app, go to <a href="https://amqa-tools.github.io/sensor-network-tracker" target="_blank" rel="noopener">amqa-tools.github.io/sensor-network-tracker</a> and sign up or sign in. To maintain site security, the email associated with your account needs to be added to the approved user list first, so check with the team if you can't sign up.</p>
@@ -262,51 +261,49 @@
   You can pin frequently-used communities or sensors to the sidebar for quick access. Just click the star icon on any sensor or community detail page.
 </div>
 
-<!-- ==================== DASHBOARD & ALERTS ==================== -->
 <h2 id="dashboard">3. Dashboard &amp; QuantAQ Alerts</h2>
 
 <p>The Dashboard is the landing page when you open the app. It gives you a quick network health snapshot: counts of active sensors, deployed communities, open service tickets, audits in progress, and the live feed of QuantAQ performance alerts.</p>
 
 <h3>How QuantAQ Alerts Work</h3>
-<p>The app automatically scans QuantAQ&rsquo;s API on a cron schedule to catch sensor problems you&rsquo;d otherwise only notice by logging into QuantAQ directly. Every scan pulls a window of recent raw readings per sensor and decodes the flag bitmask &mdash; just like QuantAQ&rsquo;s own dashboard does &mdash; so intermittent faults get caught, not just ones where every reading is flagged.</p>
+<p>The app automatically scans QuantAQ's API on a daily schedule to catch and record sensor component malfunctions and power failures. Every scan pulls a window of recent raw readings per sensor and translates the QuantAQ flag bitmask into a defined sensor status.</p>
 
 <p>Four kinds of alerts can fire:</p>
 <ul>
-  <li><strong>PM Sensor Issue</strong> (critical) &mdash; The optical particle counter or nephelometer is malfunctioning. Fires immediately when detected.</li>
-  <li><strong>SD Card Issue</strong> (critical) &mdash; The pod&rsquo;s onboard storage is faulting. Fires immediately.</li>
-  <li><strong>Gaseous Sensor Issue</strong> (warning) &mdash; One or more gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is flagged. Sits in a pending state for a 6-hour grace window before escalating, because gas sensors look &ldquo;broken&rdquo; during warm-up after any power cycle and we don&rsquo;t want to spam you with false alarms.</li>
-  <li><strong>Lost Connection</strong> (info) &mdash; The sensor hasn&rsquo;t reported to QuantAQ in over an hour. Also has a 2-hour grace window to filter out brief network blips.</li>
+  <li><strong>PM Sensor Issue</strong> (critical) — The optical particle counter or nephelometer is malfunctioning. Fires immediately when detected.</li>
+  <li><strong>SD Card Issue</strong> (critical) — The pod's onboard microSD card is faulting. Fires immediately.</li>
+  <li><strong>Gaseous Sensor Issue</strong> (warning) — One or more gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is flagged. Sits in a pending state for a 6-hour grace window before escalating, since gas sensors look "off" during warm-up periods after any power cycle or power blip.</li>
+  <li><strong>Lost Connection</strong> (info) — The sensor hasn't reported to QuantAQ in over an hour. Also has a 2-hour grace window to filter out brief network blips.</li>
 </ul>
 
 <h3>Pending vs. Active vs. Resolved</h3>
-<p>Alerts with a grace period start in <strong>pending</strong> and only promote to <strong>active</strong> if the issue is still present after the window elapses. If the problem clears before the grace window ends, the alert silently disappears &mdash; you never see it. That&rsquo;s intentional: routine power cycles that look scary for a few minutes shouldn&rsquo;t page anyone.</p>
+<p>Alerts with a grace period start in <strong>pending</strong> and only promote to <strong>active</strong> if the issue is still present after the window elapses. If the problem clears before the grace window ends, the alert silently disappears. This makes it so routine power cycles or brief power outages don't get flagged as a lost connection if they persisted for a short time.&nbsp;</p>
 
-<p>Active alerts stay on the dashboard until the underlying issue clears in QuantAQ&rsquo;s data, at which point the alert is marked <strong>resolved</strong>.</p>
+<p>Active alerts stay on the dashboard until the underlying issue clears in QuantAQ's data, at which point the alert is marked <strong>resolved</strong>.</p>
 
 <h3>Sensors Can Have More Than One Alert at Once</h3>
-<p>Lost Connection and PM/SD/Gas alerts fire independently. A sensor that&rsquo;s offline right now but whose last reported batch of readings was flagged for a PM fault will show <em>both</em> a Lost Connection alert and a PM Sensor Issue alert &mdash; matching what QuantAQ&rsquo;s dashboard shows. They won&rsquo;t mask each other.</p>
+<p>Lost Connection and PM/SD/Gas alerts fire independently. A sensor that's offline right now but whose last reported batch of readings was flagged for a PM fault will show <em>both</em> a Lost Connection alert and a PM Sensor Issue alert, one won't mask the other.</p>
 
-<h3>What Happens to the Sensor&rsquo;s Status</h3>
-<p>When a PM, SD, or Gas alert becomes active, the corresponding status tag (e.g., &ldquo;PM Sensor Issue&rdquo;) is automatically added to the sensor&rsquo;s status &mdash; but <strong>&ldquo;Online&rdquo; stays</strong>. The sensor is still reporting data, just with a fault flagged alongside. Only a Lost Connection alert (or a manual status change you make yourself) removes the &ldquo;Online&rdquo; tag.</p>
+<h3>What Happens to the Sensor's Status</h3>
+<p>When a PM, SD, or Gas alert becomes active, the corresponding status tag (e.g., "PM Sensor Issue") is automatically added to the sensor's status — but <strong>"Online" stays</strong>. The sensor is still reporting data, just with a fault flagged alongside. Only a Lost Connection alert (or a manual status change you make yourself) removes the "Online" tag.</p>
 
 <h3>Acknowledging &amp; Linking to History</h3>
-<p>Click an alert card to acknowledge it, write a follow-up note, or jump to the sensor&rsquo;s detail page. Writing a follow-up creates a row in the sensor&rsquo;s event history so the alert and your response are linked &mdash; useful when you&rsquo;re reviewing a sensor weeks later and want to know what happened.</p>
+<p>Click an alert card to write a follow-up note or jump to the sensor's detail page. Writing a follow-up creates a row in the sensor's event history so the alert and your response are linked — useful when you're reviewing a sensor weeks later and want to know what happened or what actions were taken to resolve the issue.</p>
 
 <h3>Run Check Now</h3>
-<p>The dashboard has a &ldquo;Run Check Now&rdquo; button that kicks off a scan on demand if you don&rsquo;t want to wait for the next cron run. The scan runs server-side and takes a minute or two. The &ldquo;last check&rdquo; / &ldquo;next check&rdquo; timestamps next to the button reflect the live cron schedule.</p>
+<p>The dashboard has a "Run Check Now" button that kicks off a scan on demand if you don't want to wait for the next scheduled run (Mon-Fri at 6:00am AKST). The scan runs server-side and takes a minute or two. The "last check" / "next check" timestamps next to the button reflect the daily schedule.</p>
 
 <div class="callout tip">
   <div class="callout-label">Expected Offline Statuses</div>
-  Sensors in &ldquo;Lab Storage,&rdquo; &ldquo;In Transit,&rdquo; &ldquo;Service at Quant,&rdquo; &ldquo;Ready for Deployment,&rdquo; or &ldquo;Needs Repair&rdquo; are <strong>never</strong> alerted about. The app assumes these are deliberately offline and skips them during the scan.
+  Sensors in "Lab Storage," "In Transit," "Service at Quant," "Ready for Deployment," or "Needs Repair" are <strong>never</strong> alerted about. The app assumes these are deliberately offline or have known issues and skips them during the scan.
 </div>
 
-<!-- ==================== SENSORS ==================== -->
 <h2 id="sensors">4. Working with Sensors</h2>
 
-<p>The All Sensors page is your main view. You can search by sensor ID, filter by status, and click any sensor to see its full detail page.</p>
+<p>The All Sensors page is the main view. You can search by sensor ID, filter by status, and click any sensor to see its full detail page.</p>
 
 <h3>Sensor Statuses</h3>
-<p>Each sensor can have one or more status tags. Statuses fall into two groups: ones you apply manually, and ones that get applied automatically by workflows (collocations, audits, and Quant service tickets).</p>
+<p>Each sensor can have one or more status tags. Statuses fall into two groups: ones you apply manually, and ones that get applied automatically by workflows (collocations, audits, QuantAQ alerts, and service tickets).</p>
 
 <h4>Manually applied statuses</h4>
 <p>You pick these from the status list on a sensor or in a Mass Action note.</p>
@@ -314,7 +311,7 @@
   <li><strong>Online</strong> — The sensor is deployed and reporting data. Mutually exclusive with Offline.</li>
   <li><strong>Offline</strong> — The sensor is not reporting data. Mutually exclusive with Online.</li>
   <li><strong>Lab Storage</strong> — The sensor is sitting at one of our lab locations, not currently deployed.</li>
-  <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready to ship or install.</li>
+  <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready for use.</li>
   <li><strong>Needs Repair</strong> — The sensor has a known problem and shouldn't be deployed until it's fixed.</li>
 </ul>
 
@@ -323,8 +320,8 @@
 <ul>
   <li><strong>PM Sensor Issue</strong> — The particulate matter sensor (OPC or nephelometer) is malfunctioning.</li>
   <li><strong>Gaseous Sensor Issue</strong> — One or more of the gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is malfunctioning.</li>
-  <li><strong>SD Card Issue</strong> — The pod's SD card is malfunctioning.</li>
-  <li><strong>Lost Connection</strong> — The sensor hasn't reported to QuantAQ in over an hour. PM/Gas/SD faults keep &ldquo;Online&rdquo; alongside the fault tag; only Lost Connection removes &ldquo;Online.&rdquo;</li>
+  <li><strong>SD Card Issue</strong> — The pod's microSD card is malfunctioning.</li>
+  <li><strong>Lost Connection</strong> — The sensor hasn't reported to QuantAQ in over an hour.&nbsp;</li><li>PM/Gas/SD faults keep "Online" alongside the fault tag; only Lost Connection removes "Online."</li>
 </ul>
 
 <h4>Auto-applied statuses</h4>
@@ -375,7 +372,6 @@
   <li><strong>Service Tickets</strong> — Open and closed tickets with progress notes</li>
 </ul>
 
-<!-- ==================== COMMUNITIES ==================== -->
 <h2 id="communities">5. Communities</h2>
 
 <p>Communities are organized alphabetically by parent communities, with child communities nested beneath them. You can change parent/child relationships anytime with the "Change Parent" button in each sensor's details page.</p>
@@ -387,7 +383,6 @@
   The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's individual history.
 </div>
 
-<!-- ==================== NOTES ==================== -->
 <h2 id="notes">6. Notes &amp; Event History</h2>
 
 <p>Notes are how everything gets documented in the app. When you add a note, you can:</p>
@@ -413,7 +408,6 @@
   <li><strong>General Notes</strong> — Everything else</li>
 </ul>
 
-<!-- ==================== TICKETS ==================== -->
 <h2 id="tickets">7. Service Tickets</h2>
 
 <p>Service tickets track the lifecycle of a sensor being sent to QuantAQ for repair or calibration. Each ticket follows this workflow:</p>
@@ -445,7 +439,6 @@
 <h3>Closed Tickets</h3>
 <p>Closed tickets appear in their own section at the bottom of the Service Tickets page</p>
 
-<!-- ==================== COLLOCATIONS ==================== -->
 <h2 id="collocations">8. Collocations</h2>
 
 <p>Collocations are when we place community sensors at a regulatory site (Garden, NCore, or Floyd Dryden) alongside a BAM reference monitor and/or permanent pod to verify the sensors are reading accurately.</p>
@@ -475,7 +468,6 @@
 <h3>Progress Notes</h3>
 <p>Just like service tickets, collocations have a progress notes section for tracking updates throughout the process. Add notes anytime from the collocation detail view.</p>
 
-<!-- ==================== AUDITS ==================== -->
 <h2 id="audits">9. Audits</h2>
 
 <p>Audits are similar to collocations but involve sending an audit pod to a community to run alongside the community's sensor for validation. The audit workflow goes: Scheduled → In Progress → Finished, Analysis Pending → Complete.</p>
@@ -495,10 +487,9 @@
 
 <p>Each audit tracks the audit pod, community pod, community, dates, and who installed/removed the equipment. Like collocations, audits have progress notes and a full analysis pipeline.</p>
 
-<!-- ==================== ANALYSIS ==================== -->
 <h2 id="analysis">10. Data Analysis &amp; Reports</h2>
 
-<p>This is the big one. Once a collocation or audit reaches "Complete," you can upload an Excel data file and the app runs the full regression analysis for you.</p>
+<p>Once a collocation or audit reaches "Complete," you can upload an Excel data file and the app runs the full regression analysis for you.</p>
 
 <h3>Uploading Data</h3>
 <ol>
@@ -506,7 +497,7 @@
   <li>When selecting regulatory site data, use <strong>PM<sub>2.5</sub> and PM<sub>10</sub> local conditions</strong></li>
   <li>Clean up any invalidated data and trim to the collocation dates</li>
   <li><strong>Don't remove the first 24 hours</strong> — the app handles that automatically</li>
-  <li>Define the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod (optional; if no permanent pod is defined, all Quants will be compared against all other Quants instead of all Quants compared against the one permanent pod, all Quants get compared to the BAM data in both cases).</li>
+  <li>Define the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod (optional; if no permanent pod is defined, all Quants will be compared against all other Quants instead of all Quants compared against the one permanent pod. All Quants get compared to the BAM data in both cases).</li>
   <li>Upload the Excel file</li>
 </ol>
 
@@ -549,67 +540,64 @@
   X-PM sensors (the Modulair-PM models) only compare PM<sub>2.5</sub> and PM<sub>10</sub> — gas parameters are automatically skipped for these sensors since they don't measure gases.
 </div>
 
-<!-- ==================== CONTACTS ==================== -->
 <h2 id="contacts">11. Contacts</h2>
 
 <p>Contacts include anyone involved in the sensor network: tribal administrators, school staff, facility managers, etc. They're grouped by community in the Contacts view.</p>
 
 <p>You can tag contacts in notes using @mentions (type @ and start typing their name), tag them in sensor movements, and add them to the email distribution list. Contacts can be deactivated (not deleted) when they're no longer involved, and reactivated later if needed.</p>
 
-<!-- ==================== EXPORTING ==================== -->
 <h2 id="exporting">12. Exporting Data</h2>
 
-<p>Each of the three main lists &mdash; Sensors, Communities, and Contacts &mdash; has an <strong>Export as Spreadsheet</strong> button at the top of the page. They all work the same way and open the same field-picker popup.</p>
+<p>Each of the three main lists — Sensors, Communities, and Contacts — has an <strong>Export as Spreadsheet</strong> button at the top of the page. They all work the same way and open the same field-picker popup.</p>
 
 <ol>
   <li>Click <strong>Export as Spreadsheet</strong>.</li>
   <li>Check or uncheck the fields you want in the spreadsheet. Every field is on by default.</li>
-  <li>For Contacts and Communities, there&rsquo;s an extra checkbox to include inactive records. Active-only is the default.</li>
+  <li>For Contacts and Communities, there's an extra checkbox to include inactive records. Active-only is the default.</li>
   <li>Click <strong>Download</strong>. An <code>.xlsx</code> file named for the list and the current date downloads automatically.</li>
 </ol>
 
 <p>Fields vary by list:</p>
 <ul>
-  <li><strong>Sensors</strong> &mdash; ID, type, status, community, location, install date, SOA tag, purchase date. Custom sensor fields (added in Setup Mode) are included automatically.</li>
-  <li><strong>Communities</strong> &mdash; Name, parent community, tags, status, sensor count, sensor IDs, sub-community count, contact count.</li>
-  <li><strong>Contacts</strong> &mdash; Name, role, community, organization, email, phone, mass-email-list flag, status.</li>
+  <li><strong>Sensors</strong> — ID, type, status, community, location, install date, SOA tag, purchase date. Custom sensor fields (added in Setup Mode) are included automatically.</li>
+  <li><strong>Communities</strong> — Name, parent community, tags, status, sensor count, sensor IDs, sub-community count, contact count.</li>
+  <li><strong>Contacts</strong> — Name, role, community, organization, email, phone, mass-email-list flag, status.</li>
 </ul>
 
-<!-- ==================== ADMIN MODES ==================== -->
 <h2 id="admin-modes">13. Admin Modes (Setup &amp; Sandbox)</h2>
 
-<p>Admins see two extra toggles in the sidebar footer: <strong>Setup Mode</strong> and <strong>Sandbox Mode</strong>. They look similar but do very different things, so don&rsquo;t confuse them.</p>
+<p>Admins see two extra toggles in the sidebar footer: <strong>Setup Mode</strong> and <strong>Sandbox Mode</strong>. They look similar but do very different things, so don't confuse them.</p>
 
 <h3>Setup Mode</h3>
-<p>Setup Mode is for <strong>bulk data entry and backfilling</strong>. Use it when you&rsquo;re correcting or adding a lot of records at once and don&rsquo;t want the app to clutter sensor/community/contact history with an auto-generated note for every single edit.</p>
+<p>Setup Mode is for <strong>bulk data entry and backfilling</strong>. Use it when you're correcting or adding a lot of records at once and don't want the app to clutter sensor/community/contact history with an auto-generated note for every single edit.</p>
 
 <p>While Setup Mode is on:</p>
 <ul>
-  <li>Edits still save to the real database the same way &mdash; this is <strong>not</strong> a practice mode.</li>
+  <li>Edits still save to the real database the same way — this is <strong>not</strong> a practice mode.</li>
   <li>The app stops writing automatic history notes for status changes, community moves, contact edits, etc.</li>
-  <li>The &ldquo;Date of change&rdquo; and &ldquo;Notes&rdquo; prompts on the status-change and move modals are hidden so you can move through records faster.</li>
+  <li>The "Date of change" and "Notes" prompts on the status-change and move modals are hidden so you can move through records faster.</li>
   <li>Extra admin controls appear on the sensors table: add custom fields, edit sensor IDs inline, and restore hidden columns.</li>
 </ul>
 
-<p>Clicking the toggle opens a popup that explains the above. Click &ldquo;Enter Setup Mode&rdquo; to confirm. Turn it off again when you&rsquo;re done &mdash; normal editing re-enables the automatic history trail. Setup Mode auto-resets when you sign out or close the browser.</p>
+<p>Clicking the toggle opens a popup that explains the above. Click "Enter Setup Mode" to confirm. Turn it off again when you're done — normal editing re-enables the automatic history trail. Setup Mode auto-resets when you sign out or close the browser.</p>
 
 <div class="callout heads-up">
   <div class="callout-label">Heads Up</div>
-  If you forget to turn Setup Mode off, your day-to-day edits will stop writing history notes. Watch for the amber &ldquo;Setup Mode ON&rdquo; pill in the sidebar.
+  If you forget to turn Setup Mode off, your day-to-day edits will stop writing history notes. Watch for the amber "Setup Mode ON" pill in the sidebar.
 </div>
 
 <h3>Sandbox Mode</h3>
-<p>Sandbox Mode is a <strong>safe practice space</strong>. You can click around, add/edit/delete sensors, communities, contacts, notes &mdash; anything &mdash; and nothing you do will save to the real database. Use it to try new features, train yourself on a workflow, or show someone around without any risk.</p>
+<p>Sandbox Mode is a <strong>safe practice space</strong>. You can click around, add/edit/delete sensors, communities, contacts, notes — anything — and nothing you do will save to the real database. Use it to try new features, train yourself on a workflow, or show someone around without any risk.</p>
 
 <p>How it works:</p>
 <ul>
   <li>You still see the real, current data from Supabase.</li>
   <li>Any change you make only lives in your browser.</li>
-  <li>Refreshing the page, signing out, or clicking &ldquo;Exit sandbox&rdquo; reverts everything instantly.</li>
-  <li>A bright amber banner stays at the top of the screen the whole time so you never forget you&rsquo;re in sandbox.</li>
+  <li>Refreshing the page, signing out, or clicking "Exit sandbox" reverts everything instantly.</li>
+  <li>A bright amber banner stays at the top of the screen the whole time so you never forget you're in sandbox.</li>
 </ul>
 
-<p>Clicking the toggle opens a popup that explains the above. Click &ldquo;Enter Sandbox&rdquo; to confirm &mdash; the page reloads with the sandbox safety net active.</p>
+<p>Clicking the toggle opens a popup that explains the above. Click "Enter Sandbox" to confirm — the page reloads with the sandbox safety net active. Turn it off when you're done — all edits will be automatically saved to the database again. Sandbox Mode auto-resets when you refresh the page, sign out, or close the browser.</p>
 
 <div class="callout tip">
   <div class="callout-label">Which One Do I Want?</div>
@@ -617,7 +605,6 @@
   <strong>Doing a lot of real cleanup/backfill and want to skip the auto-notes?</strong> Setup Mode. Everything persists.
 </div>
 
-<!-- ==================== TIPS ==================== -->
 <h2 id="tips">14. Tips &amp; Good-to-Knows</h2>
 
 <div class="callout">
@@ -627,8 +614,7 @@
 
 <div class="callout tip">
   <div class="callout-label">Online &amp; Offline</div>
-  These two statuses are mutually exclusive everywhere in the app. If you select Online, Offline automatically deselects, and vice versa. No more accidentally having both.
-</div>
+  These two statuses are mutually exclusive everywhere in the app. If you select Online, Offline automatically deselects, and vice versa.</div>
 
 <div class="callout">
   <div class="callout-label">Notes + Status Changes</div>
@@ -642,7 +628,7 @@
 
 <div class="callout">
   <div class="callout-label">Re-uploading Analysis Data</div>
-  You can re-upload data anytime from the collocation or audit detail view. Just click "Re-upload Data" and it'll clear the old results and let you start fresh. The old analysis is gone once you re-upload — there's no undo.
+  You can re-upload data anytime from the collocation or audit detail view. Just click "Re-upload Data" and it'll clear the old results and let you start fresh. Take note: the old analysis is gone once you click re-upload — there's no undo.
 </div>
 
 <div class="callout tip">
