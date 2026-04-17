@@ -1020,21 +1020,21 @@
 
     <!-- Sandbox Mode Explainer Modal -->
     <div id="modal-sandbox-explainer" class="modal" role="dialog" aria-modal="true">
-        <div class="modal-content modal-sm">
+        <div class="modal-content modal-lg">
             <div class="modal-header">
                 <h2>Enter Sandbox Mode?</h2>
                 <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-sandbox-explainer')">&times;</button>
             </div>
-            <div style="padding:4px 2px 16px;font-size:14px;line-height:1.55;color:var(--slate-200)">
+            <div style="padding:8px 4px 16px;font-size:14px;line-height:1.6;color:var(--navy-800)">
                 <p style="margin:0 0 12px"><strong>Sandbox is a safe practice space.</strong> You can click around, add/edit/delete sensors, communities, contacts, notes &mdash; anything &mdash; and nothing you do will save to the real database.</p>
-                <p style="margin:0 0 12px"><strong>How it works:</strong></p>
+                <p style="margin:0 0 8px"><strong>How it works:</strong></p>
                 <ul style="margin:0 0 12px 20px;padding:0">
                     <li>You still see the real, current data from Supabase.</li>
                     <li>Any change you make only lives in your browser.</li>
                     <li>Refreshing the page, signing out, or clicking &ldquo;Exit sandbox&rdquo; reverts everything instantly.</li>
                     <li>A bright amber banner stays at the top of the screen so you never forget you&rsquo;re in sandbox.</li>
                 </ul>
-                <p style="margin:0;color:var(--slate-400);font-size:13px">Use it to try new features, train yourself on workflows, or show someone around without any risk.</p>
+                <p style="margin:0;color:var(--slate-600);font-size:13px">Use it to try new features, train yourself on workflows, or show someone around without any risk.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn" onclick="closeModal('modal-sandbox-explainer')">Cancel</button>
