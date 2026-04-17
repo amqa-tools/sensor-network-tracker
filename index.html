@@ -79,7 +79,7 @@
     <script>
         if (window.SANDBOX_MODE || new URLSearchParams(location.search).has('sandbox')) {
             document.getElementById('sandbox-banner').style.display = 'block';
-            document.body.style.paddingTop = '36px';
+            document.body.classList.add('has-sandbox-banner');
         }
     </script>
 

@@ -110,6 +110,15 @@ body {
     height: 100vh;
 }
 
+/* When the sandbox banner is showing, reserve 36px at the top of the body and
+   trim #app so the sidebar (and its bottom actions, including the Sandbox
+   Mode toggle itself) don't get clipped off-screen. */
+body.has-sandbox-banner { padding-top: 36px; }
+body.has-sandbox-banner #app { height: calc(100vh - 36px); }
+@media (max-width: 768px) {
+    body.has-sandbox-banner #sidebar { top: 36px; }
+}
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
