@@ -14,6 +14,7 @@ let audits = [];
 let collocations = [];
 let communityParents = {}; // childId -> parentId
 let currentUserRole = 'user'; // 'admin' or 'user' — loaded from profile on login
+let currentUserCanEditGuide = false; // allowed_emails.can_edit_user_guide — loaded on login
 let mfaRequired = true; // global setting, admin-configurable
 
 // Build lookup maps for O(1) access
@@ -930,7 +931,7 @@ async function enterApp() {
         // Also try session email in case profile email was cleared by a previous deletion
         const session = await db.getSession();
         const checkEmail = (userEmail || session?.user?.email || '').toLowerCase();
-        const { data: emailRow } = await supa.from('allowed_emails').select('role, status').eq('email', checkEmail).maybeSingle();
+        const { data: emailRow } = await supa.from('allowed_emails').select('role, status, can_edit_user_guide').eq('email', checkEmail).maybeSingle();
         if (!emailRow || emailRow.status === 'archived' || emailRow.status === 'revoked') {
             await db.signOut();
             document.getElementById('login-loading').style.display = 'none';
@@ -939,8 +940,9 @@ async function enterApp() {
             showLoginError('Your account has been archived. Please contact an admin if you need access restored.');
             return;
         }
-        // Load role
+        // Load role and granular permissions
         currentUserRole = profile?.role || emailRow?.role || 'user';
+        currentUserCanEditGuide = !!emailRow?.can_edit_user_guide;
 
         // Repair profile if it was previously anonymized by deletion
         if (profile && (profile.name === '[Deleted User]' || !profile.email) && checkEmail) {
@@ -1021,6 +1023,7 @@ async function logoutUser() {
     currentUser = null;
     currentUserId = null;
     currentUserRole = 'user';
+    currentUserCanEditGuide = false;
     selectedSensors.clear();
     viewHistory = [];
     setupMode = false;
@@ -5264,11 +5267,22 @@ async function renderAllowedUsers(currentEmail) {
         const roleBadge = row.role === 'admin'
             ? '<span style="background:var(--navy-800);color:white;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px">Admin</span>'
             : '';
+        const guideBadge = row.can_edit_user_guide
+            ? '<span style="background:#d4a84b;color:#1a2332;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px" title="Can edit the User Guide">Guide Editor</span>'
+            : '';
         const roleToggle = isAdmin && !isYou
             ? `<select class="btn btn-sm" onchange="changeUserRole('${row.id}', this.value)" style="font-size:11px;padding:2px 6px">
                 <option value="user" ${row.role !== 'admin' ? 'selected' : ''}>User</option>
                 <option value="admin" ${row.role === 'admin' ? 'selected' : ''}>Admin</option>
                </select>`
+            : '';
+        // Guide-editor permission is admin-managed but togglable on yourself too,
+        // so the one person holding it can grant/revoke without another admin's help.
+        const guideToggle = isAdmin
+            ? `<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--slate-500);cursor:pointer" title="Allow this user to edit the User Guide">
+                <input type="checkbox" ${row.can_edit_user_guide ? 'checked' : ''} onchange="toggleUserGuideEditor('${row.id}', this.checked)" style="margin:0">
+                Guide Editor
+               </label>`
             : '';
         const archiveBtn = isAdmin && !isYou
             ? `<button class="btn btn-sm btn-danger" onclick="archiveUser('${row.id}')">Archive</button>`
@@ -5283,9 +5297,10 @@ async function renderAllowedUsers(currentEmail) {
             <span>
                 <span class="settings-user-email">${escapeHtml(row.email)}</span>
                 ${roleBadge}
+                ${guideBadge}
                 ${isYou ? '<span class="settings-user-you">(you)</span>' : ''}
             </span>
-            <span style="display:flex;gap:6px;align-items:center">${roleToggle}${resetMfaBtn}${archiveBtn}${deleteBtn}</span>
+            <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${guideToggle}${roleToggle}${resetMfaBtn}${archiveBtn}${deleteBtn}</span>
         </div>`;
     }).join('') || '<p style="color:var(--slate-400);font-size:13px">No active users.</p>';
 
@@ -5454,6 +5469,22 @@ async function changeUserRole(id, newRole) {
     }
 
     const session = await db.getSession();
+    await renderAllowedUsers(session?.user?.email || '');
+}
+
+async function toggleUserGuideEditor(id, enabled) {
+    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can change permissions.'); return; }
+    const { error } = await supa.from('allowed_emails').update({ can_edit_user_guide: enabled }).eq('id', id);
+    if (error) { showAlert('Error', error.message); return; }
+
+    // If you just toggled your own flag, refresh the in-memory value so the
+    // Edit button on the User Guide view appears/disappears without a reload.
+    const session = await db.getSession();
+    const youEmail = (session?.user?.email || '').toLowerCase();
+    const { data: row } = await supa.from('allowed_emails').select('email').eq('id', id).maybeSingle();
+    if (row && row.email.toLowerCase() === youEmail) {
+        currentUserCanEditGuide = !!enabled;
+    }
     await renderAllowedUsers(session?.user?.email || '');
 }
 
@@ -11194,16 +11225,20 @@ let _userGuideMode = 'view'; // 'view' or 'edit'
 let _userGuideOriginalText = null;
 
 function _renderUserGuideButtons() {
-    const isAdmin = currentUserRole === 'admin';
+    // Guide-edit permission is independent from admin role — see the
+    // can_edit_user_guide column on allowed_emails. This lets us have multiple
+    // admins managing users/sensors while keeping the guide editable by only
+    // the people who actually write documentation.
+    const canEdit = !!currentUserCanEditGuide;
     const editing = _userGuideMode === 'edit';
     const toggle = (id, show) => {
         const el = document.getElementById(id);
         if (el) el.style.display = show ? '' : 'none';
     };
-    toggle('user-guide-edit-btn',    isAdmin && !editing);
-    toggle('user-guide-save-btn',    isAdmin && editing);
-    toggle('user-guide-preview-btn', isAdmin && editing);
-    toggle('user-guide-cancel-btn',  isAdmin && editing);
+    toggle('user-guide-edit-btn',    canEdit && !editing);
+    toggle('user-guide-save-btn',    canEdit && editing);
+    toggle('user-guide-preview-btn', canEdit && editing);
+    toggle('user-guide-cancel-btn',  canEdit && editing);
     toggle('user-guide-export-btn',  !editing);
 }
 
@@ -11238,7 +11273,7 @@ async function renderUserGuide() {
 }
 
 async function openUserGuideEditor() {
-    if (currentUserRole !== 'admin') return;
+    if (!currentUserCanEditGuide) return;
     _userGuideMode = 'edit';
     _renderUserGuideButtons();
 
@@ -11263,7 +11298,7 @@ async function openUserGuideEditor() {
 }
 
 async function saveUserGuide() {
-    if (currentUserRole !== 'admin') return;
+    if (!currentUserCanEditGuide) return;
     const ta = document.getElementById('user-guide-editor-textarea');
     const body = ta ? ta.value : '';
     try {
