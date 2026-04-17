@@ -39,6 +39,21 @@ const EXPECTED_OFFLINE = new Set([
   "Ready for Deployment", "Shipped to Quant", "Shipped from Quant", "Needs Repair",
 ]);
 const OFFLINE_MS = 60 * 60 * 1000; // 1 hour
+// How old the newest raw reading can be before we stop trusting its flags.
+// Matches QuantAQ's dashboard behavior: a sensor that went offline yesterday
+// with a PM fault is still shown as PM-faulty, but a sensor we haven't heard
+// from in a week stops generating noise about flags.
+const FLAG_MAX_STALENESS_MS = 24 * 60 * 60 * 1000;
+
+// How many recent raw readings to pull per sensor when checking flags.
+// We OR the flag bits across the whole window instead of trusting a single
+// latest reading — QuantAQ's own dashboard appears to work the same way, and
+// it's the only way to catch sensors (e.g. a misbehaving PM unit) that set
+// the fault bit intermittently rather than on every point. Kept deliberately
+// small (5) because QuantAQ's raw endpoint has been observed to time out for
+// larger paginated queries, and even a small window dramatically beats the
+// single-latest-point check.
+const RAW_WINDOW_SIZE = 5;
 
 const ALERT_SEVERITY: Record<string, string> = {
   "PM Sensor Issue": "critical",
@@ -55,7 +70,10 @@ const GRACE_PERIODS: Record<string, number> = {
 // Deno's fetch has no default timeout — if QuantAQ stalls on even one
 // request, the entire scan hangs until the edge runtime's 150s wall
 // clock kills it. AbortController keeps us honest.
-const QAQ_TIMEOUT_MS = 20_000;
+// 20s was plenty for per_page=1, but pulling a window of 60 raw readings
+// regularly takes longer than that — bumped so windowed flag checks
+// don't silently timeout for every sensor.
+const QAQ_TIMEOUT_MS = 45_000;
 
 async function qaqFetch(apiKey: string, path: string): Promise<any> {
   const url = `https://api.quant-aq.com/v1${path}`;
@@ -197,140 +215,188 @@ async function runScan(): Promise<Response> {
   const newAlerts: any[] = [];
   const statusUpdates: { sn: string; statuses: string[] }[] = [];
 
-  // --- Split offline vs online ---
-  const onlineDevices: any[] = [];
+  // --- Pre-filter out sensors we're intentionally ignoring ---
+  // EXPECTED_OFFLINE sensors (Lab Storage, In Transit, etc.) are never
+  // checked — raw OR lost-connection.
+  const candidateDevices: any[] = [];
   for (const d of devices) {
-    const lastSeenStr = d.last_seen ? (d.last_seen.endsWith("Z") ? d.last_seen : d.last_seen + "Z") : null;
-    const lastSeen = lastSeenStr ? new Date(lastSeenStr) : null;
-    const msSince = lastSeen ? Date.now() - lastSeen.getTime() : Infinity;
     const appSensor = sensorById.get(d.sn);
     const appStatuses = appSensor ? getStatusArray(appSensor) : [];
-
-    if (msSince > OFFLINE_MS) {
-      if (appStatuses.some((s) => EXPECTED_OFFLINE.has(s))) continue;
-      if (!appSensor || !appSensor.community_id) continue;
-      const detail = lastSeen ? `Last seen ${lastSeen.toISOString()}` : "Never seen";
-      const community = communityNameById.get(appSensor.community_id) || d.city || "";
-      const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === "Lost Connection");
-      if (existing) {
-        stillActiveIds.add(existing.id);
-        // Re-anchor detected_at/grace to the live last_seen on every scan.
-        // Idempotent in the happy path (same last_seen = same values) and
-        // self-heals any rows that were created under older code with the
-        // scan time baked in.
-        const detectedAtIso = lastSeen ? lastSeen.toISOString() : existing.detected_at;
-        const detectedAtMs = lastSeen ? lastSeen.getTime() : new Date(existing.detected_at).getTime();
-        const graceExpiresMs = detectedAtMs + GRACE_PERIODS["Lost Connection"];
-        const graceExpiresIso = new Date(graceExpiresMs).toISOString();
-        const res = await supa.from("quantaq_alerts")
-          .update({
-            last_checked: now,
-            detail,
-            is_new: false,
-            detected_at: detectedAtIso,
-            grace_expires_at: graceExpiresIso,
-          })
-          .eq("id", existing.id);
-        check("update lost-connection alert", res);
-        // Keep the in-memory copy in sync so the pending-promotion loop
-        // below sees the corrected grace window this same scan.
-        existing.detected_at = detectedAtIso;
-        existing.grace_expires_at = graceExpiresIso;
-      } else {
-        // Anchor to QuantAQ's clock: detected_at = last_seen, grace window
-        // runs from there. If the sensor has been dark longer than the grace
-        // window already, the alert goes straight to active on first detect.
-        const detectedAtIso = lastSeen ? lastSeen.toISOString() : now;
-        const detectedAtMs = lastSeen ? lastSeen.getTime() : Date.now();
-        const graceMs = GRACE_PERIODS["Lost Connection"];
-        const graceExpiresMs = detectedAtMs + graceMs;
-        const graceExpiresIso = new Date(graceExpiresMs).toISOString();
-        const alreadyExpired = graceExpiresMs <= Date.now();
-
-        newAlerts.push({
-          sensor_sn: d.sn, sensor_model: d.model, community_name: community,
-          issue_type: "Lost Connection", detail,
-          status: alreadyExpired ? "active" : "pending",
-          severity: "info",
-          grace_expires_at: graceExpiresIso,
-          is_new: true,
-          detected_at: detectedAtIso,
-          last_checked: now,
-          notes: [],
-        });
-      }
-    } else {
-      onlineDevices.push(d);
-    }
+    if (appStatuses.some((s) => EXPECTED_OFFLINE.has(s))) continue;
+    candidateDevices.push(d);
   }
 
-  // --- Fetch latest raw reading per online device, concurrency 30 ---
-  await runWithConcurrency(onlineDevices, 30, async (d) => {
+  // --- For every candidate sensor: fetch a window of recent raw readings, ---
+  // --- then decide (per sensor) whether it's lost connection or has flags. ---
+  //
+  // Why not split by /devices/ last_seen first like we used to?
+  //   Because last_seen can lag significantly behind the freshest raw data.
+  //   A sensor that's actively reporting flagged data would get bucketed as
+  //   "offline" purely because /devices/ hadn't updated yet, and its flag
+  //   malfunction would never surface. We now use max(device.last_seen,
+  //   latest raw timestamp) as the real "last activity" signal.
+  await runWithConcurrency(candidateDevices, 30, async (d) => {
+    let rows: any[] = [];
     try {
-      const json = await qaqFetch(apiKey, `/devices/${d.sn}/data/raw/?per_page=1&sort=timestamp,desc`);
-      const raw = json.data?.[0];
-      if (!raw || !raw.flag || raw.flag <= 1) return;
-      const flagClean = raw.flag & ~1;
-      if (flagClean === 0) return;
+      const json = await qaqFetch(apiKey, `/devices/${d.sn}/data/raw/?per_page=${RAW_WINDOW_SIZE}&sort=timestamp,desc`);
+      rows = Array.isArray(json.data) ? json.data : [];
+    } catch (e) {
+      console.warn(`[QAQ] Raw error for ${d.sn}:`, e);
+      // Fall through — raw fetch failed, device last_seen still drives
+      // Lost Connection detection. We just can't check flags this scan.
+    }
 
-      const issues = decodeFlags(flagClean);
-      const flagDesc = describeFlags(flagClean);
-      const appSensor = sensorById.get(d.sn);
-      const community = appSensor ? (communityNameById.get(appSensor.community_id) || "") : (d.city || "");
+    const appSensor = sensorById.get(d.sn);
+    const community = appSensor ? (communityNameById.get(appSensor.community_id) || "") : (d.city || "");
 
-      for (const issueType of issues) {
-        const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === issueType);
+    // Parse device-level last_seen and the newest raw-data timestamp; use the
+    // freshest of the two as the source of truth for "when did we last hear
+    // from this sensor."
+    const deviceLastSeenStr = d.last_seen
+      ? (d.last_seen.endsWith("Z") ? d.last_seen : d.last_seen + "Z")
+      : null;
+    const deviceLastSeen = deviceLastSeenStr ? new Date(deviceLastSeenStr) : null;
+    const deviceLastSeenMs = deviceLastSeen && !isNaN(deviceLastSeen.getTime())
+      ? deviceLastSeen.getTime()
+      : -Infinity;
+
+    let latestRawMs = -Infinity;
+    for (const r of rows) {
+      if (!r || !r.timestamp) continue;
+      const tsStr = String(r.timestamp).endsWith("Z") ? String(r.timestamp) : String(r.timestamp) + "Z";
+      const ts = new Date(tsStr);
+      if (!isNaN(ts.getTime()) && ts.getTime() > latestRawMs) latestRawMs = ts.getTime();
+    }
+
+    const effectiveLastSeenMs = Math.max(deviceLastSeenMs, latestRawMs);
+    const effectiveLastSeen = Number.isFinite(effectiveLastSeenMs) ? new Date(effectiveLastSeenMs) : null;
+    const msSince = effectiveLastSeen ? Date.now() - effectiveLastSeen.getTime() : Infinity;
+
+    // --- Lost Connection (runs independently of flag detection) ---
+    // A sensor can be both offline AND have a PM/gas/SD fault recorded in its
+    // last-reported data — that's exactly what QuantAQ's dashboard shows, so
+    // we fire both alerts rather than treating them as mutually exclusive.
+    if (msSince > OFFLINE_MS) {
+      if (appSensor && appSensor.community_id) {
+        const detail = effectiveLastSeen ? `Last seen ${effectiveLastSeen.toISOString()}` : "Never seen";
+        const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === "Lost Connection");
         if (existing) {
           stillActiveIds.add(existing.id);
+          const detectedAtIso = effectiveLastSeen ? effectiveLastSeen.toISOString() : existing.detected_at;
+          const detectedAtMs = effectiveLastSeen ? effectiveLastSeen.getTime() : new Date(existing.detected_at).getTime();
+          const graceExpiresMs = detectedAtMs + GRACE_PERIODS["Lost Connection"];
+          const graceExpiresIso = new Date(graceExpiresMs).toISOString();
           const res = await supa.from("quantaq_alerts")
-            .update({ last_checked: now, detail: `Flags: ${flagDesc} (raw: ${raw.flag})`, is_new: false })
-            .eq("id", existing.id);
-          check("update existing flag alert", res);
-        } else {
-          // Anchor detected_at to QuantAQ's raw reading timestamp, not our
-          // scan time. If the raw timestamp is missing or unparseable, fall
-          // back to now so we never lose the alert.
-          const rawTsStr = raw.timestamp
-            ? (String(raw.timestamp).endsWith("Z") ? String(raw.timestamp) : String(raw.timestamp) + "Z")
-            : null;
-          const rawTs = rawTsStr ? new Date(rawTsStr) : null;
-          const detectedAtIso = rawTs && !isNaN(rawTs.getTime()) ? rawTs.toISOString() : now;
-          const detectedAtMs = rawTs && !isNaN(rawTs.getTime()) ? rawTs.getTime() : Date.now();
-
-          const severity = ALERT_SEVERITY[issueType] || "warning";
-          if (severity === "critical") {
-            // Critical skips the grace window entirely — straight to active.
-            newAlerts.push({
-              sensor_sn: d.sn, sensor_model: d.model, community_name: community,
-              issue_type: issueType, detail: `Flags: ${flagDesc} (raw: ${raw.flag})`,
-              status: "active", severity, is_new: true,
-              detected_at: detectedAtIso, last_checked: now, notes: [],
-            });
-            statusUpdates.push({ sn: d.sn, statuses: [issueType] });
-          } else {
-            const graceMs = GRACE_PERIODS[issueType];
-            const graceExpiresMs = detectedAtMs + graceMs;
-            const graceExpiresIso = new Date(graceExpiresMs).toISOString();
-            const alreadyExpired = graceExpiresMs <= Date.now();
-            newAlerts.push({
-              sensor_sn: d.sn, sensor_model: d.model, community_name: community,
-              issue_type: issueType, detail: `Flags: ${flagDesc} (raw: ${raw.flag})`,
-              status: alreadyExpired ? "active" : "pending",
-              severity,
-              grace_expires_at: graceExpiresIso,
-              is_new: true,
-              detected_at: detectedAtIso,
+            .update({
               last_checked: now,
-              notes: [],
-            });
-            if (alreadyExpired) {
-              statusUpdates.push({ sn: d.sn, statuses: [issueType] });
-            }
+              detail,
+              is_new: false,
+              detected_at: detectedAtIso,
+              grace_expires_at: graceExpiresIso,
+            })
+            .eq("id", existing.id);
+          check("update lost-connection alert", res);
+          existing.detected_at = detectedAtIso;
+          existing.grace_expires_at = graceExpiresIso;
+        } else {
+          const detectedAtIso = effectiveLastSeen ? effectiveLastSeen.toISOString() : now;
+          const detectedAtMs = effectiveLastSeen ? effectiveLastSeen.getTime() : Date.now();
+          const graceMs = GRACE_PERIODS["Lost Connection"];
+          const graceExpiresMs = detectedAtMs + graceMs;
+          const graceExpiresIso = new Date(graceExpiresMs).toISOString();
+          const alreadyExpired = graceExpiresMs <= Date.now();
+          newAlerts.push({
+            sensor_sn: d.sn, sensor_model: d.model, community_name: community,
+            issue_type: "Lost Connection", detail,
+            status: alreadyExpired ? "active" : "pending",
+            severity: "info",
+            grace_expires_at: graceExpiresIso,
+            is_new: true,
+            detected_at: detectedAtIso,
+            last_checked: now,
+            notes: [],
+          });
+        }
+      }
+      // Don't return — still evaluate flags below.
+    }
+
+    // --- Flag detection across the raw window ---
+    // Cap: if the newest raw reading is older than FLAG_MAX_STALENESS_MS, don't
+    // surface flag alerts. A sensor that's been dark for a week shouldn't keep
+    // creating PM noise from ancient readings.
+    if (rows.length === 0) return;
+    const rawFreshnessMs = Number.isFinite(latestRawMs) ? Date.now() - latestRawMs : Infinity;
+    if (rawFreshnessMs > FLAG_MAX_STALENESS_MS) return;
+    let flagUnion = 0;
+    let flaggedCount = 0;
+    let earliestFlaggedMs = Infinity;
+    for (const r of rows) {
+      if (!r || !r.flag || r.flag <= 1) continue;
+      const bits = r.flag & ~1;
+      if (bits === 0) continue;
+      flagUnion |= bits;
+      flaggedCount++;
+      const tsStr = r.timestamp
+        ? (String(r.timestamp).endsWith("Z") ? String(r.timestamp) : String(r.timestamp) + "Z")
+        : null;
+      const ts = tsStr ? new Date(tsStr) : null;
+      if (ts && !isNaN(ts.getTime())) {
+        const ms = ts.getTime();
+        if (ms < earliestFlaggedMs) earliestFlaggedMs = ms;
+      }
+    }
+    if (flagUnion === 0) return;
+
+    const issues = decodeFlags(flagUnion);
+    const flagDesc = describeFlags(flagUnion);
+    const detailStr = `Flags: ${flagDesc} (raw: ${flagUnion}; ${flaggedCount}/${rows.length} recent)`;
+
+    // Earliest flagged reading in the window approximates "when did the fault
+    // start." For a persistent fault it hits the oldest reading we fetched;
+    // for a just-appeared fault it's recent.
+    const detectedAtMs = Number.isFinite(earliestFlaggedMs) ? earliestFlaggedMs : Date.now();
+    const detectedAtIso = new Date(detectedAtMs).toISOString();
+
+    for (const issueType of issues) {
+      const existing = existingAlerts.find((a) => a.sensor_sn === d.sn && a.issue_type === issueType);
+      if (existing) {
+        stillActiveIds.add(existing.id);
+        const res = await supa.from("quantaq_alerts")
+          .update({ last_checked: now, detail: detailStr, is_new: false })
+          .eq("id", existing.id);
+        check("update existing flag alert", res);
+      } else {
+        const severity = ALERT_SEVERITY[issueType] || "warning";
+        if (severity === "critical") {
+          newAlerts.push({
+            sensor_sn: d.sn, sensor_model: d.model, community_name: community,
+            issue_type: issueType, detail: detailStr,
+            status: "active", severity, is_new: true,
+            detected_at: detectedAtIso, last_checked: now, notes: [],
+          });
+          statusUpdates.push({ sn: d.sn, statuses: [issueType] });
+        } else {
+          const graceMs = GRACE_PERIODS[issueType];
+          const graceExpiresMs = detectedAtMs + graceMs;
+          const graceExpiresIso = new Date(graceExpiresMs).toISOString();
+          const alreadyExpired = graceExpiresMs <= Date.now();
+          newAlerts.push({
+            sensor_sn: d.sn, sensor_model: d.model, community_name: community,
+            issue_type: issueType, detail: detailStr,
+            status: alreadyExpired ? "active" : "pending",
+            severity,
+            grace_expires_at: graceExpiresIso,
+            is_new: true,
+            detected_at: detectedAtIso,
+            last_checked: now,
+            notes: [],
+          });
+          if (alreadyExpired) {
+            statusUpdates.push({ sn: d.sn, statuses: [issueType] });
           }
         }
       }
-    } catch (e) {
-      console.warn(`[QAQ] Raw error for ${d.sn}:`, e);
     }
   });
 
@@ -377,7 +443,10 @@ async function runScan(): Promise<Response> {
       if (appSensor) {
         const cur = getStatusArray(appSensor);
         const merged = new Set([...cur, alert.issue_type]);
-        merged.delete("Online");
+        // Only Lost Connection (or a manual change) knocks a sensor out of
+        // Online. PM/gas/SD faults ride alongside Online so the dashboard
+        // still shows the sensor as reporting data while flagging the issue.
+        if (alert.issue_type === "Lost Connection") merged.delete("Online");
         const final = [...merged];
         if (final.slice().sort().join(",") !== cur.slice().sort().join(",")) {
           check(
@@ -423,12 +492,14 @@ async function runScan(): Promise<Response> {
   }
 
   // --- Apply status updates for new critical alerts ---
+  // Only critical flag alerts (PM / SD) push into this list — never Lost
+  // Connection — so we deliberately do NOT strip "Online" here. The sensor is
+  // still actively reporting; we just want to flag the fault alongside.
   for (const u of statusUpdates) {
     const s = sensorById.get(u.sn);
     if (!s) continue;
     const cur = getStatusArray(s);
     const merged = new Set([...cur, ...u.statuses]);
-    merged.delete("Online");
     const final = [...merged];
     if (final.slice().sort().join(",") !== cur.slice().sort().join(",")) {
       check(
@@ -451,7 +522,7 @@ async function runScan(): Promise<Response> {
     ok: true,
     durationMs,
     devicesSeen: devices.length,
-    onlineDevices: onlineDevices.length,
+    candidateDevices: candidateDevices.length,
     newAlerts: newAlerts.length,
     newCritical: newAlerts.filter((a) => a.status === "active").length,
     newPending: newAlerts.filter((a) => a.status === "pending").length,

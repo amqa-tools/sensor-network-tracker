@@ -49,6 +49,8 @@ QuantAQ returns a bitmask per sensor. The constants in the edge function mirror 
 
 `describeFlags()` produces the human-readable detail string (e.g., `"OPC, NEPH"`).
 
+The scan looks at a **window** of the most recent raw readings per sensor (see `RAW_WINDOW_SIZE` in the edge function) and ORs the flag bits across the whole window — not just the latest point. Intermittent faults (e.g., a PM sensor that sets the OPC bit on some readings but not others) are real malfunctions that QuantAQ's own dashboard surfaces, so we need to catch them the same way. If only the single latest reading were checked, intermittent faults would slip through and any pending alert could get silently dismissed the first time a clean reading showed up mid-grace-window.
+
 ## Lost Connection detection
 
 A sensor is flagged *Lost Connection* when its last-seen timestamp is older than `OFFLINE_MS` (1 hour) **and** its app status isn't in `EXPECTED_OFFLINE` (Lab Storage, In Transit, Shipped to/from Quant, etc.). The expected-offline list exists because a sensor that's deliberately unplugged shouldn't page anyone.
