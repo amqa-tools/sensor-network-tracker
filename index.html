@@ -429,9 +429,17 @@
             <div id="view-user-guide" class="view">
                 <div class="view-header">
                     <h1>User Guide</h1>
-                    <button class="btn" onclick="exportUserGuide()">Export as HTML</button>
+                    <button class="btn" id="user-guide-edit-btn" style="display:none" onclick="openUserGuideEditor()">Edit</button>
+                    <button class="btn btn-primary" id="user-guide-save-btn" style="display:none" onclick="saveUserGuide()">Save &amp; Publish</button>
+                    <button class="btn" id="user-guide-preview-btn" style="display:none" onclick="previewUserGuide()">Preview</button>
+                    <button class="btn" id="user-guide-cancel-btn" style="display:none" onclick="cancelUserGuideEdit()">Cancel</button>
+                    <button class="btn" id="user-guide-export-btn" onclick="exportUserGuide()">Export as HTML</button>
                 </div>
                 <div id="user-guide-content"></div>
+                <div id="user-guide-editor-panel" style="display:none">
+                    <p style="margin:0 0 8px;font-size:13px;color:var(--slate-500)">Edit the full HTML below. Saving publishes your changes to every user's in-app User Guide instantly. Use <strong>Preview</strong> to open the rendered version in a new tab before saving.</p>
+                    <textarea id="user-guide-editor-textarea" spellcheck="false" style="width:100%;height:calc(100vh - 260px);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:12px;border:1px solid var(--slate-300);border-radius:8px;resize:vertical;background:#fff;color:#1a2332;line-height:1.5"></textarea>
+                </div>
             </div>
 
             <!-- Settings View -->

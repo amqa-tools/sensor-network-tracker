@@ -11190,29 +11190,134 @@ var gasPairs = interPairs.filter(function(pk) { return REG.interPod[pk].co || RE
 }
 
 // ===== USER GUIDE =====
-function renderUserGuide() {
-    const container = document.getElementById('user-guide-content');
-    if (!container) return;
-    if (container.dataset.loaded) return;
-    container.dataset.loaded = '1';
-    // Use an iframe so the guide renders with its full standalone styles
-    container.innerHTML = `<iframe src="user-guide.html?v=${Date.now()}" style="width:100%;height:calc(100vh - 180px);border:none;border-radius:8px;background:#fff" title="User Guide"></iframe>`;
+let _userGuideMode = 'view'; // 'view' or 'edit'
+let _userGuideOriginalText = null;
+
+function _renderUserGuideButtons() {
+    const isAdmin = currentUserRole === 'admin';
+    const editing = _userGuideMode === 'edit';
+    const toggle = (id, show) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = show ? '' : 'none';
+    };
+    toggle('user-guide-edit-btn',    isAdmin && !editing);
+    toggle('user-guide-save-btn',    isAdmin && editing);
+    toggle('user-guide-preview-btn', isAdmin && editing);
+    toggle('user-guide-cancel-btn',  isAdmin && editing);
+    toggle('user-guide-export-btn',  !editing);
 }
 
-function exportUserGuide() {
-    fetch('user-guide.html?v=' + Date.now())
-        .then(r => r.text())
-        .then(html => {
-            const blob = new Blob([html], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'ADEC_Sensor_Network_Tracker_User_Guide.html';
-            a.click();
-            URL.revokeObjectURL(url);
-            showSuccessToast('User guide exported');
-        })
-        .catch(() => showAlert('Error', 'Could not export user guide.'));
+async function renderUserGuide() {
+    _userGuideMode = 'view';
+    _userGuideOriginalText = null;
+    _renderUserGuideButtons();
+    const editorPanel = document.getElementById('user-guide-editor-panel');
+    if (editorPanel) editorPanel.style.display = 'none';
+    const container = document.getElementById('user-guide-content');
+    if (!container) return;
+    container.style.display = '';
+
+    // Prefer the admin-edited version stored in Supabase so in-app edits are
+    // live for everyone instantly. Fall back to the static user-guide.html
+    // file shipped with the repo when no custom content exists.
+    let body = null;
+    try {
+        body = await db.getAppSetting('user_guide_body');
+    } catch (_) {}
+
+    container.innerHTML = '';
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'width:100%;height:calc(100vh - 180px);border:none;border-radius:8px;background:#fff';
+    iframe.title = 'User Guide';
+    if (body) {
+        iframe.srcdoc = body;
+    } else {
+        iframe.src = 'user-guide.html?v=' + Date.now();
+    }
+    container.appendChild(iframe);
+}
+
+async function openUserGuideEditor() {
+    if (currentUserRole !== 'admin') return;
+    _userGuideMode = 'edit';
+    _renderUserGuideButtons();
+
+    let body = null;
+    try { body = await db.getAppSetting('user_guide_body'); } catch (_) {}
+    if (!body) {
+        // First edit — seed the textarea from the static file so the admin
+        // can iterate from the current published version, not a blank page.
+        try {
+            const r = await fetch('user-guide.html?v=' + Date.now());
+            body = await r.text();
+        } catch (_) {
+            body = '<!-- Could not load user-guide.html. Paste your guide HTML here. -->';
+        }
+    }
+    _userGuideOriginalText = body;
+    const ta = document.getElementById('user-guide-editor-textarea');
+    if (ta) ta.value = body;
+
+    document.getElementById('user-guide-content').style.display = 'none';
+    document.getElementById('user-guide-editor-panel').style.display = '';
+}
+
+async function saveUserGuide() {
+    if (currentUserRole !== 'admin') return;
+    const ta = document.getElementById('user-guide-editor-textarea');
+    const body = ta ? ta.value : '';
+    try {
+        await db.setAppSetting('user_guide_body', body);
+        showSuccessToast('User guide published');
+        await renderUserGuide();
+    } catch (err) {
+        showAlert('Error saving', err?.message || String(err));
+    }
+}
+
+function previewUserGuide() {
+    const ta = document.getElementById('user-guide-editor-textarea');
+    if (!ta) return;
+    const win = window.open('', '_blank');
+    if (!win) {
+        showAlert('Popup blocked', 'Allow popups for this site to preview the user guide.');
+        return;
+    }
+    win.document.open();
+    win.document.write(ta.value);
+    win.document.close();
+}
+
+function cancelUserGuideEdit() {
+    const ta = document.getElementById('user-guide-editor-textarea');
+    if (ta && _userGuideOriginalText !== null && ta.value !== _userGuideOriginalText) {
+        if (!confirm('Discard unsaved changes to the User Guide?')) return;
+    }
+    renderUserGuide();
+}
+
+async function exportUserGuide() {
+    // Prefer the admin-edited version from Supabase so the downloaded file
+    // matches what users actually see in the app.
+    let html = null;
+    try { html = await db.getAppSetting('user_guide_body'); } catch (_) {}
+    if (!html) {
+        try {
+            const r = await fetch('user-guide.html?v=' + Date.now());
+            html = await r.text();
+        } catch (_) {
+            showAlert('Error', 'Could not export user guide.');
+            return;
+        }
+    }
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ADEC_Sensor_Network_Tracker_User_Guide.html';
+    a.click();
+    URL.revokeObjectURL(url);
+    showSuccessToast('User guide exported');
 }
 
 // ===== MOBILE SIDEBAR =====
