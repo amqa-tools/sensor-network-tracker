@@ -324,10 +324,21 @@ async function runScan(): Promise<Response> {
     // --- Flag detection across the raw window ---
     // Cap: if the newest raw reading is older than FLAG_MAX_STALENESS_MS, don't
     // surface flag alerts. A sensor that's been dark for a week shouldn't keep
-    // creating PM noise from ancient readings.
+    // creating PM noise from ancient readings. But any flag alert that was
+    // already active must be kept alive in stillActiveIds so the later
+    // "resolve cleared" pass doesn't auto-resolve it and write a misleading
+    // "has cleared" note — we're just choosing not to refresh, not declaring
+    // the fault gone.
     if (rows.length === 0) return;
     const rawFreshnessMs = Number.isFinite(latestRawMs) ? Date.now() - latestRawMs : Infinity;
-    if (rawFreshnessMs > FLAG_MAX_STALENESS_MS) return;
+    if (rawFreshnessMs > FLAG_MAX_STALENESS_MS) {
+      for (const a of existingAlerts) {
+        if (a.sensor_sn === d.sn && a.issue_type !== "Lost Connection") {
+          stillActiveIds.add(a.id);
+        }
+      }
+      return;
+    }
     let flagUnion = 0;
     let flaggedCount = 0;
     let earliestFlaggedMs = Infinity;
@@ -479,14 +490,27 @@ async function runScan(): Promise<Response> {
         alert.sensor_sn,
         communityId,
       );
-      if (appSensor && alert.issue_type !== "Lost Connection") {
-        const cur = getStatusArray(appSensor).filter((s) => s !== alert.issue_type);
-        const next = cur.length > 0 ? cur : ["Online"];
-        check(
-          "clear sensor status (resolve)",
-          await supa.from("sensors").update({ status: next, updated_at: now }).eq("id", appSensor.id),
-        );
-        appSensor.status = next;
+      if (appSensor) {
+        const filtered = getStatusArray(appSensor).filter((s) => s !== alert.issue_type);
+        let next: string[];
+        if (alert.issue_type === "Lost Connection") {
+          // Sensor reconnected — strip "Lost Connection" and make sure
+          // "Online" is present again (reverse of the promotion step).
+          next = filtered.includes("Online") ? filtered : ["Online", ...filtered];
+        } else {
+          // PM/Gas/SD cleared — drop the issue; if that was the only status,
+          // fall back to "Online".
+          next = filtered.length > 0 ? filtered : ["Online"];
+        }
+        const sortedNext = next.slice().sort().join(",");
+        const sortedCur = getStatusArray(appSensor).slice().sort().join(",");
+        if (sortedNext !== sortedCur) {
+          check(
+            "clear sensor status (resolve)",
+            await supa.from("sensors").update({ status: next, updated_at: now }).eq("id", appSensor.id),
+          );
+          appSensor.status = next;
+        }
       }
     }
   }

@@ -74,7 +74,7 @@
     </div>
 
     <div id="sandbox-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#d4a84b;color:#1a2332;text-align:center;padding:8px 16px;font-weight:700;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,0.15);font-family:var(--font-sans,sans-serif)">
-        SANDBOX MODE — nothing you do here is saved. Refresh to reset. <a href="?" style="color:#1a2332;text-decoration:underline;margin-left:8px">Exit sandbox</a>
+        SANDBOX MODE — nothing you do here is saved. Refresh to reset. <a href="#" onclick="event.preventDefault(); if(typeof toggleSandboxMode==='function'){toggleSandboxMode();} else {window.location.href=window.location.pathname+window.location.hash;}" style="color:#1a2332;text-decoration:underline;margin-left:8px">Exit sandbox</a>
     </div>
     <script>
         if (window.SANDBOX_MODE || new URLSearchParams(location.search).has('sandbox')) {
@@ -134,11 +134,11 @@
             </ul>
             <div class="sidebar-bottom-actions">
                 <a href="#" class="sidebar-bottom-link" onclick="event.preventDefault(); showView('user-guide')" style="display:block;padding:8px 16px;font-size:13px;color:var(--slate-400);text-decoration:none"><span class="icon" style="font-weight:700">?</span> User Guide</a>
-                <div class="setup-mode-toggle" id="setup-mode-toggle" onclick="toggleSetupMode()" role="button" aria-label="Toggle setup mode" tabindex="0">
+                <div class="setup-mode-toggle" id="setup-mode-toggle" style="display:none" onclick="toggleSetupMode()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSetupMode();}" role="button" aria-label="Toggle setup mode" tabindex="0">
                     <span class="setup-mode-icon" aria-hidden="true">&#9881;</span>
                     <span class="setup-mode-label">Setup Mode</span>
                 </div>
-                <div class="setup-mode-toggle sandbox-mode-toggle" id="sandbox-mode-toggle" onclick="toggleSandboxMode()" role="button" aria-label="Toggle sandbox mode" tabindex="0">
+                <div class="setup-mode-toggle sandbox-mode-toggle" id="sandbox-mode-toggle" style="display:none" onclick="toggleSandboxMode()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSandboxMode();}" role="button" aria-label="Toggle sandbox mode" tabindex="0">
                     <span class="setup-mode-icon" aria-hidden="true">&#9727;</span>
                     <span class="setup-mode-label" id="sandbox-mode-label">Sandbox Mode</span>
                 </div>

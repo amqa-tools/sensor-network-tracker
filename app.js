@@ -4519,6 +4519,10 @@ function refreshCurrentView() {
     else if (activeViewId === 'view-community' && currentCommunity) { showCommunityView(currentCommunity); }
     else if (activeViewId === 'view-contact-detail' && currentContact) { showContactView(currentContact); }
     else if (activeViewId === 'view-collocations') { renderCollocationsView(); }
+    else if (activeViewId === 'view-audits') { if (typeof renderAuditsView === 'function') renderAuditsView(); }
+    else if (activeViewId === 'view-service') { if (typeof renderServiceView === 'function') renderServiceView(); }
+    else if (activeViewId === 'view-settings') { if (typeof renderSettings === 'function') renderSettings(); }
+    else if (activeViewId === 'view-user-guide') { if (typeof renderUserGuide === 'function') renderUserGuide(); }
     // Restore active tab after re-render (showXxxView calls resetTabs which defaults to first tab)
     if (activeTab) {
         const container = document.querySelector('.view.active');
@@ -5901,10 +5905,13 @@ const COMMUNITY_EXPORT_FIELDS = [
     } },
     { key: 'tags', label: 'Tags', get: c => getCommunityTags(c.id).join('; ') },
     { key: 'status', label: 'Status', get: c => isCommunityDeactivated(c.id) ? 'Inactive' : 'Active' },
-    { key: 'sensorCount', label: 'Sensor Count', get: c => sensors.filter(s => s.community === c.id).length },
-    { key: 'sensorIds', label: 'Sensor IDs', get: c => sensors.filter(s => s.community === c.id).map(s => s.id).sort().join(', ') },
+    // Counts are direct (only records whose community field equals this id),
+    // NOT rollups through sub-communities. A parent community's own count
+    // excludes sensors/contacts attached to its children.
+    { key: 'sensorCount', label: 'Direct Sensor Count', get: c => sensors.filter(s => s.community === c.id).length },
+    { key: 'sensorIds', label: 'Direct Sensor IDs', get: c => sensors.filter(s => s.community === c.id).map(s => s.id).sort().join(', ') },
     { key: 'childCount', label: 'Sub-Community Count', get: c => getChildCommunities(c.id).length },
-    { key: 'contactCount', label: 'Contact Count', get: c => contacts.filter(ct => ct.community === c.id && ct.active !== false).length },
+    { key: 'contactCount', label: 'Direct Active Contact Count', get: c => contacts.filter(ct => ct.community === c.id && ct.active !== false).length },
 ];
 
 const EXPORT_FIELD_SETS = {
@@ -5958,17 +5965,20 @@ function executeExport() {
     const customFields = loadData('customSensorFields', []);
     const includeInactive = document.getElementById('export-include-inactive').checked;
 
+    // Coerce sort keys to strings so a row with a missing id/name (mid-import,
+    // partial record) doesn't throw and abort the whole export.
+    const byStr = (get) => (a, b) => String(get(a) ?? '').localeCompare(String(get(b) ?? ''));
     let data;
     if (type === 'sensors') {
-        data = [...sensors].sort((a, b) => a.id.localeCompare(b.id));
+        data = [...sensors].sort(byStr(s => s.id));
     } else if (type === 'communities') {
         data = COMMUNITIES
             .filter(c => includeInactive || !isCommunityDeactivated(c.id))
-            .sort((a, b) => a.name.localeCompare(b.name));
+            .sort(byStr(c => c.name));
     } else {
         data = contacts
             .filter(c => includeInactive || c.active !== false)
-            .sort((a, b) => a.name.localeCompare(b.name));
+            .sort(byStr(c => c.name));
     }
 
     const headers = [];
@@ -11269,7 +11279,9 @@ async function renderUserGuide() {
     let body = null;
     try {
         body = await db.getAppSetting('user_guide_body');
-    } catch (_) {}
+    } catch (err) {
+        console.warn('[user guide] Could not load saved body, falling back to static file:', err);
+    }
 
     container.innerHTML = '';
     const iframe = document.createElement('iframe');
@@ -11289,14 +11301,19 @@ async function openUserGuideEditor() {
     _renderUserGuideButtons();
 
     let body = null;
-    try { body = await db.getAppSetting('user_guide_body'); } catch (_) {}
+    try {
+        body = await db.getAppSetting('user_guide_body');
+    } catch (err) {
+        console.warn('[user guide] Editor load from Supabase failed; will seed from static file:', err);
+    }
     if (!body) {
         // First edit — seed the textarea from the static file so the admin
         // can iterate from the current published version, not a blank page.
         try {
             const r = await fetch('user-guide.html?v=' + Date.now());
             body = await r.text();
-        } catch (_) {
+        } catch (err) {
+            console.warn('[user guide] Static fallback failed too:', err);
             body = '<!-- Could not load user-guide.html. Paste your guide HTML here. -->';
         }
     }
@@ -11346,7 +11363,11 @@ async function exportUserGuide() {
     // Prefer the admin-edited version from Supabase so the downloaded file
     // matches what users actually see in the app.
     let html = null;
-    try { html = await db.getAppSetting('user_guide_body'); } catch (_) {}
+    try {
+        html = await db.getAppSetting('user_guide_body');
+    } catch (err) {
+        console.warn('[user guide] Export: could not load saved body, using static file:', err);
+    }
     if (!html) {
         try {
             const r = await fetch('user-guide.html?v=' + Date.now());

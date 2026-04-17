@@ -117,6 +117,9 @@ body.has-sandbox-banner { padding-top: 36px; }
 body.has-sandbox-banner #app { height: calc(100vh - 36px); }
 @media (max-width: 768px) {
     body.has-sandbox-banner #sidebar { top: 36px; }
+    /* The fixed mobile header is pinned at top:10px; without this nudge the
+       sandbox banner would sit on top of the hamburger button. */
+    body.has-sandbox-banner .mobile-header { top: 46px; }
 }
 
 /* ===== SCROLLBAR ===== */
