@@ -565,6 +565,14 @@ body {
     font-size: 14px;
 }
 
+/* Sandbox Mode toggle — same shell as setup mode, but amber (matches the
+   top-of-screen sandbox banner) so it reads as a distinct, noticeable state. */
+.sandbox-mode-toggle.active {
+    background: rgba(212, 168, 75, 0.15);
+    border-color: rgba(212, 168, 75, 0.4);
+    color: #d4a84b;
+}
+
 /* ===== MAIN WRAPPER (tab bar + content) ===== */
 #main-wrapper {
     flex: 1;

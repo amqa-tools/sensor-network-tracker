@@ -1028,6 +1028,13 @@ async function logoutUser() {
     sessionStorage.removeItem('mfa_verified_at');
     sessionStorage.removeItem('mfa_verified_user');
     if (inactivityTimeout) clearTimeout(inactivityTimeout);
+    // If we were in sandbox mode, drop the query param and reload so the next
+    // sign-in starts clean — otherwise db writes would stay no-oped for
+    // whoever logs in next.
+    if (window.SANDBOX_MODE) {
+        window.location.href = window.location.pathname + window.location.hash;
+        return;
+    }
     showLoginScreen();
 }
 
@@ -1055,6 +1062,39 @@ function renderSetupModeIndicator() {
         el.classList.toggle('active', setupMode);
         el.querySelector('.setup-mode-label').textContent = setupMode ? 'Setup Mode ON' : 'Setup Mode';
     }
+    renderSandboxModeIndicator();
+}
+
+// ===== SANDBOX MODE =====
+// window.SANDBOX_MODE is set in supabase-client.js based on a ?sandbox=1 URL
+// param; entering/exiting sandbox is a navigation (not an in-memory flag) so
+// the db helpers are wrapped before any code can write through them.
+function toggleSandboxMode() {
+    if (currentUserRole !== 'admin') return;
+    if (window.SANDBOX_MODE) {
+        // Exit — strip the query param and reload so the wrapped db helpers
+        // reset back to real writes.
+        window.location.href = window.location.pathname + window.location.hash;
+        return;
+    }
+    openModal('modal-sandbox-explainer');
+}
+
+function enterSandboxMode() {
+    if (currentUserRole !== 'admin') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('sandbox', '1');
+    window.location.href = url.toString();
+}
+
+function renderSandboxModeIndicator() {
+    const el = document.getElementById('sandbox-mode-toggle');
+    if (!el) return;
+    el.style.display = currentUserRole === 'admin' ? '' : 'none';
+    const active = !!window.SANDBOX_MODE;
+    el.classList.toggle('active', active);
+    const label = document.getElementById('sandbox-mode-label');
+    if (label) label.textContent = active ? 'Sandbox Mode ON' : 'Sandbox Mode';
 }
 
 // ===== STATE =====
@@ -5795,15 +5835,35 @@ const CONTACT_EXPORT_FIELDS = [
     { key: 'active', label: 'Status', get: c => c.active === false ? 'Inactive' : 'Active' },
 ];
 
+const COMMUNITY_EXPORT_FIELDS = [
+    { key: 'name', label: 'Name', get: c => c.name },
+    { key: 'parent', label: 'Parent Community', get: c => {
+        const p = getParentCommunity(c.id);
+        return p ? p.name : '';
+    } },
+    { key: 'tags', label: 'Tags', get: c => getCommunityTags(c.id).join('; ') },
+    { key: 'status', label: 'Status', get: c => isCommunityDeactivated(c.id) ? 'Inactive' : 'Active' },
+    { key: 'sensorCount', label: 'Sensor Count', get: c => sensors.filter(s => s.community === c.id).length },
+    { key: 'sensorIds', label: 'Sensor IDs', get: c => sensors.filter(s => s.community === c.id).map(s => s.id).sort().join(', ') },
+    { key: 'childCount', label: 'Sub-Community Count', get: c => getChildCommunities(c.id).length },
+    { key: 'contactCount', label: 'Contact Count', get: c => contacts.filter(ct => ct.community === c.id && ct.active !== false).length },
+];
+
+const EXPORT_FIELD_SETS = {
+    sensors: SENSOR_EXPORT_FIELDS,
+    contacts: CONTACT_EXPORT_FIELDS,
+    communities: COMMUNITY_EXPORT_FIELDS,
+};
+
 function openExportModal(type) {
-    const fields = type === 'sensors' ? SENSOR_EXPORT_FIELDS : CONTACT_EXPORT_FIELDS;
+    const fields = EXPORT_FIELD_SETS[type] || [];
     const container = document.getElementById('export-fields-list');
     container.innerHTML = fields.map(f =>
         `<label class="export-field-option"><input type="checkbox" checked data-key="${f.key}"> ${f.label}</label>`
     ).join('');
     document.getElementById('export-type').value = type;
 
-    // Add custom fields
+    // Sensor custom fields — only apply to the sensors export
     const customFields = loadData('customSensorFields', []);
     if (type === 'sensors' && customFields.length > 0) {
         customFields.forEach(cf => {
@@ -5811,12 +5871,19 @@ function openExportModal(type) {
         });
     }
 
-    // Show/hide inactive contacts checkbox
+    // "Include inactive" checkbox — shown for contacts and communities, both of
+    // which have an inactive state the user may or may not want to include.
     const inactiveOption = document.getElementById('export-inactive-option');
     const inactiveCheckbox = document.getElementById('export-include-inactive');
-    if (type === 'contacts') {
+    const inactiveLabel = document.getElementById('export-include-inactive-label');
+    if (type === 'contacts' || type === 'communities') {
         inactiveOption.style.display = '';
         inactiveCheckbox.checked = false;
+        if (inactiveLabel) {
+            inactiveLabel.textContent = type === 'communities'
+                ? 'Include inactive communities'
+                : 'Include inactive contacts';
+        }
     } else {
         inactiveOption.style.display = 'none';
     }
@@ -5829,14 +5896,21 @@ function executeExport() {
     const checkboxes = document.querySelectorAll('#export-fields-list input[type="checkbox"]:checked');
     const selectedKeys = Array.from(checkboxes).map(cb => cb.dataset.key);
 
-    const fields = type === 'sensors' ? SENSOR_EXPORT_FIELDS : CONTACT_EXPORT_FIELDS;
+    const fields = EXPORT_FIELD_SETS[type] || [];
     const customFields = loadData('customSensorFields', []);
+    const includeInactive = document.getElementById('export-include-inactive').checked;
+
     let data;
     if (type === 'sensors') {
         data = [...sensors].sort((a, b) => a.id.localeCompare(b.id));
+    } else if (type === 'communities') {
+        data = COMMUNITIES
+            .filter(c => includeInactive || !isCommunityDeactivated(c.id))
+            .sort((a, b) => a.name.localeCompare(b.name));
     } else {
-        const includeInactive = document.getElementById('export-include-inactive').checked;
-        data = contacts.filter(c => includeInactive || c.active !== false).sort((a, b) => a.name.localeCompare(b.name));
+        data = contacts
+            .filter(c => includeInactive || c.active !== false)
+            .sort((a, b) => a.name.localeCompare(b.name));
     }
 
     const headers = [];
@@ -5866,6 +5940,7 @@ function executeExport() {
 
 function exportSensors() { openExportModal('sensors'); }
 function exportContacts() { openExportModal('contacts'); }
+function exportCommunities() { openExportModal('communities'); }
 
 // ===== BULK ACTIONS =====
 let selectedSensors = new Set();

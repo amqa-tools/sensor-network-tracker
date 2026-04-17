@@ -138,6 +138,10 @@
                     <span class="setup-mode-icon" aria-hidden="true">&#9881;</span>
                     <span class="setup-mode-label">Setup Mode</span>
                 </div>
+                <div class="setup-mode-toggle sandbox-mode-toggle" id="sandbox-mode-toggle" onclick="toggleSandboxMode()" role="button" aria-label="Toggle sandbox mode" tabindex="0">
+                    <span class="setup-mode-icon" aria-hidden="true">&#9727;</span>
+                    <span class="setup-mode-label" id="sandbox-mode-label">Sandbox Mode</span>
+                </div>
             </div>
         </nav>
 
@@ -171,7 +175,7 @@
                     <h1>All Sensors</h1>
                     <button class="btn btn-primary" onclick="openAddSensorModal()">+ Add Sensor</button>
                     <button class="btn" onclick="openAddNoteModal('', '')">Mass Action</button>
-                    <a class="import-link" onclick="exportSensors()" style="cursor:pointer">Export as Spreadsheet</a>
+                    <button class="btn" onclick="exportSensors()">Export as Spreadsheet</button>
                 </div>
                 <div id="sensor-type-filters" class="community-tag-filters"></div>
                 <div class="filter-bar">
@@ -255,6 +259,7 @@
                 <div class="view-header">
                     <h1>All Communities</h1>
                     <button class="btn btn-primary" onclick="openAddCommunityModal()">+ Add Community</button>
+                    <button class="btn" onclick="exportCommunities()">Export as Spreadsheet</button>
                 </div>
                 <div class="community-list-tabs">
                     <button class="community-list-tab active" id="community-tab-active" onclick="switchCommunityTab('active')">Active <span class="community-tab-count" id="community-active-count"></span></button>
@@ -344,7 +349,7 @@
                     <h1>All Contacts</h1>
                     <button class="btn btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
                     <button class="btn btn-primary" onclick="openEmailModal()">&#9993; Email</button>
-                    <button class="btn" onclick="exportContacts()">Export</button>
+                    <button class="btn" onclick="exportContacts()">Export as Spreadsheet</button>
                 </div>
                 <div class="community-list-tabs">
                     <button class="community-list-tab active" id="contacts-tab-active" onclick="switchContactsTab('active')">Active Communities <span class="community-tab-count" id="contacts-active-count"></span></button>
@@ -1013,6 +1018,31 @@
         </div>
     </div>
 
+    <!-- Sandbox Mode Explainer Modal -->
+    <div id="modal-sandbox-explainer" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2>Enter Sandbox Mode?</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-sandbox-explainer')">&times;</button>
+            </div>
+            <div style="padding:4px 2px 16px;font-size:14px;line-height:1.55;color:var(--slate-200)">
+                <p style="margin:0 0 12px"><strong>Sandbox is a safe practice space.</strong> You can click around, add/edit/delete sensors, communities, contacts, notes &mdash; anything &mdash; and nothing you do will save to the real database.</p>
+                <p style="margin:0 0 12px"><strong>How it works:</strong></p>
+                <ul style="margin:0 0 12px 20px;padding:0">
+                    <li>You still see the real, current data from Supabase.</li>
+                    <li>Any change you make only lives in your browser.</li>
+                    <li>Refreshing the page, signing out, or clicking &ldquo;Exit sandbox&rdquo; reverts everything instantly.</li>
+                    <li>A bright amber banner stays at the top of the screen so you never forget you&rsquo;re in sandbox.</li>
+                </ul>
+                <p style="margin:0;color:var(--slate-400);font-size:13px">Use it to try new features, train yourself on workflows, or show someone around without any risk.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('modal-sandbox-explainer')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="enterSandboxMode()">Enter Sandbox</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Export Modal -->
     <div id="modal-export" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content modal-sm">
@@ -1028,7 +1058,7 @@
             <div id="export-inactive-option" class="form-group" style="display:none;margin-top:8px">
                 <label class="contact-email-list-label">
                     <input type="checkbox" id="export-include-inactive">
-                    Include inactive contacts
+                    <span id="export-include-inactive-label">Include inactive contacts</span>
                 </label>
             </div>
             <div class="modal-footer">
