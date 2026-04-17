@@ -135,6 +135,18 @@ async function runQuantAQCheck() {
     }
 }
 
+// ===== INTERNAL HELPERS =====
+// Find the auto-generated event note that an alert is linked to. Previously
+// inlined in four places with the same filter each time.
+function _findEventNoteForAlert(alert, sensorSn) {
+    const sn = sensorSn || alert.sensorSn;
+    return notes.find(n =>
+        n.text && n.text.includes('QuantAQ Auto-Flag') &&
+        n.text.includes(alert.issueType) &&
+        n.taggedSensors && n.taggedSensors.includes(sn)
+    );
+}
+
 // ===== HELPERS =====
 
 function quantaqTimeSince(dateStr) {
@@ -517,22 +529,24 @@ async function confirmDismissQuantAQAlert(alertId) {
     alert.acknowledgedBy = userName;
 
     // Add dismiss entry to the auto-flag event note
-    const eventNote = notes.find(n =>
-        n.text && n.text.includes('QuantAQ Auto-Flag') &&
-        n.text.includes(alert.issueType) &&
-        n.taggedSensors && n.taggedSensors.includes(alert.sensorSn)
-    );
+    const eventNote = _findEventNoteForAlert(alert);
     if (eventNote) {
         let line = `\n— Dismissed by ${userName} (${timestamp})`;
         if (noteText) line += `: ${noteText}`;
         eventNote.text += line;
-        try { await supa.from('notes').update({ text: eventNote.text }).eq('id', eventNote.id); } catch(e) {}
+        try {
+            await db.updateNote(eventNote.id, { text: eventNote.text });
+        } catch (err) {
+            if (typeof handleSaveError === 'function') handleSaveError(err);
+        }
     }
 
     try {
-        await supa.from('quantaq_alerts').update({ acknowledged_by: userName }).eq('id', alertId);
+        await db.updateQuantAQAlert(alertId, { acknowledged_by: userName });
     } catch (err) {
+        // Roll back the optimistic in-memory acknowledge so UI matches DB.
         alert.acknowledgedBy = null;
+        if (typeof handleSaveError === 'function') handleSaveError(err);
     }
 
     renderDashboardAlerts();
@@ -558,23 +572,27 @@ async function confirmUndismissQuantAQAlert(alertId) {
     const noteText = input?.value?.trim() || '';
 
     // Add restore entry to the auto-flag event note
-    const eventNote = notes.find(n =>
-        n.text && n.text.includes('QuantAQ Auto-Flag') &&
-        n.text.includes(alert.issueType) &&
-        n.taggedSensors && n.taggedSensors.includes(alert.sensorSn)
-    );
+    const eventNote = _findEventNoteForAlert(alert);
     if (eventNote) {
         let line = `\n— Restored by ${userName} (${timestamp})`;
         if (noteText) line += `: ${noteText}`;
         eventNote.text += line;
-        try { await supa.from('notes').update({ text: eventNote.text }).eq('id', eventNote.id); } catch(e) {}
+        try {
+            await db.updateNote(eventNote.id, { text: eventNote.text });
+        } catch (err) {
+            if (typeof handleSaveError === 'function') handleSaveError(err);
+        }
     }
 
+    const prevAck = alert.acknowledgedBy;
     alert.acknowledgedBy = null;
 
     try {
-        await supa.from('quantaq_alerts').update({ acknowledged_by: null }).eq('id', alertId);
-    } catch (err) {}
+        await db.updateQuantAQAlert(alertId, { acknowledged_by: null });
+    } catch (err) {
+        alert.acknowledgedBy = prevAck;
+        if (typeof handleSaveError === 'function') handleSaveError(err);
+    }
 
     renderDashboardAlerts();
 }
@@ -582,12 +600,15 @@ async function confirmUndismissQuantAQAlert(alertId) {
 async function deleteQuantAQAlert(alertId) {
     const idx = quantaqAlerts.findIndex(a => a.id === alertId);
     if (idx < 0) return;
-    quantaqAlerts.splice(idx, 1);
+    const [removed] = quantaqAlerts.splice(idx, 1);
     renderDashboardAlerts();
     try {
-        await supa.from('quantaq_alerts').delete().eq('id', alertId);
+        await db.deleteQuantAQAlert(alertId);
     } catch (err) {
-        console.error('[QuantAQ] Failed to delete alert:', err);
+        // Roll back so the dashboard matches the DB on failure.
+        quantaqAlerts.splice(idx, 0, removed);
+        renderDashboardAlerts();
+        if (typeof handleSaveError === 'function') handleSaveError(err);
     }
 }
 
@@ -598,7 +619,7 @@ async function promoteAlert(alertId) {
 
     try {
         const now = new Date().toISOString();
-        await supa.from('quantaq_alerts').update({ status: 'active', is_new: true, last_checked: now }).eq('id', alertId);
+        await db.updateQuantAQAlert(alertId, { status: 'active', is_new: true, last_checked: now });
 
         // Create event note
         const appSensor = sensors.find(s => s.id === alert.sensorSn);
@@ -607,11 +628,13 @@ async function promoteAlert(alertId) {
             sensors: [alert.sensorSn], communities: communityId ? [communityId] : [], contacts: [],
         });
 
-        // Update sensor status
+        // Update sensor status. PM/SD/Gas faults keep "Online" — only a real
+        // Lost Connection (which has its own path in the edge function)
+        // removes it. Mirrors the server-side status rule.
         if (appSensor) {
             const cur = getStatusArray(appSensor);
             const merged = new Set([...cur, alert.issueType]);
-            merged.delete('Online');
+            if (alert.issueType === 'Lost Connection') merged.delete('Online');
             appSensor.status = [...merged];
             persistSensor(appSensor);
         }
@@ -622,7 +645,7 @@ async function promoteAlert(alertId) {
         renderDashboardAlerts();
         buildSensorSidebar();
     } catch (err) {
-        console.error('[QuantAQ] Failed to promote alert:', err);
+        if (typeof handleSaveError === 'function') handleSaveError(err);
     }
 }
 
@@ -631,12 +654,12 @@ async function silentDismissPendingAlert(alertId) {
     if (!alert) return;
 
     try {
-        await supa.from('quantaq_alerts').delete().eq('id', alertId);
+        await db.deleteQuantAQAlert(alertId);
         quantaqAlerts = quantaqAlerts.filter(a => a.id !== alertId);
         showSuccessToast(`Pending alert dismissed — no note created`);
         renderDashboardAlerts();
     } catch (err) {
-        console.error('[QuantAQ] Failed to dismiss pending alert:', err);
+        if (typeof handleSaveError === 'function') handleSaveError(err);
     }
 }
 
@@ -660,11 +683,7 @@ async function saveQuantAQFollowUp(alertId, sensorSn) {
     if (!alert) return;
 
     // Find the auto-generated event note for this alert
-    const eventNote = notes.find(n =>
-        n.text && n.text.includes('QuantAQ Auto-Flag') &&
-        n.text.includes(alert.issueType) &&
-        n.taggedSensors && n.taggedSensors.includes(sensorSn)
-    );
+    const eventNote = _findEventNoteForAlert(alert, sensorSn);
 
     if (eventNote) {
         // Append the follow-up to the existing note
@@ -674,9 +693,9 @@ async function saveQuantAQFollowUp(alertId, sensorSn) {
 
         // Persist to database
         try {
-            await supa.from('notes').update({ text: eventNote.text }).eq('id', eventNote.id);
+            await db.updateNote(eventNote.id, { text: eventNote.text });
         } catch (err) {
-            console.error('[QuantAQ] Failed to update note:', err);
+            if (typeof handleSaveError === 'function') handleSaveError(err);
         }
     } else {
         // No auto-generated note found — create a new one

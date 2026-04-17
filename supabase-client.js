@@ -103,21 +103,22 @@ const db = {
     },
 
     async deleteCommunity(id) {
-        // Unassign sensors and contacts
-        await supa.from('sensors').update({ community_id: null }).eq('community_id', id);
-        await supa.from('contacts').update({ community_id: null }).eq('community_id', id);
-        // Nullify comms and audits references
-        await supa.from('comms').update({ community_id: null }).eq('community_id', id);
-        await supa.from('audits').update({ community_id: null }).eq('community_id', id);
-        // Detach any child communities
-        await supa.from('communities').update({ parent_id: null }).eq('parent_id', id);
-        // Clean up note tags and comm tags referencing this community
-        await supa.from('note_tags').delete().eq('tag_type', 'community').eq('tag_id', id);
-        await supa.from('comm_tags').delete().eq('tag_type', 'community').eq('tag_id', id);
-        // Remove community tags and files (CASCADE handles these, but be explicit)
-        await supa.from('community_tags').delete().eq('community_id', id);
-        await supa.from('community_files').delete().eq('community_id', id);
-        // Delete the community
+        // Each cascade step checks its own error — before this helper did
+        // them as fire-and-forget, so an RLS rejection on any one left
+        // orphaned data while the caller thought the delete succeeded.
+        const step = async (label, promise) => {
+            const { error } = await promise;
+            if (error) throw new Error(`deleteCommunity step "${label}": ${error.message}`);
+        };
+        await step('unassign sensors',   supa.from('sensors').update({ community_id: null }).eq('community_id', id));
+        await step('unassign contacts',  supa.from('contacts').update({ community_id: null }).eq('community_id', id));
+        await step('nullify comms',      supa.from('comms').update({ community_id: null }).eq('community_id', id));
+        await step('nullify audits',     supa.from('audits').update({ community_id: null }).eq('community_id', id));
+        await step('detach children',    supa.from('communities').update({ parent_id: null }).eq('parent_id', id));
+        await step('clear note_tags',    supa.from('note_tags').delete().eq('tag_type', 'community').eq('tag_id', id));
+        await step('clear comm_tags',    supa.from('comm_tags').delete().eq('tag_type', 'community').eq('tag_id', id));
+        await step('clear community_tags', supa.from('community_tags').delete().eq('community_id', id));
+        await step('clear community_files', supa.from('community_files').delete().eq('community_id', id));
         const { error } = await supa.from('communities').delete().eq('id', id);
         if (error) throw error;
     },
@@ -264,6 +265,15 @@ const db = {
         if (error) throw error;
     },
 
+    async deleteNote(id) {
+        // note_tags has ON DELETE CASCADE but explicit delete lets us surface
+        // permission errors on the tags table if RLS ever changes.
+        const { error: tagErr } = await supa.from('note_tags').delete().eq('note_id', id);
+        if (tagErr) throw tagErr;
+        const { error } = await supa.from('notes').delete().eq('id', id);
+        if (error) throw error;
+    },
+
     // --- Communications ---
     async getComms() {
         const { data, error } = await supa
@@ -316,6 +326,26 @@ const db = {
         }
 
         return { ...comm, id: commId };
+    },
+
+    async updateComm(id, updates) {
+        // Column-name translation: app uses camelCase, DB uses snake_case.
+        const row = {};
+        for (const [k, v] of Object.entries(updates || {})) {
+            if (k === 'commType') row.comm_type = v;
+            else if (k === 'fullBody') row.full_body = v;
+            else if (k === 'community') row.community_id = v;
+            else row[k] = v;
+        }
+        const { error } = await supa.from('comms').update(row).eq('id', id);
+        if (error) throw error;
+    },
+
+    async deleteComm(id) {
+        const { error: tagErr } = await supa.from('comm_tags').delete().eq('comm_id', id);
+        if (tagErr) throw tagErr;
+        const { error } = await supa.from('comms').delete().eq('id', id);
+        if (error) throw error;
     },
 
     // --- Community Files ---
@@ -528,6 +558,29 @@ const db = {
         const { error } = await supa.from('service_tickets').update(row).eq('id', id);
         if (error) throw error;
     },
+
+    // --- QuantAQ Alerts ---
+    // Writes from quantaq.js (acknowledge, dismiss, delete, promote, follow-up)
+    // go through these helpers so (a) errors actually throw instead of silently
+    // failing RLS, and (b) sandbox mode intercepts them correctly.
+    async updateQuantAQAlert(id, updates) {
+        const { error } = await supa.from('quantaq_alerts').update(updates).eq('id', id);
+        if (error) throw error;
+    },
+
+    async deleteQuantAQAlert(id) {
+        const { error } = await supa.from('quantaq_alerts').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    // --- Community Files (rename) ---
+    async renameCommunityFile(id, newName) {
+        const { error } = await supa
+            .from('community_files')
+            .update({ file_name: newName })
+            .eq('id', id);
+        if (error) throw error;
+    },
 };
 
 // ===== SANDBOX MODE =====
@@ -541,12 +594,13 @@ if (window.SANDBOX_MODE) {
         'setCommunityTags',
         'upsertSensor', 'deleteSensor',
         'upsertContact', 'deleteContact',
-        'insertNote', 'updateNote',
-        'insertComm',
-        'uploadFile', 'deleteFile',
+        'insertNote', 'updateNote', 'deleteNote',
+        'insertComm', 'updateComm', 'deleteComm',
+        'uploadFile', 'deleteFile', 'renameCommunityFile',
         'insertAudit', 'updateAudit',
         'insertCollocation', 'updateCollocation', 'deleteCollocation',
         'insertServiceTicket', 'updateServiceTicket',
+        'updateQuantAQAlert', 'deleteQuantAQAlert',
     ];
     for (const name of WRITE_METHODS) {
         if (typeof db[name] !== 'function') continue;

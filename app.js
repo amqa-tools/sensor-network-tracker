@@ -359,9 +359,7 @@ function cleanupOrphanedCollocationNotes() {
         const toRemoveIds = new Set(orphaned.map(n => n.id));
         notes = notes.filter(n => !toRemoveIds.has(n.id));
         orphaned.forEach(n => {
-            supa.from('note_tags').delete().eq('note_id', n.id).then(() =>
-                supa.from('notes').delete().eq('id', n.id)
-            ).catch(err => console.error('Delete orphaned collocation note error:', err));
+            db.deleteNote(n.id).catch(err => console.warn('[cleanup] orphaned collocation note:', err));
         });
     }
 }
@@ -409,10 +407,7 @@ function mergeStatusChangeNotes() {
         const toRemoveSet = new Set(toRemove);
         notes = notes.filter(n => !toRemoveSet.has(n.id));
         toRemove.forEach(id => {
-            // Delete from DB
-            supa.from('note_tags').delete().eq('note_id', id).then(() =>
-                supa.from('notes').delete().eq('id', id)
-            ).catch(err => console.error('Delete merged note error:', err));
+            db.deleteNote(id).catch(err => console.warn('[cleanup] merged note:', err));
         });
     }
 }
@@ -521,9 +516,7 @@ function cleanupOldMigrationNotes() {
         const toDeleteIds = new Set(toDelete.map(n => n.id));
         notes = notes.filter(n => !toDeleteIds.has(n.id));
         toDelete.forEach(n => {
-            supa.from('note_tags').delete().eq('note_id', n.id).then(() =>
-                supa.from('notes').delete().eq('id', n.id)
-            ).catch(() => {});
+            db.deleteNote(n.id).catch(err => console.warn('[cleanup] legacy note:', err));
         });
         console.log('Cleaned up ' + toDelete.length + ' old migration notes');
     }
@@ -629,9 +622,7 @@ async function deleteAutoNotes(noteType, sensorIds) {
     toRemove.forEach(n => {
         const idx = notes.indexOf(n);
         if (idx >= 0) notes.splice(idx, 1);
-        supa.from('note_tags').delete().eq('note_id', n.id).then(() =>
-            supa.from('notes').delete().eq('id', n.id)
-        ).catch(err => console.error('Delete auto note error:', err));
+        db.deleteNote(n.id).catch(err => console.warn('[cleanup] auto note:', err));
     });
     if (toRemove.length > 0) console.log(`Deleted ${toRemove.length} auto-generated ${noteType} notes`);
 }
@@ -4256,7 +4247,7 @@ function editFollowUp(noteId, followUpIdx) {
     }
 
     note.text = [...mainLines, ...followUps].join('\n');
-    supa.from('notes').update({ text: note.text }).eq('id', noteId).catch(err => console.error('Edit follow-up error:', err));
+    db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
     refreshCurrentView();
     if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
 }
@@ -4278,7 +4269,7 @@ function deleteFollowUp(noteId, followUpIdx) {
     note.text = [...mainLines, ...followUps].join('\n');
     refreshCurrentView();
     if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
-    supa.from('notes').update({ text: note.text }).eq('id', noteId).catch(err => console.error('Delete follow-up error:', err));
+    db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
 }
 
 function toggleTimelineNotePanel(noteId) {
@@ -4305,9 +4296,9 @@ async function saveTimelineFollowUp(noteId) {
     note.text += `\n— ${userName} (${timestamp}): ${text}`;
 
     try {
-        await supa.from('notes').update({ text: note.text }).eq('id', noteId);
+        await db.updateNote(noteId, { text: note.text });
     } catch (err) {
-        console.error('Failed to save follow-up note:', err);
+        handleSaveError(err);
     }
 
     input.value = '';
@@ -4353,10 +4344,10 @@ function editTimelineItem(id, isNote) {
         if (!newText || newText === (item.text || '').trim()) return;
 
         item.text = newText;
-        const table = isNote ? 'notes' : 'comms';
-        supa.from(table).update({ text: newText }).eq('id', id)
-            .then(({ error }) => { if (error) console.error('Edit save error:', error); })
-            .catch(err => console.error('Edit save error:', err));
+        const writer = isNote
+            ? db.updateNote(id, { text: newText })
+            : db.updateComm(id, { text: newText });
+        writer.catch(handleSaveError);
 
         refreshCurrentView();
     };
@@ -4384,12 +4375,14 @@ async function deleteTimelineItem(id, isNote) {
     // For communications or non-note items, use simple delete
     if (!isNote) {
         showConfirm('Delete Event', 'Are you sure? Only delete events that were created by accident.', async () => {
+            const prevComms = comms;
+            comms = comms.filter(c => c.id !== id);
             try {
-                comms = comms.filter(c => c.id !== id);
-                await supa.from('comm_tags').delete().eq('comm_id', id);
-                await supa.from('comms').delete().eq('id', id);
+                await db.deleteComm(id);
             } catch (err) {
-                console.error('Delete error:', err);
+                // Roll back the optimistic in-memory delete so the UI matches the DB.
+                comms = prevComms;
+                handleSaveError(err);
             }
             refreshCurrentView();
         }, { danger: true });
@@ -4411,12 +4404,13 @@ async function deleteTimelineItem(id, isNote) {
     if (!canRevert) {
         // Non-revertable note types: just delete normally
         showConfirm('Delete Event', 'Are you sure? Only delete events that were created by accident.', async () => {
+            const prevNotes = notes;
+            notes = notes.filter(n => n.id !== id);
             try {
-                notes = notes.filter(n => n.id !== id);
-                await supa.from('note_tags').delete().eq('note_id', id);
-                await supa.from('notes').delete().eq('id', id);
+                await db.deleteNote(id);
             } catch (err) {
-                console.error('Delete error:', err);
+                notes = prevNotes;
+                handleSaveError(err);
             }
             refreshCurrentView();
         }, { danger: true });
@@ -4452,11 +4446,11 @@ async function deleteTimelineItem(id, isNote) {
     showConfirm('Delete Event', message, async () => {
         const doRevert = document.getElementById('revert-changes-checkbox')?.checked;
 
+        const prevNotes = notes;
         try {
             // Delete the note
             notes = notes.filter(n => n.id !== id);
-            await supa.from('note_tags').delete().eq('note_id', id);
-            await supa.from('notes').delete().eq('id', id);
+            await db.deleteNote(id);
 
             // Revert sensor changes if checkbox was checked
             if (doRevert) {
@@ -4507,7 +4501,8 @@ async function deleteTimelineItem(id, isNote) {
                 }
             }
         } catch (err) {
-            console.error('Delete/revert error:', err);
+            notes = prevNotes;
+            handleSaveError(err);
         }
         refreshCurrentView();
     }, { danger: true, confirmText: 'Delete' });
