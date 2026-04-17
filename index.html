@@ -1018,6 +1018,32 @@
         </div>
     </div>
 
+    <!-- Setup Mode Explainer Modal -->
+    <div id="modal-setup-explainer" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Enter Setup Mode?</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-setup-explainer')">&times;</button>
+            </div>
+            <div style="padding:8px 4px 16px;font-size:14px;line-height:1.6;color:var(--navy-800)">
+                <p style="margin:0 0 12px"><strong>Setup Mode is for bulk data entry and backfilling.</strong> Use it when you're adding or correcting a lot of records at once and don't want the app to clutter sensor/community/contact history with an auto-generated note for every single edit.</p>
+                <p style="margin:0 0 8px"><strong>What changes while Setup Mode is on:</strong></p>
+                <ul style="margin:0 0 12px 20px;padding:0">
+                    <li>Edits save to the real database the same way &mdash; this is not a practice mode.</li>
+                    <li>The app stops writing automatic history notes for status changes, community moves, contact edits, etc.</li>
+                    <li>The &ldquo;Date of change&rdquo; and &ldquo;Notes&rdquo; prompts on the status-change and move modals are hidden so you can move through records faster.</li>
+                    <li>Extra admin controls appear on the sensors table: add custom fields, edit sensor IDs inline, and restore hidden columns.</li>
+                </ul>
+                <p style="margin:0 0 12px;color:var(--slate-600);font-size:13px">Turn it off again when you're done &mdash; normal editing re-enables the automatic history trail. Setup Mode auto-resets when you sign out or close the browser.</p>
+                <p style="margin:0;color:var(--slate-600);font-size:13px">If you just want to practice without writing anything to the database, use <strong>Sandbox Mode</strong> instead.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('modal-setup-explainer')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="enterSetupMode()">Enter Setup Mode</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Sandbox Mode Explainer Modal -->
     <div id="modal-sandbox-explainer" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content modal-lg">

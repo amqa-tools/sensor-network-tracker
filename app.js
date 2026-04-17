@@ -1048,10 +1048,26 @@ let setupMode = sessionStorage.getItem('snt_setupMode') === 'true';
 
 function toggleSetupMode() {
     if (currentUserRole !== 'admin') return;
-    setupMode = !setupMode;
+    if (setupMode) {
+        // Leaving setup mode — no confirmation needed, just flip it off.
+        setupMode = false;
+        sessionStorage.setItem('snt_setupMode', setupMode);
+        renderSetupModeIndicator();
+        refreshCurrentView();
+        return;
+    }
+    // Entering — show the explainer so the user knows auto-notes are suppressed
+    // and which extra admin controls appear on sensor tables.
+    openModal('modal-setup-explainer');
+}
+
+function enterSetupMode() {
+    if (currentUserRole !== 'admin') return;
+    setupMode = true;
     sessionStorage.setItem('snt_setupMode', setupMode);
     renderSetupModeIndicator();
     refreshCurrentView();
+    closeModal('modal-setup-explainer');
 }
 
 function renderSetupModeIndicator() {
