@@ -4791,14 +4791,36 @@ function insertMention(textarea, dropdown, startPos, name) {
 }
 
 // ===== HELPER: Parse @mentions from text =====
+// Matches the longest contact name that appears after each @, guarded by
+// word boundaries on both sides. The previous regex-only version captured
+// every char up to the next "." or "," which broke any mention followed
+// by mid-sentence words (e.g. "emailed @Rory M on Monday").
 function parseMentionedContacts(text) {
     const mentioned = [];
-    const mentionRegex = /@([\w\s]+?)(?=\.|,|$|@)/g;
-    let match;
-    while ((match = mentionRegex.exec(text)) !== null) {
-        const name = match[1].trim();
-        const contact = contacts.find(c => c.name.toLowerCase() === name.toLowerCase());
-        if (contact && !mentioned.includes(contact.id)) mentioned.push(contact.id);
+    if (!text || !Array.isArray(contacts) || contacts.length === 0) return mentioned;
+    const lower = text.toLowerCase();
+    // Longest names first so "Rory Miller" wins over "Rory" at the same @.
+    const sorted = contacts.slice().sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
+    const consumed = new Array(text.length).fill(false);
+    for (const c of sorted) {
+        if (!c?.name) continue;
+        const needle = '@' + c.name.toLowerCase();
+        let from = 0;
+        while (from <= lower.length - needle.length) {
+            const idx = lower.indexOf(needle, from);
+            if (idx < 0) break;
+            from = idx + 1;
+            const prev = idx > 0 ? lower[idx - 1] : '';
+            if (prev && /\w/.test(prev)) continue;
+            const end = idx + needle.length;
+            const next = end < lower.length ? lower[end] : '';
+            if (next && /\w/.test(next)) continue;
+            let overlaps = false;
+            for (let i = idx; i < end; i++) if (consumed[i]) { overlaps = true; break; }
+            if (overlaps) continue;
+            for (let i = idx; i < end; i++) consumed[i] = true;
+            if (!mentioned.includes(c.id)) mentioned.push(c.id);
+        }
     }
     return mentioned;
 }
