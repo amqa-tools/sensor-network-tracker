@@ -7278,7 +7278,12 @@ function openAuditDetail(auditId) {
     if (!audit) return;
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
     const idx = AUDIT_STATUSES.indexOf(audit.status);
-    const nextStatus = idx < AUDIT_STATUSES.length - 1 ? AUDIT_STATUSES[idx + 1] : null;
+    const isAuditComplete = audit.status === 'Complete';
+    const nextStatus = isAuditComplete
+        ? null
+        : (idx >= 0 && idx < AUDIT_STATUSES.length - 1
+            ? AUDIT_STATUSES[idx + 1]
+            : 'Complete');
     const progress = AUDIT_STATUSES.map((st, i) => {
         const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
         return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
@@ -7346,10 +7351,12 @@ function saveAuditConductors(auditId, installVal, takedownVal) {
 function advanceAuditStatus(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
+    if (audit.status === 'Complete') return;
     const idx = AUDIT_STATUSES.indexOf(audit.status);
-    if (idx >= AUDIT_STATUSES.length - 1) return;
     const oldStatus = audit.status;
-    const newStatus = AUDIT_STATUSES[idx + 1];
+    const newStatus = (idx >= 0 && idx < AUDIT_STATUSES.length - 1)
+        ? AUDIT_STATUSES[idx + 1]
+        : 'Complete';
 
     const doAdvance = () => {
         audit.status = newStatus;
@@ -9706,9 +9713,13 @@ function openCollocationDetail(collocId) {
     if (!colloc) return;
     const communityName = COMMUNITIES.find(c => c.id === colloc.locationId)?.name || colloc.locationId;
     const statusIndex = COLLOC_STATUSES.indexOf(colloc.status);
-    const nextStatus = statusIndex < COLLOC_STATUSES.length - 1 ? COLLOC_STATUSES[statusIndex + 1] : null;
     const isComplete = colloc.status === 'Complete';
-    const showAnalysis = statusIndex >= 1; // Complete or later
+    const nextStatus = isComplete
+        ? null
+        : (statusIndex >= 0 && statusIndex < COLLOC_STATUSES.length - 1
+            ? COLLOC_STATUSES[statusIndex + 1]
+            : 'Complete');
+    const showAnalysis = isComplete || colloc.status === 'Finished, Analysis Pending';
 
     const progressHtml = COLLOC_STATUSES.map((st, i) => {
         const state = i < statusIndex ? 'completed' : i === statusIndex ? 'current' : 'pending';
@@ -9723,7 +9734,7 @@ function openCollocationDetail(collocId) {
     document.getElementById('collocation-detail-body').innerHTML = `
         <div style="padding:12px 28px 0"><div class="ticket-steps ticket-steps-detail">${progressHtml}</div></div>
         <div class="ticket-detail-actions" style="border-top:none">
-            ${!isComplete && nextStatus ? `<button class="btn btn-primary" onclick="advanceCollocationStatus('${colloc.id}')">Advance to: ${nextStatus}</button>` : ''}
+            ${nextStatus ? `<button class="btn btn-primary" onclick="advanceCollocationStatus('${colloc.id}')">Advance to: ${nextStatus}</button>` : ''}
             ${statusIndex > 0 && !isComplete ? `<a class="undo-link" onclick="revertCollocationStatus('${colloc.id}')">Undo</a>` : ''}
             ${showAnalysis ? `<button class="btn" onclick="beginCollocationAnalysis('${colloc.id}')">${hasResults ? 'View Analysis' : 'Upload Data'}</button>` : ''}
             ${hasResults ? `<button class="btn" onclick="reuploadCollocationData('${colloc.id}')">Re-upload Data</button>` : ''}
@@ -9733,10 +9744,10 @@ function openCollocationDetail(collocId) {
         <div class="ticket-detail-grid">
             <div class="ticket-field"><label>Location</label><p><a href="#" onclick="closeModal('modal-collocation-detail'); showCommunity('${colloc.locationId}'); return false;" style="color:var(--navy-500)">${escapeHtml(communityName)}</a></p></div>
             <div class="ticket-field"><label>Status</label><p><span class="audit-status-badge ${COLLOC_STATUS_CSS[colloc.status]}">${colloc.status}</span></p></div>
-            <div class="ticket-field"><label>Start Date</label>${!isComplete ? `<input class="ticket-edit-input" type="date" value="${colloc.startDate}" onblur="saveCollocationField('${colloc.id}','startDate',this.value)">` : `<p>${formatDate(colloc.startDate) || '—'}</p>`}</div>
-            <div class="ticket-field"><label>End Date</label>${!isComplete ? `<input class="ticket-edit-input" type="date" value="${colloc.endDate === 'TBD' ? '' : colloc.endDate}" onblur="saveCollocationField('${colloc.id}','endDate',this.value)">` : `<p>${colloc.endDate === 'TBD' ? 'TBD' : formatDate(colloc.endDate) || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Start Date</label><input class="ticket-edit-input" type="date" value="${colloc.startDate}" onblur="saveCollocationField('${colloc.id}','startDate',this.value)"></div>
+            <div class="ticket-field"><label>End Date</label><input class="ticket-edit-input" type="date" value="${colloc.endDate === 'TBD' ? '' : colloc.endDate}" onblur="saveCollocationField('${colloc.id}','endDate',this.value)"></div>
             <div class="ticket-field full-width"><label>Sensors</label><p>${sensorList || '—'}</p></div>
-            <div class="ticket-field"><label>Conducted By</label>${!isComplete ? `<input class="ticket-edit-input" value="${escapeHtml(colloc.conductedBy)}" onblur="saveCollocationField('${colloc.id}','conductedBy',this.value)">` : `<p>${escapeHtml(colloc.conductedBy) || '—'}</p>`}</div>
+            <div class="ticket-field"><label>Conducted By</label><input class="ticket-edit-input" value="${escapeHtml(colloc.conductedBy)}" onblur="saveCollocationField('${colloc.id}','conductedBy',this.value)"></div>
             ${renderProgressNotesSection(colloc.progressNotes, colloc.id, 'addCollocationProgressNote')}
             ${hasResults ? `<div class="ticket-field full-width"><label>Analysis</label><p style="color:var(--green)">Analysis uploaded ${formatDate(colloc.analysisUploadDate)} by ${escapeHtml(colloc.analysisUploadedBy)}</p></div>` : ''}
         </div>
@@ -9756,10 +9767,12 @@ function saveCollocationField(collocId, field, value) {
 function advanceCollocationStatus(collocId) {
     const colloc = collocations.find(c => c.id === collocId);
     if (!colloc) return;
+    if (colloc.status === 'Complete') return;
     const idx = COLLOC_STATUSES.indexOf(colloc.status);
-    if (idx >= COLLOC_STATUSES.length - 1) return;
     const oldStatus = colloc.status;
-    const newStatus = COLLOC_STATUSES[idx + 1];
+    const newStatus = (idx >= 0 && idx < COLLOC_STATUSES.length - 1)
+        ? COLLOC_STATUSES[idx + 1]
+        : 'Complete';
     colloc.status = newStatus;
     persistCollocationUpdate(collocId, { status: newStatus });
 
