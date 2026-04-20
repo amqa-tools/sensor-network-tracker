@@ -1,6 +1,6 @@
 # ADEC Sensor Network Tracker
 
-Internal tool for the Alaska Department of Environmental Conservation (ADEC) to track air quality sensors (QuantAQ Modulairs), the Alaska communities they're deployed in, and the contacts at each site. It replaces a clunky Salesforce workflow with a single-page app backed by Supabase.
+Internal tool for the Alaska Department of Environmental Conservation (ADEC) to track air quality sensors (QuantAQ Modulairs), the Alaska communities they're deployed in, and the contacts at each site.
 
 **Live app:** https://amqa-tools.github.io/sensor-network-tracker/
 
