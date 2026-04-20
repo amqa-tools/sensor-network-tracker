@@ -4731,7 +4731,46 @@ function buildTagsHTML(item) {
 }
 
 function highlightMentions(text) {
-    return text.replace(/@([\w\s]+?)(?=\.|,|$|@)/g, '<strong style="color:var(--navy-600)">@$1</strong>');
+    if (!text) return text;
+    if (!Array.isArray(contacts) || contacts.length === 0) return text;
+    // Only highlight actual known contact names (longest first so
+    // "Rory Miller" wins over "Rory"), guarded by word boundaries on
+    // both sides. The previous regex greedily highlighted everything
+    // between @ and the next "." or "," which bolded whole sentences.
+    const sorted = contacts.slice().sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
+    let out = '';
+    const lower = text.toLowerCase();
+    const consumed = new Array(text.length).fill(false);
+    const matches = [];
+    for (const c of sorted) {
+        if (!c?.name) continue;
+        const needle = '@' + c.name.toLowerCase();
+        let from = 0;
+        while (from <= lower.length - needle.length) {
+            const idx = lower.indexOf(needle, from);
+            if (idx < 0) break;
+            from = idx + 1;
+            const prev = idx > 0 ? lower[idx - 1] : '';
+            if (prev && /\w/.test(prev)) continue;
+            const end = idx + needle.length;
+            const next = end < lower.length ? lower[end] : '';
+            if (next && /\w/.test(next)) continue;
+            let overlaps = false;
+            for (let i = idx; i < end; i++) if (consumed[i]) { overlaps = true; break; }
+            if (overlaps) continue;
+            for (let i = idx; i < end; i++) consumed[i] = true;
+            matches.push({ start: idx, end });
+        }
+    }
+    matches.sort((a, b) => a.start - b.start);
+    let cursor = 0;
+    for (const m of matches) {
+        out += text.slice(cursor, m.start);
+        out += `<strong style="color:var(--navy-600)">${text.slice(m.start, m.end)}</strong>`;
+        cursor = m.end;
+    }
+    out += text.slice(cursor);
+    return out;
 }
 
 const AK_TZ = 'America/Anchorage';
