@@ -3436,16 +3436,41 @@ function showContactView(contactId) {
     const contactFilterEl = document.getElementById('contact-history-filter');
     if (contactFilterEl) contactFilterEl.value = '';
 
-    // Combine notes and comms into one list
+    // Combine notes, comms, and progress-note mentions into one list
     const contactNotes = notes.filter(n => n.taggedContacts && n.taggedContacts.includes(contactId));
     const contactComms = comms.filter(cm => cm.taggedContacts && cm.taggedContacts.includes(contactId))
         .map(cm => ({ ...cm, type: cm.commType || cm.type }));
-    const allItems = [...contactNotes, ...contactComms];
+    const progressMentions = collectProgressNoteMentions(contactId);
+    const allItems = [...contactNotes, ...contactComms, ...progressMentions];
     renderTimeline('contact-all-timeline', allItems);
 
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-contact-detail').classList.add('active');
     pushViewHistory();
+}
+
+function collectProgressNoteMentions(contactId) {
+    const items = [];
+    const push = (records, typeLabel, viewFn, getLocationId, locationKind) => {
+        (records || []).forEach(r => {
+            (r.progressNotes || []).forEach((pn, idx) => {
+                if (!pn.taggedContacts || !pn.taggedContacts.includes(contactId)) return;
+                items.push({
+                    id: `pn-${typeLabel}-${r.id}-${idx}`,
+                    date: pn.at || r.createdAt || new Date().toISOString(),
+                    type: typeLabel,
+                    text: pn.text,
+                    createdBy: pn.by || '',
+                    taggedContacts: pn.taggedContacts,
+                    _source: { kind: typeLabel, id: r.id, viewFn, locationId: getLocationId ? getLocationId(r) : '', locationKind },
+                });
+            });
+        });
+    };
+    push(audits, 'Audit', 'openAuditDetail', a => a.communityId, 'community');
+    push(collocations, 'Collocation', 'openCollocationDetail', c => c.locationId, 'community');
+    push(serviceTickets, 'Service Ticket', 'openTicketDetail', t => t.sensorId, 'sensor');
+    return items;
 }
 
 const CONTACT_FILTER_GROUPS = {
@@ -3459,6 +3484,7 @@ function filterContactHistory() {
     let contactNotes = notes.filter(n => n.taggedContacts && n.taggedContacts.includes(currentContact));
     let contactComms = comms.filter(cm => cm.taggedContacts && cm.taggedContacts.includes(currentContact))
         .map(cm => ({ ...cm, type: cm.commType || cm.type }));
+    const progressMentions = collectProgressNoteMentions(currentContact);
 
     if (filterVal === 'Communication') {
         renderTimeline('contact-all-timeline', contactComms);
@@ -3466,7 +3492,7 @@ function filterContactHistory() {
         contactNotes = contactNotes.filter(n => CONTACT_FILTER_GROUPS[filterVal].includes(n.type));
         renderTimeline('contact-all-timeline', contactNotes);
     } else {
-        const allItems = [...contactNotes, ...contactComms];
+        const allItems = [...contactNotes, ...contactComms, ...progressMentions];
         renderTimeline('contact-all-timeline', allItems);
     }
 }
@@ -4198,10 +4224,15 @@ function renderTimeline(containerId, items) {
             : '';
 
         const isNote = !item.commType;
-        const actions = `<div class="timeline-actions" onclick="event.stopPropagation()">
-            <span class="timeline-action-btn" onclick="editTimelineItem('${item.id}', ${isNote})" title="Edit">&#9998;</span>
-            <span class="timeline-action-btn" onclick="deleteTimelineItem('${item.id}', ${isNote})" title="Delete">&#128465;</span>
-        </div>`;
+        const isProgressNote = !!item._source;
+        const actions = isProgressNote
+            ? `<div class="timeline-actions" onclick="event.stopPropagation()">
+                <span class="timeline-action-btn" style="font-size:11px" onclick="${item._source.viewFn}('${item._source.id}')" title="View ${item._source.kind}">Open ${item._source.kind} &rarr;</span>
+            </div>`
+            : `<div class="timeline-actions" onclick="event.stopPropagation()">
+                <span class="timeline-action-btn" onclick="editTimelineItem('${item.id}', ${isNote})" title="Edit">&#9998;</span>
+                <span class="timeline-action-btn" onclick="deleteTimelineItem('${item.id}', ${isNote})" title="Delete">&#128465;</span>
+            </div>`;
 
         return `
             <div class="timeline-item ${typeClass}" ${expandable}>
@@ -4217,7 +4248,7 @@ function renderTimeline(containerId, items) {
                 ${hasFullBody ? `<div class="timeline-text-full">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
                 ${tags ? `<div class="timeline-tags">${tags}</div>` : ''}
-                ${isNote ? `<div class="timeline-add-note">
+                ${isNote && !isProgressNote ? `<div class="timeline-add-note">
                     <div id="timeline-note-panel-${item.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100)">
                         <textarea id="timeline-note-input-${item.id}" rows="2" placeholder="Add a follow-up note..." style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
                         <div style="display:flex;gap:8px;margin-top:6px">
@@ -6867,6 +6898,7 @@ function addProgressNote(ticketId) {
         text: text,
         by: getCurrentUserName(),
         at: nowDatetime(),
+        taggedContacts: parseMentionedContacts(text),
     });
 
     persistServiceTicketUpdate(ticketId, { progressNotes: ticket.progressNotes });
@@ -6878,19 +6910,46 @@ function addProgressNote(ticketId) {
 }
 
 function renderProgressNotesSection(notes, itemId, addFn) {
-    const notesList = (notes || []).slice().reverse().map((n, i) =>
-        `<div style="font-size:13px;padding:6px 0;${i < (notes || []).length - 1 ? 'border-bottom:1px solid var(--slate-100);' : ''}">
+    const notesList = (notes || []).slice().reverse().map((n, i) => {
+        const chips = (n.taggedContacts || []).map(cId => {
+            const contact = contacts.find(c => c.id === cId);
+            if (!contact) return '';
+            return `<span class="tag tag-contact" style="font-size:11px;padding:2px 8px;margin-right:4px;cursor:pointer" onclick="event.stopPropagation(); closeModal('modal-audit-detail'); closeModal('modal-collocation-detail'); closeModal('modal-service-ticket'); showContactDetail('${cId}')">${escapeHtml(contact.name)}</span>`;
+        }).join('');
+        return `<div style="font-size:13px;padding:6px 0;${i < (notes || []).length - 1 ? 'border-bottom:1px solid var(--slate-100);' : ''}">
             <span style="color:var(--slate-400);font-size:11px">${n.at ? formatDate(n.at) : ''}${n.by ? ' — ' + escapeHtml(n.by) : ''}</span>
-            <div style="color:var(--slate-700);margin-top:2px">${escapeHtml(n.text)}</div>
-        </div>`
-    ).join('');
+            <div style="color:var(--slate-700);margin-top:2px">${highlightMentions(escapeHtml(n.text))}</div>
+            ${chips ? `<div style="margin-top:4px">${chips}</div>` : ''}
+        </div>`;
+    }).join('');
+    const dropdownId = `progress-note-mention-dropdown-${itemId}`;
+    const textareaId = `progress-note-input-${itemId}`;
     return `<div class="ticket-field full-width"><label>Progress Notes</label>
         <div>${notesList || '<p style="color:var(--slate-400);font-size:13px">No notes yet.</p>'}</div>
-        <div style="margin-top:8px;display:flex;gap:8px">
-            <input type="text" id="progress-note-input-${itemId}" class="ticket-edit-input" placeholder="Add a note..." style="flex:1" onkeydown="if(event.key==='Enter'){${addFn}('${itemId}');event.preventDefault();}">
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:flex-start">
+            <div style="flex:1;position:relative">
+                <textarea id="${textareaId}" class="ticket-edit-input mention-textarea" rows="2" placeholder="Add a note… type @ to tag a contact" style="width:100%;resize:vertical" onfocus="initProgressNoteMention('${itemId}')" onkeydown="handleProgressNoteKeydown(event, '${itemId}', '${addFn}')"></textarea>
+                <div id="${dropdownId}" class="mention-dropdown" style="left:0;width:100%"></div>
+            </div>
             <button class="btn btn-sm btn-primary" onclick="${addFn}('${itemId}')">Add</button>
         </div>
     </div>`;
+}
+
+function initProgressNoteMention(itemId) {
+    const ta = document.getElementById('progress-note-input-' + itemId);
+    const dd = document.getElementById('progress-note-mention-dropdown-' + itemId);
+    if (!ta || !dd || ta._mentionInit) return;
+    setupMentionAutocomplete(ta, dd);
+    ta._mentionInit = true;
+}
+
+function handleProgressNoteKeydown(event, itemId, addFn) {
+    if (event.key !== 'Enter' || event.shiftKey) return;
+    const dd = document.getElementById('progress-note-mention-dropdown-' + itemId);
+    if (dd && dd.classList.contains('visible')) return; // let mention autocomplete handle it
+    event.preventDefault();
+    if (typeof window[addFn] === 'function') window[addFn](itemId);
 }
 
 function addAuditProgressNote(auditId) {
@@ -6901,7 +6960,7 @@ function addAuditProgressNote(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
     if (!audit.progressNotes) audit.progressNotes = [];
-    audit.progressNotes.push({ text, by: getCurrentUserName(), at: nowDatetime() });
+    audit.progressNotes.push({ text, by: getCurrentUserName(), at: nowDatetime(), taggedContacts: parseMentionedContacts(text) });
     persistAuditUpdate(auditId, { progressNotes: audit.progressNotes });
     input.value = '';
     openAuditDetail(auditId);
@@ -6915,7 +6974,7 @@ function addCollocationProgressNote(collocId) {
     const colloc = collocations.find(c => c.id === collocId);
     if (!colloc) return;
     if (!colloc.progressNotes) colloc.progressNotes = [];
-    colloc.progressNotes.push({ text, by: getCurrentUserName(), at: nowDatetime() });
+    colloc.progressNotes.push({ text, by: getCurrentUserName(), at: nowDatetime(), taggedContacts: parseMentionedContacts(text) });
     persistCollocationUpdate(collocId, { progressNotes: colloc.progressNotes });
     input.value = '';
     openCollocationDetail(collocId);

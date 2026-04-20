@@ -457,7 +457,10 @@ function renderQuantAQAlertList(alerts, isNew) {
                 <p class="quantaq-alert-meta">Detected: ${detectedStr}${duration ? ` (${duration})` : ''}${isResolved ? ` · Resolved: ${new Date(a.resolvedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ })}` : ''}</p>
                 ${followUpHtml}
                 <div id="quantaq-note-panel-${a.id}" class="quantaq-note-panel" style="display:none">
-                    <textarea id="quantaq-note-input-${a.id}" rows="2" placeholder="Add a follow-up note..." style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical;margin-top:8px"></textarea>
+                    <div style="position:relative;margin-top:8px">
+                        <textarea id="quantaq-note-input-${a.id}" class="mention-textarea" rows="2" placeholder="Add a follow-up note… type @ to tag a contact" style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical" onfocus="initQuantAQMention('${a.id}')"></textarea>
+                        <div id="quantaq-note-mention-dropdown-${a.id}" class="mention-dropdown" style="left:0;width:100%"></div>
+                    </div>
                     <div style="display:flex;gap:8px;margin-top:6px">
                         <button class="btn btn-sm btn-primary" onclick="saveQuantAQFollowUp('${a.id}', '${escapeHtml(a.sensorSn)}')">Save Note</button>
                         <button class="btn btn-sm" onclick="document.getElementById('quantaq-note-panel-${a.id}').style.display='none'">Cancel</button>
@@ -673,6 +676,16 @@ function toggleQuantAQNotePanel(alertId) {
     }
 }
 
+function initQuantAQMention(alertId) {
+    const ta = document.getElementById('quantaq-note-input-' + alertId);
+    const dd = document.getElementById('quantaq-note-mention-dropdown-' + alertId);
+    if (!ta || !dd || ta._mentionInit) return;
+    if (typeof setupMentionAutocomplete === 'function') {
+        setupMentionAutocomplete(ta, dd);
+        ta._mentionInit = true;
+    }
+}
+
 async function saveQuantAQFollowUp(alertId, sensorSn) {
     const input = document.getElementById('quantaq-note-input-' + alertId);
     if (!input) return;
@@ -681,6 +694,8 @@ async function saveQuantAQFollowUp(alertId, sensorSn) {
 
     const alert = quantaqAlerts.find(a => a.id === alertId);
     if (!alert) return;
+
+    const mentionedContacts = (typeof parseMentionedContacts === 'function') ? parseMentionedContacts(text) : [];
 
     // Find the auto-generated event note for this alert
     const eventNote = _findEventNoteForAlert(alert, sensorSn);
@@ -694,6 +709,13 @@ async function saveQuantAQFollowUp(alertId, sensorSn) {
         // Persist to database
         try {
             await db.updateNote(eventNote.id, { text: eventNote.text });
+            if (mentionedContacts.length) {
+                const added = await db.addNoteContactTags(eventNote.id, mentionedContacts);
+                if (added.length) {
+                    if (!eventNote.taggedContacts) eventNote.taggedContacts = [];
+                    added.forEach(id => { if (!eventNote.taggedContacts.includes(id)) eventNote.taggedContacts.push(id); });
+                }
+            }
         } catch (err) {
             if (typeof handleSaveError === 'function') handleSaveError(err);
         }
@@ -704,7 +726,7 @@ async function saveQuantAQFollowUp(alertId, sensorSn) {
         createNote('Issue', `QuantAQ Alert: ${alert.issueType} — ${text}`, {
             sensors: [sensorSn],
             communities: communityId ? [communityId] : [],
-            contacts: [],
+            contacts: mentionedContacts,
         });
     }
 

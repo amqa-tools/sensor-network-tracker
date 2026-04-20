@@ -265,6 +265,24 @@ const db = {
         if (error) throw error;
     },
 
+    async addNoteContactTags(noteId, contactIds) {
+        const ids = (contactIds || []).filter(Boolean).map(String);
+        if (!ids.length) return [];
+        const { data: existing, error: readErr } = await supa
+            .from('note_tags')
+            .select('tag_id')
+            .eq('note_id', noteId)
+            .eq('tag_type', 'contact');
+        if (readErr) throw readErr;
+        const existingSet = new Set((existing || []).map(r => r.tag_id));
+        const newIds = ids.filter(id => !existingSet.has(id));
+        if (!newIds.length) return [];
+        const rows = newIds.map(id => ({ note_id: noteId, tag_type: 'contact', tag_id: id }));
+        const { error } = await supa.from('note_tags').insert(rows);
+        if (error) throw error;
+        return newIds;
+    },
+
     async deleteNote(id) {
         // note_tags has ON DELETE CASCADE but explicit delete lets us surface
         // permission errors on the tags table if RLS ever changes.
