@@ -4841,8 +4841,8 @@ function setupMentionAutocomplete(textarea, dropdown) {
             if (!afterAt.includes('\n')) {
                 mentionStart = atIndex;
                 const query = afterAt.toLowerCase();
-                const matches = contacts.filter(c =>
-                    c.name.toLowerCase().includes(query)
+                const matches = (contacts || []).filter(c =>
+                    c && typeof c.name === 'string' && c.name.toLowerCase().includes(query)
                 );
 
                 if (matches.length > 0 && query.length > 0) {
