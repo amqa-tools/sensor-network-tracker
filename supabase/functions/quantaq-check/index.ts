@@ -143,12 +143,13 @@ async function insertAutoFlagNote(
   text: string,
   sensorSn: string,
   communityId: string | null,
+  dateIso?: string,
 ) {
   const nowIso = new Date().toISOString();
   const noteRes = await supa
     .from("notes")
     .insert({
-      date: nowIso,
+      date: dateIso || nowIso,
       type: "Issue",
       text,
       additional_info: "",
@@ -448,11 +449,14 @@ async function runScan(): Promise<Response> {
       if (alert.status !== "active") continue;
       const appSensor = sensorById.get(alert.sensor_sn);
       const communityId = appSensor?.community_id || null;
+      // Date the note at detected_at so the sensor timeline reflects when
+      // the sensor actually went offline/faulted, not when the cron ran.
       await insertAutoFlagNote(
         supa,
         `QuantAQ Auto-Flag: ${alert.issue_type} detected on ${alert.sensor_sn}. ${alert.detail}`,
         alert.sensor_sn,
         communityId,
+        alert.detected_at,
       );
     }
   }
@@ -480,6 +484,7 @@ async function runScan(): Promise<Response> {
         `QuantAQ Auto-Flag: ${alert.issue_type} detected on ${alert.sensor_sn} (persisted past ${alert.issue_type === "Lost Connection" ? "2-hour" : "6-hour"} grace period). ${alert.detail}`,
         alert.sensor_sn,
         communityId,
+        alert.detected_at,
       );
       if (appSensor) {
         const cur = getStatusArray(appSensor);
@@ -561,6 +566,43 @@ async function runScan(): Promise<Response> {
     if (final.slice().sort().join(",") !== cur.slice().sort().join(",")) {
       check(
         "update sensor status (new critical)",
+        await supa.from("sensors").update({ status: final, updated_at: now }).eq("id", s.id),
+      );
+      s.status = final;
+    }
+  }
+
+  // --- Reconciliation: sensor.status must reflect every active alert ---
+  // Belt-and-suspenders. The scan paths above update statuses as alerts
+  // transition (promote / resolve / new critical), but an earlier build
+  // missed the case where a Lost Connection alert is born "active" on
+  // first detection (sensor offline longer than the 2h grace at time of
+  // first scan) — the LC tag never landed. This pass re-queries the
+  // currently-active alerts and forces sensor.status into agreement,
+  // self-healing any historical misses including already-stored rows.
+  const activeRes = await supa
+    .from("quantaq_alerts")
+    .select("sensor_sn, issue_type")
+    .eq("status", "active");
+  check("load active alerts for reconcile", activeRes);
+  const neededBySensor = new Map<string, Set<string>>();
+  for (const a of (activeRes.data || [])) {
+    if (!a?.sensor_sn || !a?.issue_type) continue;
+    let set = neededBySensor.get(a.sensor_sn);
+    if (!set) { set = new Set(); neededBySensor.set(a.sensor_sn, set); }
+    set.add(a.issue_type);
+  }
+  for (const [sn, needed] of neededBySensor) {
+    const s = sensorById.get(sn);
+    if (!s) continue;
+    const cur = getStatusArray(s);
+    const merged = new Set([...cur, ...needed]);
+    // Lost Connection trumps Online — sensor truly isn't reporting.
+    if (needed.has("Lost Connection")) merged.delete("Online");
+    const final = [...merged];
+    if (final.slice().sort().join(",") !== cur.slice().sort().join(",")) {
+      check(
+        "reconcile sensor status against active alerts",
         await supa.from("sensors").update({ status: final, updated_at: now }).eq("id", s.id),
       );
       s.status = final;
