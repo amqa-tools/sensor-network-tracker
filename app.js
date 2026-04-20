@@ -247,6 +247,86 @@ async function loadAllData() {
 
     // Build O(1) lookup maps
     rebuildLookupMaps();
+
+    // One-shot: re-scan all notes + progress notes for @mentions and backfill
+    // missing contact tags. The old parser captured too much (everything up
+    // to the next "." or ","), so mid-sentence mentions silently didn't tag
+    // anyone. Fire-and-forget — we don't want to block the first render.
+    rescanMentionTagsV1().then(refreshed => {
+        if (refreshed && typeof refreshCurrentView === 'function') refreshCurrentView();
+    }).catch(err => console.error('[rescanMentionTags] failed:', err));
+}
+
+async function rescanMentionTagsV1() {
+    if (localStorage.getItem('snt_mentionTagsRescan_v1')) return false;
+    if (!Array.isArray(contacts) || contacts.length === 0) return false;
+    if (window.SANDBOX_MODE) return false;
+
+    let noteTagsAdded = 0;
+    let progressRecordsUpdated = 0;
+    let progressTagsAdded = 0;
+
+    const diffMissing = (pn) => {
+        if (!pn?.text) return null;
+        const mentioned = parseMentionedContacts(pn.text);
+        if (!mentioned.length) return null;
+        const existing = new Set(pn.taggedContacts || []);
+        const missing = mentioned.filter(id => !existing.has(id));
+        return missing.length ? missing : null;
+    };
+
+    // Notes table — add note_tags rows for any newly-matched contacts.
+    for (const n of (notes || [])) {
+        const missing = diffMissing(n);
+        if (!missing) continue;
+        try {
+            const added = await db.addNoteContactTags(n.id, missing);
+            if (added.length) {
+                if (!n.taggedContacts) n.taggedContacts = [];
+                added.forEach(id => { if (!n.taggedContacts.includes(id)) n.taggedContacts.push(id); });
+                noteTagsAdded += added.length;
+            }
+        } catch (err) {
+            console.error('[rescanMentionTags] note failed', n.id, err);
+            return false; // leave flag unset so we retry next load
+        }
+    }
+
+    // Progress notes on audits / collocations / service tickets — stored as
+    // JSON on the parent record, so rewrite the whole progressNotes array.
+    const rescanProgress = async (records, updateFn) => {
+        for (const r of (records || [])) {
+            let changed = 0;
+            (r.progressNotes || []).forEach(pn => {
+                const missing = diffMissing(pn);
+                if (!missing) return;
+                pn.taggedContacts = [...(pn.taggedContacts || []), ...missing];
+                changed += missing.length;
+            });
+            if (changed) {
+                try {
+                    await updateFn(r.id, { progressNotes: r.progressNotes });
+                    progressRecordsUpdated++;
+                    progressTagsAdded += changed;
+                } catch (err) {
+                    console.error('[rescanMentionTags] progress-note write failed', r.id, err);
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    if (!await rescanProgress(audits, (id, u) => db.updateAudit(id, u))) return false;
+    if (!await rescanProgress(collocations, (id, u) => db.updateCollocation(id, u))) return false;
+    if (!await rescanProgress(serviceTickets, (id, u) => db.updateServiceTicket(id, u))) return false;
+
+    localStorage.setItem('snt_mentionTagsRescan_v1', '1');
+    const total = noteTagsAdded + progressTagsAdded;
+    if (total > 0) {
+        console.log(`[rescanMentionTags] backfilled ${noteTagsAdded} note tag(s) and ${progressTagsAdded} progress-note tag(s) across ${progressRecordsUpdated} records`);
+    }
+    return total > 0;
 }
 
 function migrateAuditCollocStatuses() {
