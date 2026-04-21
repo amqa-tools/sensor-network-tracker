@@ -1196,7 +1196,7 @@
                 <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-new-service-ticket')">&times;</button>
             </div>
             <form onsubmit="saveNewTicket(event)">
-                <div class="form-group"><label>Sensor</label><select id="ticket-sensor-input" required></select></div>
+                <div class="form-group"><label>Sensor(s) <span style="font-weight:400;color:var(--slate-400);font-size:12px">— hold Cmd/Ctrl to pick multiple for a grouped ticket</span></label><select id="ticket-sensor-input" required multiple size="6"></select></div>
                 <div class="form-group"><label>Actions Needed (select all that apply)</label>
                     <div style="display:flex;flex-direction:column;gap:6px;padding:6px 0">
                         <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="ticket-type-issue" checked> Issue / Repair</label>

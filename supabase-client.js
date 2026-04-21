@@ -536,19 +536,32 @@ const db = {
     async getServiceTickets() {
         const { data, error } = await supa.from('service_tickets').select('*, profiles(name)').order('created_at', { ascending: false });
         if (error) throw error;
-        return (data || []).map(t => ({
-            id: t.id, sensorId: t.sensor_id, ticketType: t.ticket_type, status: t.status,
-            rmaNumber: t.rma_number || '', fedexTrackingTo: t.fedex_tracking_to || '',
-            fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
-            progressNotes: parseNotesField(t.quant_notes), workCompleted: t.work_completed || '',
-            createdBy: t.profiles?.name || (t.created_by ? '[Deleted User]' : ''), createdById: t.created_by,
-            createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at,
-        }));
+        return (data || []).map(t => {
+            const sensorIds = Array.isArray(t.sensor_ids) && t.sensor_ids.length > 0
+                ? t.sensor_ids
+                : (t.sensor_id ? [t.sensor_id] : []);
+            return {
+                id: t.id,
+                sensorIds,
+                sensorId: sensorIds[0] || '', // primary, for backward-compat display
+                ticketType: t.ticket_type, status: t.status,
+                rmaNumber: t.rma_number || '', fedexTrackingTo: t.fedex_tracking_to || '',
+                fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
+                progressNotes: parseNotesField(t.quant_notes), workCompleted: t.work_completed || '',
+                createdBy: t.profiles?.name || (t.created_by ? '[Deleted User]' : ''), createdById: t.created_by,
+                createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at,
+            };
+        });
     },
 
     async insertServiceTicket(ticket) {
+        const sensorIds = Array.isArray(ticket.sensorIds) && ticket.sensorIds.length > 0
+            ? ticket.sensorIds
+            : (ticket.sensorId ? [ticket.sensorId] : []);
         const { data, error } = await supa.from('service_tickets').insert({
-            sensor_id: ticket.sensorId, ticket_type: ticket.ticketType,
+            sensor_id: sensorIds[0] || ticket.sensorId,
+            sensor_ids: sensorIds,
+            ticket_type: ticket.ticketType,
             status: ticket.status || 'Ticket Opened', rma_number: ticket.rmaNumber || '',
             fedex_tracking_to: ticket.fedexTrackingTo || '', fedex_tracking_from: ticket.fedexTrackingFrom || '',
             issue_description: ticket.issueDescription || '', quant_notes: JSON.stringify(ticket.progressNotes || []),
@@ -556,8 +569,14 @@ const db = {
         }).select('*, profiles(name)');
         if (error) throw error;
         const t = data[0];
+        const returnedIds = Array.isArray(t.sensor_ids) && t.sensor_ids.length > 0
+            ? t.sensor_ids
+            : (t.sensor_id ? [t.sensor_id] : []);
         return {
-            id: t.id, sensorId: t.sensor_id, ticketType: t.ticket_type, status: t.status,
+            id: t.id,
+            sensorIds: returnedIds,
+            sensorId: returnedIds[0] || '',
+            ticketType: t.ticket_type, status: t.status,
             rmaNumber: t.rma_number || '', fedexTrackingTo: t.fedex_tracking_to || '',
             fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
             progressNotes: parseNotesField(t.quant_notes), workCompleted: t.work_completed || '',
@@ -568,9 +587,15 @@ const db = {
 
     async updateServiceTicket(id, updates) {
         const row = { updated_at: new Date().toISOString() };
+        const map = { rmaNumber: 'rma_number', fedexTrackingTo: 'fedex_tracking_to', fedexTrackingFrom: 'fedex_tracking_from', issueDescription: 'issue_description', progressNotes: 'quant_notes', workCompleted: 'work_completed', closedAt: 'closed_at', status: 'status' };
         for (const [k, v] of Object.entries(updates)) {
-            const map = { rmaNumber: 'rma_number', fedexTrackingTo: 'fedex_tracking_to', fedexTrackingFrom: 'fedex_tracking_from', issueDescription: 'issue_description', progressNotes: 'quant_notes', workCompleted: 'work_completed', closedAt: 'closed_at', status: 'status' };
             if (k === 'progressNotes') { row['quant_notes'] = JSON.stringify(v); continue; }
+            if (k === 'sensorIds') {
+                const ids = Array.isArray(v) ? v.filter(Boolean) : [];
+                row['sensor_ids'] = ids;
+                row['sensor_id'] = ids[0] || null;
+                continue;
+            }
             if (map[k]) row[map[k]] = v;
         }
         const { error } = await supa.from('service_tickets').update(row).eq('id', id);
