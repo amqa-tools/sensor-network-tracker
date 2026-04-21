@@ -657,17 +657,37 @@ async function runDiagnose(sn: string): Promise<Response> {
   if (!supabaseUrl || !serviceRoleKey) throw new Error("Missing Supabase env");
   const supa = createClient(supabaseUrl, serviceRoleKey);
 
-  const [sensorRes, existingRes, deviceRes, rawRes] = await Promise.all([
+  // Pull the full paginated device list (same shape as the real scan) and
+  // match by SN client-side. QuantAQ's /devices/?sn=X doesn't actually
+  // filter — an earlier diagnose showed it returning an unrelated device.
+  const devicesFetch = async (): Promise<{ devices?: any[]; _error?: string }> => {
+    try {
+      const MAX_PAGES = 5;
+      const out: any[] = [];
+      let page = 1, pages = 1;
+      while (page <= pages && page <= MAX_PAGES) {
+        const json = await qaqFetch(apiKey, `/devices/?per_page=100&org_id=1250&page=${page}`);
+        out.push(...(json.data || []));
+        pages = json.meta?.pages || 1;
+        page++;
+      }
+      return { devices: out };
+    } catch (e) {
+      return { _error: String(e) };
+    }
+  };
+
+  const [sensorRes, existingRes, deviceListRes, rawRes] = await Promise.all([
     supa.from("sensors").select("id, status, community_id").eq("id", sn).maybeSingle(),
     supa.from("quantaq_alerts").select("*").eq("sensor_sn", sn),
-    qaqFetch(apiKey, `/devices/?sn=${encodeURIComponent(sn)}`).catch((e) => ({ _error: String(e) })),
+    devicesFetch(),
     qaqFetch(apiKey, `/devices/${sn}/data/raw/?per_page=${RAW_WINDOW_SIZE}&sort=timestamp,desc`).catch((e) => ({ _error: String(e) })),
   ]);
 
   const appSensor = sensorRes.data;
   const appStatuses = Array.isArray(appSensor?.status) ? appSensor.status : [];
   const excludedBy = appStatuses.filter((s: string) => EXPECTED_OFFLINE.has(s));
-  const device = (deviceRes?.data || [])[0] || null;
+  const device = (deviceListRes.devices || []).find((d: any) => d?.sn === sn) || null;
   const rows = (rawRes?.data || []);
 
   // Replicate the flag-scan logic the scanner uses.
@@ -698,7 +718,7 @@ async function runDiagnose(sn: string): Promise<Response> {
     wouldBeSkippedByExcludeFilter: excludedBy.length > 0,
     deviceFoundInQuantaq: !!device,
     device: device ? { sn: device.sn, model: device.model, last_seen: device.last_seen, city: device.city } : null,
-    deviceFetchError: deviceRes?._error || null,
+    deviceFetchError: deviceListRes._error || null,
     rawRowCount: rows.length,
     rawFetchError: rawRes?._error || null,
     rawWindowSize: RAW_WINDOW_SIZE,

@@ -87,13 +87,13 @@ $$;
 GRANT EXECUTE ON FUNCTION public.run_quantaq_check() TO authenticated;
 
 -- ===== PG_CRON SCHEDULE =====
--- Runs Mon-Fri at 3pm UTC (6am AKST)
+-- Runs every 2 hours, every day.
 -- NOTE: pg_cron and pg_net extensions must be enabled in Supabase Dashboard first
 -- Go to: Database > Extensions > enable pg_cron and pg_net
 
 SELECT cron.schedule(
-    'quantaq-weekday-check',
-    '0 15 * * 1-5',  -- 3pm UTC = 6am AKST, Mon-Fri
+    'quantaq-every-2h',
+    '0 */2 * * *',  -- every 2 hours, on the hour
     $$SELECT net.http_post(
         url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url') || '/functions/v1/quantaq-check',
         headers := jsonb_build_object(
