@@ -1036,12 +1036,30 @@ async function enterApp() {
             showLoginError('Your account has been archived. Please contact an admin if you need access restored.');
             return;
         }
-        currentUserRole = profile?.role || emailRow?.role || 'user';
+        // allowed_emails is the source of truth for role (that's the table
+        // admins edit via the UI). profile.role can drift stale when a user
+        // was invited-as-admin but signed up under older upsert_profile code
+        // that defaulted profile.role to 'user'. Prefer allowed_emails, fall
+        // back to profile, then 'user'.
+        currentUserRole = emailRow?.role || profile?.role || 'user';
+
         // If the column is missing, default to admins-can-edit-guide so nobody
         // is locked out between the code deploy and the db push.
         currentUserCanEditGuide = 'can_edit_user_guide' in emailRow
             ? !!emailRow.can_edit_user_guide
             : currentUserRole === 'admin';
+
+        // Self-heal: if profile.role disagrees with allowed_emails.role, sync
+        // it so DB-level RLS checks (which read profiles.role) match what the
+        // UI is showing. RLS "Users can update own profile" permits this.
+        if (profile && emailRow?.role && profile.role !== emailRow.role) {
+            const session2 = await db.getSession();
+            if (session2?.user?.id) {
+                supa.from('profiles').update({ role: emailRow.role }).eq('id', session2.user.id)
+                    .then(() => { if (profile) profile.role = emailRow.role; })
+                    .catch(err => console.warn('[role sync] failed:', err));
+            }
+        }
 
         // Repair profile if it was previously anonymized by deletion
         if (profile && (profile.name === '[Deleted User]' || !profile.email) && checkEmail) {
