@@ -642,6 +642,89 @@ async function runScan(): Promise<Response> {
   });
 }
 
+// ----- Diagnose mode: inspect what the scan sees for a single sensor -----
+// Call with body { mode: "diagnose", sn: "MOD-00465" }. Returns the same
+// reasoning the scan uses — whether the device is in QuantAQ's list, what
+// status we have on our side, whether we skip it as EXPECTED_OFFLINE, how
+// many raw rows came back, the flag bits observed, and what the scan would
+// decide. Intended for debugging missed alerts (e.g., "why didn't Seward's
+// PM fault create an alert?") without running a full scan.
+async function runDiagnose(sn: string): Promise<Response> {
+  const apiKey = Deno.env.get("QUANTAQ_API_KEY");
+  if (!apiKey) throw new Error("Missing QUANTAQ_API_KEY");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) throw new Error("Missing Supabase env");
+  const supa = createClient(supabaseUrl, serviceRoleKey);
+
+  const [sensorRes, existingRes, deviceRes, rawRes] = await Promise.all([
+    supa.from("sensors").select("id, status, community_id").eq("id", sn).maybeSingle(),
+    supa.from("quantaq_alerts").select("*").eq("sensor_sn", sn),
+    qaqFetch(apiKey, `/devices/?sn=${encodeURIComponent(sn)}`).catch((e) => ({ _error: String(e) })),
+    qaqFetch(apiKey, `/devices/${sn}/data/raw/?per_page=${RAW_WINDOW_SIZE}&sort=timestamp,desc`).catch((e) => ({ _error: String(e) })),
+  ]);
+
+  const appSensor = sensorRes.data;
+  const appStatuses = Array.isArray(appSensor?.status) ? appSensor.status : [];
+  const excludedBy = appStatuses.filter((s: string) => EXPECTED_OFFLINE.has(s));
+  const device = (deviceRes?.data || [])[0] || null;
+  const rows = (rawRes?.data || []);
+
+  // Replicate the flag-scan logic the scanner uses.
+  let latestRawMs = -Infinity;
+  let flagUnion = 0;
+  let flaggedCount = 0;
+  const perRow: any[] = [];
+  for (const r of rows) {
+    const tsStr = r?.timestamp
+      ? (String(r.timestamp).endsWith("Z") ? String(r.timestamp) : String(r.timestamp) + "Z")
+      : null;
+    const ts = tsStr ? new Date(tsStr) : null;
+    if (ts && !isNaN(ts.getTime()) && ts.getTime() > latestRawMs) latestRawMs = ts.getTime();
+    const flag = r?.flag;
+    const relevantBits = flag && flag > 1 ? (flag & ~1) : 0;
+    if (relevantBits) {
+      flagUnion |= relevantBits;
+      flaggedCount++;
+    }
+    perRow.push({ timestamp: r?.timestamp, flag, relevantBits, allKeys: Object.keys(r || {}) });
+  }
+  const rawFreshnessMs = Number.isFinite(latestRawMs) ? Date.now() - latestRawMs : null;
+
+  return new Response(JSON.stringify({
+    sn,
+    appSensor: appSensor || null,
+    excludedByStatuses: excludedBy,
+    wouldBeSkippedByExcludeFilter: excludedBy.length > 0,
+    deviceFoundInQuantaq: !!device,
+    device: device ? { sn: device.sn, model: device.model, last_seen: device.last_seen, city: device.city } : null,
+    deviceFetchError: deviceRes?._error || null,
+    rawRowCount: rows.length,
+    rawFetchError: rawRes?._error || null,
+    rawWindowSize: RAW_WINDOW_SIZE,
+    latestRawIso: Number.isFinite(latestRawMs) ? new Date(latestRawMs).toISOString() : null,
+    rawFreshnessHours: rawFreshnessMs != null ? +(rawFreshnessMs / 3.6e6).toFixed(2) : null,
+    flagStalenessCutoffHours: FLAG_MAX_STALENESS_MS / 3.6e6,
+    wouldBeSkippedByStaleness: rawFreshnessMs != null && rawFreshnessMs > FLAG_MAX_STALENESS_MS,
+    flagUnion,
+    flagDescription: flagUnion > 0 ? describeFlags(flagUnion) : null,
+    decodedIssues: flagUnion > 0 ? decodeFlags(flagUnion) : [],
+    flaggedRowsInWindow: flaggedCount,
+    existingAlerts: (existingRes.data || []).map((a: any) => ({
+      id: a.id,
+      issue_type: a.issue_type,
+      status: a.status,
+      acknowledged_by: a.acknowledged_by,
+      detected_at: a.detected_at,
+      resolved_at: a.resolved_at,
+    })),
+    perRow: perRow.slice(0, 10), // cap to keep response readable
+  }, null, 2), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // ----- Legacy proxy mode (kept for fallback) -----
 async function runProxy(path: string): Promise<Response> {
   const apiKey = Deno.env.get("QUANTAQ_API_KEY");
@@ -675,6 +758,11 @@ Deno.serve(async (req: Request) => {
       body = text ? JSON.parse(text) : {};
     } catch (_) {
       body = {};
+    }
+
+    // Diagnose mode for a specific sensor
+    if (body.mode === "diagnose" && typeof body.sn === "string" && body.sn.length > 0) {
+      return await runDiagnose(body.sn);
     }
 
     // Scan mode: empty body, { mode: "scan" }, or no path

@@ -80,6 +80,28 @@ const ALERT_SEVERITY = {
 // mode. All the scan logic (devices, flag decoding, alert diffing, event
 // notes, sensor status updates) lives server-side in
 // supabase/functions/quantaq-check/index.ts so there's only one scanner.
+// Call from DevTools console, e.g. diagnoseQuantAQSensor('MOD-00465').
+// Returns the scanner's view of a single sensor — whether it's being skipped
+// by EXPECTED_OFFLINE filtering, how many raw rows came back, what flag bits
+// they carry, what the scan would decide, and any existing alerts in the DB.
+// The result is also logged to the console for quick inspection.
+async function diagnoseQuantAQSensor(sn) {
+    if (!sn || typeof sn !== 'string') { console.warn('diagnoseQuantAQSensor: pass a sensor id like "MOD-00465"'); return; }
+    try {
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/quantaq-check', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'diagnose', sn }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { console.error('[QAQ diagnose]', resp.status, data); return data; }
+        console.log('[QAQ diagnose]', sn, data);
+        return data;
+    } catch (err) {
+        console.error('[QAQ diagnose] failed:', err);
+    }
+}
+
 async function runQuantAQCheck() {
     if (quantaqChecking) return;
     quantaqChecking = true;
