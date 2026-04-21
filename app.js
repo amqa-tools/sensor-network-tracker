@@ -7031,14 +7031,10 @@ function renderTicketProgress(ticket) {
 
 function renderTicketCard(ticket) {
     const ids = ticketSensorIds(ticket);
-    const sensorLabel = ids.length === 0
-        ? '—'
-        : ids.length === 1
-            ? escapeHtml(ids[0])
-            : `${escapeHtml(ids[0])} <span style="font-size:11px;color:var(--slate-400)">+${ids.length - 1}</span>`;
+    const sensorLabel = ids.length === 0 ? '—' : ids.map(escapeHtml).join(', ');
     return `<div class="service-ticket-card ticket-type-${ticket.ticketType}" onclick="openTicketDetail('${ticket.id}')">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-            <span class="ticket-sensor-id">${sensorLabel}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span class="ticket-sensor-id" style="white-space:normal;word-break:break-word">${sensorLabel}</span>
             <span class="ticket-type-label">${formatTicketType(ticket.ticketType)}</span>
         </div>
         ${ticket.issueDescription ? `<div class="ticket-description">${escapeHtml(ticket.issueDescription)}</div>` : ''}
@@ -7063,7 +7059,7 @@ function openTicketDetail(ticketId) {
     const sensorLinks = ids.length > 0
         ? ids.map(sid => `<a href="#" onclick="closeModal('modal-service-ticket'); showSensorDetail('${sid}'); return false;" style="color:var(--navy-500)">${escapeHtml(sid)}</a>`).join(', ')
         : '—';
-    const titleSensor = ids.length === 1 ? ids[0] : ids.length > 1 ? `${ids.length} sensors` : 'Sensor';
+    const titleSensor = ids.length > 0 ? ids.join(', ') : 'Sensor';
     document.getElementById('service-ticket-modal-title').textContent = `Service Ticket: ${titleSensor}`;
     document.getElementById('service-ticket-modal-body').innerHTML = `
         <div style="padding:12px 28px 0"><div class="ticket-steps ticket-steps-detail">${renderTicketProgress(ticket)}</div></div>
