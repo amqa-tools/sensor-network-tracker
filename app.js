@@ -7065,7 +7065,7 @@ function openTicketDetail(ticketId) {
             <div class="ticket-field"><label>Return Tracking Info (to QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingTo)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingTo',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingTo) || '—'}</p>`}</div>
             <div class="ticket-field"><label>Return Tracking Info (from QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingFrom)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingFrom',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingFrom) || '—'}</p>`}</div>
             <div class="ticket-field"><label>Closed</label><p>${ticket.closedAt ? formatDate(ticket.closedAt) : '—'}</p></div>
-            ${renderProgressNotesSection(ticket.progressNotes, ticket.id, 'addProgressNote')}
+            ${renderProgressNotesSection(ticket.progressNotes, ticket.id, 'addProgressNote', 'ticket')}
             <div class="ticket-field full-width"><label>Work Completed</label>${isOpen ? `<textarea class="ticket-edit-input" rows="3" placeholder="Describe work done..." onblur="saveTicketField('${ticket.id}','workCompleted',this.value)">${escapeHtml(ticket.workCompleted)}</textarea>` : `<p>${escapeHtml(ticket.workCompleted) || '—'}</p>`}</div>
         </div>
         <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
@@ -7106,19 +7106,31 @@ function addProgressNote(ticketId) {
     if (currentSensor) renderSensorTickets(currentSensor);
 }
 
-function renderProgressNotesSection(notes, itemId, addFn) {
-    const notesList = (notes || []).slice().reverse().map((n, i) => {
-        const chips = (n.taggedContacts || []).map(cId => {
-            const contact = contacts.find(c => c.id === cId);
-            if (!contact) return '';
-            return `<span class="tag tag-contact" style="font-size:11px;padding:2px 8px;margin-right:4px;cursor:pointer" onclick="event.stopPropagation(); closeModal('modal-audit-detail'); closeModal('modal-collocation-detail'); closeModal('modal-service-ticket'); showContactDetail('${cId}')">${escapeHtml(contact.name)}</span>`;
+// parentKind is 'ticket' | 'audit' | 'collocation' — tells the edit/delete
+// handlers which in-memory array + db update helper to use.
+function renderProgressNotesSection(notes, itemId, addFn, parentKind) {
+    const list = notes || [];
+    const notesList = list.map((n, origIdx) => ({ n, origIdx }))
+        .reverse()
+        .map(({ n, origIdx }, displayIdx) => {
+            const chips = (n.taggedContacts || []).map(cId => {
+                const contact = contacts.find(c => c.id === cId);
+                if (!contact) return '';
+                return `<span class="tag tag-contact" style="font-size:11px;padding:2px 8px;margin-right:4px;cursor:pointer" onclick="event.stopPropagation(); closeModal('modal-audit-detail'); closeModal('modal-collocation-detail'); closeModal('modal-service-ticket'); showContactDetail('${cId}')">${escapeHtml(contact.name)}</span>`;
+            }).join('');
+            const rowId = `pn-row-${itemId}-${origIdx}`;
+            const editControls = parentKind
+                ? `<span style="margin-left:8px;display:inline-flex;gap:6px;opacity:0.6">
+                    <a onclick="editProgressNote('${parentKind}','${itemId}',${origIdx})" title="Edit" style="cursor:pointer;font-size:11px">&#9998;</a>
+                    <a onclick="deleteProgressNote('${parentKind}','${itemId}',${origIdx})" title="Delete" style="cursor:pointer;font-size:11px;color:var(--aurora-rose)">&#128465;</a>
+                </span>`
+                : '';
+            return `<div id="${rowId}" style="font-size:13px;padding:6px 0;${displayIdx < list.length - 1 ? 'border-bottom:1px solid var(--slate-100);' : ''}">
+                <span style="color:var(--slate-400);font-size:11px">${n.at ? formatDate(n.at) : ''}${n.by ? ' — ' + escapeHtml(n.by) : ''}${editControls}</span>
+                <div class="pn-body" style="color:var(--slate-700);margin-top:2px">${highlightMentions(escapeHtml(n.text))}</div>
+                ${chips ? `<div class="pn-chips" style="margin-top:4px">${chips}</div>` : ''}
+            </div>`;
         }).join('');
-        return `<div style="font-size:13px;padding:6px 0;${i < (notes || []).length - 1 ? 'border-bottom:1px solid var(--slate-100);' : ''}">
-            <span style="color:var(--slate-400);font-size:11px">${n.at ? formatDate(n.at) : ''}${n.by ? ' — ' + escapeHtml(n.by) : ''}</span>
-            <div style="color:var(--slate-700);margin-top:2px">${highlightMentions(escapeHtml(n.text))}</div>
-            ${chips ? `<div style="margin-top:4px">${chips}</div>` : ''}
-        </div>`;
-    }).join('');
     const dropdownId = `progress-note-mention-dropdown-${itemId}`;
     const textareaId = `progress-note-input-${itemId}`;
     return `<div class="ticket-field full-width"><label>Progress Notes</label>
@@ -7131,6 +7143,74 @@ function renderProgressNotesSection(notes, itemId, addFn) {
             <button class="btn btn-sm btn-primary" onclick="${addFn}('${itemId}')">Add</button>
         </div>
     </div>`;
+}
+
+function _pnParentAccess(parentKind, itemId) {
+    if (parentKind === 'ticket') {
+        const r = serviceTickets.find(t => t.id === itemId);
+        return r ? { record: r, reopen: () => openTicketDetail(itemId), persist: (u) => persistServiceTicketUpdate(itemId, u) } : null;
+    }
+    if (parentKind === 'audit') {
+        const r = audits.find(a => a.id === itemId);
+        return r ? { record: r, reopen: () => openAuditDetail(itemId), persist: (u) => persistAuditUpdate(itemId, u) } : null;
+    }
+    if (parentKind === 'collocation') {
+        const r = collocations.find(c => c.id === itemId);
+        return r ? { record: r, reopen: () => openCollocationDetail(itemId), persist: (u) => persistCollocationUpdate(itemId, u) } : null;
+    }
+    return null;
+}
+
+function editProgressNote(parentKind, itemId, origIdx) {
+    const ctx = _pnParentAccess(parentKind, itemId);
+    if (!ctx) return;
+    const note = (ctx.record.progressNotes || [])[origIdx];
+    if (!note) return;
+    const row = document.getElementById(`pn-row-${itemId}-${origIdx}`);
+    if (!row) return;
+    const body = row.querySelector('.pn-body');
+    const chips = row.querySelector('.pn-chips');
+    if (!body) return;
+    const prev = note.text || '';
+    body.innerHTML = `<textarea class="ticket-edit-input" rows="3" style="width:100%;resize:vertical">${escapeHtml(prev)}</textarea>
+        <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="btn btn-sm btn-primary" onclick="saveProgressNoteEdit('${parentKind}','${itemId}',${origIdx})">Save</button>
+            <button class="btn btn-sm" onclick="${parentKind === 'ticket' ? 'openTicketDetail' : parentKind === 'audit' ? 'openAuditDetail' : 'openCollocationDetail'}('${itemId}')">Cancel</button>
+        </div>`;
+    if (chips) chips.style.display = 'none';
+    body.querySelector('textarea').focus();
+}
+
+function saveProgressNoteEdit(parentKind, itemId, origIdx) {
+    const ctx = _pnParentAccess(parentKind, itemId);
+    if (!ctx) return;
+    const row = document.getElementById(`pn-row-${itemId}-${origIdx}`);
+    const ta = row?.querySelector('textarea');
+    if (!ta) return;
+    const newText = ta.value.trim();
+    const note = (ctx.record.progressNotes || [])[origIdx];
+    if (!note) return;
+    if (!newText) {
+        showAlert('Empty note', 'Progress note text cannot be empty. Use the trash icon to delete instead.');
+        return;
+    }
+    if (newText === note.text) { ctx.reopen(); return; }
+    note.text = newText;
+    note.taggedContacts = parseMentionedContacts(newText);
+    ctx.persist({ progressNotes: ctx.record.progressNotes });
+    ctx.reopen();
+}
+
+function deleteProgressNote(parentKind, itemId, origIdx) {
+    const ctx = _pnParentAccess(parentKind, itemId);
+    if (!ctx) return;
+    const note = (ctx.record.progressNotes || [])[origIdx];
+    if (!note) return;
+    showConfirm('Delete Progress Note', `Delete this progress note?<br><br><em>${escapeHtml(note.text).slice(0, 240)}${note.text.length > 240 ? '…' : ''}</em>`, () => {
+        ctx.record.progressNotes.splice(origIdx, 1);
+        ctx.persist({ progressNotes: ctx.record.progressNotes });
+        ctx.reopen();
+    }, { danger: true, confirmText: 'Delete' });
 }
 
 function initProgressNoteMention(itemId) {
@@ -7573,7 +7653,7 @@ function openAuditDetail(auditId) {
             <div class="ticket-field"><label>Actual End</label><input type="date" class="ticket-edit-input" value="${audit.actualEnd || ''}" onblur="saveAuditField('${audit.id}','actualEnd',this.value)"></div>
             <div class="ticket-field"><label>Install Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[0] || '')}" placeholder="Who installed" onblur="saveAuditConductors('${audit.id}', this.value, null)"></div>
             <div class="ticket-field"><label>Takedown Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)"></div>
-            ${renderProgressNotesSection(audit.progressNotes, audit.id, 'addAuditProgressNote')}
+            ${renderProgressNotesSection(audit.progressNotes, audit.id, 'addAuditProgressNote', 'audit')}
         </div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}</div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Photos</label>
@@ -10004,7 +10084,7 @@ function openCollocationDetail(collocId) {
             <div class="ticket-field"><label>End Date</label><input class="ticket-edit-input" type="date" value="${colloc.endDate === 'TBD' ? '' : colloc.endDate}" onblur="saveCollocationField('${colloc.id}','endDate',this.value)"></div>
             <div class="ticket-field full-width"><label>Sensors</label><p>${sensorList || '—'}</p></div>
             <div class="ticket-field"><label>Conducted By</label><input class="ticket-edit-input" value="${escapeHtml(colloc.conductedBy)}" onblur="saveCollocationField('${colloc.id}','conductedBy',this.value)"></div>
-            ${renderProgressNotesSection(colloc.progressNotes, colloc.id, 'addCollocationProgressNote')}
+            ${renderProgressNotesSection(colloc.progressNotes, colloc.id, 'addCollocationProgressNote', 'collocation')}
             ${hasResults ? `<div class="ticket-field full-width"><label>Analysis</label><p style="color:var(--green)">Analysis uploaded ${formatDate(colloc.analysisUploadDate)} by ${escapeHtml(colloc.analysisUploadedBy)}</p></div>` : ''}
         </div>
         <div style="padding:16px 28px;border-top:1px solid var(--slate-100);text-align:right">
