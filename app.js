@@ -7766,10 +7766,19 @@ function advanceAuditStatus(auditId) {
         }
 
         if (auditPod) {
-            const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
             if (newStatus === 'In Progress') {
-                auditPod.status = [...cleaned, 'Auditing a Community'];
+                // Pod is now at the community, reporting data. Clear any
+                // leftover "In Transit Between Audits" from the previous leg
+                // and make sure we show Online alongside the audit tag.
+                const cleaned = getStatusArray(auditPod).filter(st =>
+                    st !== 'Auditing a Community' && st !== 'In Transit Between Audits'
+                );
+                const next = new Set(cleaned);
+                next.add('Online');
+                next.add('Auditing a Community');
+                auditPod.status = [...next];
             } else {
+                const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
                 auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
             }
             persistSensor(auditPod);
@@ -7815,10 +7824,19 @@ function revertAuditStatus(auditId) {
         persistSensor(communityPod);
     }
     if (auditPod) {
-        const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
         if (newStatus === 'In Progress') {
-            auditPod.status = [...cleaned, 'Auditing a Community'];
+            // Same rule as advance-to-In-Progress: pod is at the community,
+            // reporting, so clear any "In Transit Between Audits" leftover
+            // and keep Online + Auditing a Community.
+            const cleaned = getStatusArray(auditPod).filter(st =>
+                st !== 'Auditing a Community' && st !== 'In Transit Between Audits'
+            );
+            const next = new Set(cleaned);
+            next.add('Online');
+            next.add('Auditing a Community');
+            auditPod.status = [...next];
         } else {
+            const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
             auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
         }
         persistSensor(auditPod);
