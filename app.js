@@ -5238,6 +5238,7 @@ function getSelectedStatuses(containerId) {
 const FILTER_GROUPS = {
     '_movement': ['Movement', 'Sensor Install', 'Sensor Removal', 'Sensor Install + Sensor Removal'],
     '_troubleshooting': ['Troubleshooting', 'Site Work', 'Issue', 'Maintenance', 'Troubleshooting + Site Work'],
+    '_issue': ['Issue'],
     '_status': ['Status Change'],
     '_general': ['General', 'Info Edit'],
 };
