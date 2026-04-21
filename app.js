@@ -84,17 +84,22 @@ function showAlert(title, message, onDismiss) {
 
 function acceptConfirmModal() {
     const modal = document.getElementById('modal-confirm');
-    // Run callback BEFORE closing so form inputs (selects, inputs) are still readable
+    // Run callback BEFORE closing so form inputs (selects, inputs) are still readable.
+    // If the callback itself calls showConfirm (chained confirmation — e.g. Delete
+    // User → Final Warning), it'll set _confirmCallback to the new handler; in
+    // that case we must leave the modal open so the next step is visible.
     if (_confirmCallback) { const cb = _confirmCallback; _confirmCallback = null; _confirmDismissCallback = null; cb(); }
-    modal.classList.remove('open');
+    if (!_confirmCallback) modal.classList.remove('open');
 }
 
 function dismissConfirmModal() {
     const modal = document.getElementById('modal-confirm');
-    modal.classList.remove('open');
-    if (_confirmDismissCallback) { const cb = _confirmDismissCallback; _confirmCallback = null; _confirmDismissCallback = null; cb(); }
+    const pendingDismiss = _confirmDismissCallback;
     _confirmCallback = null;
     _confirmDismissCallback = null;
+    if (pendingDismiss) pendingDismiss();
+    // Same chained-open guard: if the dismiss callback re-opened the modal, don't close it.
+    if (!_confirmCallback) modal.classList.remove('open');
 }
 
 // Close confirm modal on backdrop click
@@ -3819,6 +3824,7 @@ function openEmailModal() {
     emailDeselectAll();
     document.getElementById('email-subject').value = '';
     document.getElementById('email-body').value = '';
+    document.getElementById('email-bcc-toggle').checked = true;
     openModal('modal-email');
 }
 
@@ -5650,18 +5656,40 @@ async function sendUserInvite(event) {
         return;
     }
 
-    // Send invite email via mailto
+    // Send invite email via mailto. window.location.href after an awaited RPC
+    // is unreliable — browsers treat the user gesture as consumed and silently
+    // drop the protocol handoff, which is why the Outlook popup "never showed
+    // up." Use a synthesized anchor click instead, and expose a manual
+    // "Open Email" button in the success state as a reliable fallback.
     const signupUrl = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/');
     const inviterName = currentUser || 'An administrator';
     const subject = "You're invited to the AMQA Sensor Network Tracker";
     const body = `${inviterName} has invited you to the AMQA Community Sensor Network Tracking Platform.\n\nCreate your account:\n\n    ${signupUrl}\n\nSign up with this email (${email}). You'll set up two-factor authentication on your first login.`;
-    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-    // Show success state
+    const tryOpenMailto = () => {
+        const a = document.createElement('a');
+        a.href = mailtoUrl;
+        a.rel = 'noopener';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+    tryOpenMailto();
+
+    // Show success state (with a fallback button — if the mailto didn't open,
+    // clicking this in a fresh user gesture will).
     document.getElementById('invite-modal-title').textContent = 'Invite Sent';
-    document.getElementById('invite-success-email').innerHTML = `<strong>${escapeHtml(email)}</strong> has been approved.<br>Your email app has opened with the invitation — just hit send.`;
+    document.getElementById('invite-success-email').innerHTML = `<strong>${escapeHtml(email)}</strong> has been approved.<br>Your email app should have opened with the invitation. If it didn't, click <strong>Open Email</strong> below.`;
     document.getElementById('invite-step-form').style.display = 'none';
     document.getElementById('invite-step-success').style.display = '';
+    // Wire the fallback button to the same mailto, in a clean user-gesture context.
+    const openBtn = document.getElementById('invite-open-email-btn');
+    if (openBtn) {
+        openBtn.style.display = '';
+        openBtn.onclick = tryOpenMailto;
+    }
     btn.disabled = false;
     btn.textContent = 'Send Invite';
 }

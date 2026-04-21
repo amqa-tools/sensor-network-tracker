@@ -49,11 +49,15 @@ const FLAG_MAX_STALENESS_MS = 24 * 60 * 60 * 1000;
 // We OR the flag bits across the whole window instead of trusting a single
 // latest reading — QuantAQ's own dashboard appears to work the same way, and
 // it's the only way to catch sensors (e.g. a misbehaving PM unit) that set
-// the fault bit intermittently rather than on every point. Kept deliberately
-// small (5) because QuantAQ's raw endpoint has been observed to time out for
-// larger paginated queries, and even a small window dramatically beats the
-// single-latest-point check.
-const RAW_WINDOW_SIZE = 5;
+// the fault bit intermittently rather than on every point.
+//
+// Previously kept at 5 out of caution for QuantAQ's raw endpoint timing out,
+// but at 5 readings × ~1 min each the window was only 5 minutes wide — too
+// short to catch intermittent PM faults that clear within a few minutes, and
+// we missed a real Seward PM malfunction as a result. QAQ_TIMEOUT_MS is now
+// 45s (plenty of headroom) so we can safely widen the window to ~1h and
+// stay aligned with QuantAQ's dashboard.
+const RAW_WINDOW_SIZE = 60;
 
 const ALERT_SEVERITY: Record<string, string> = {
   "PM Sensor Issue": "critical",

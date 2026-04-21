@@ -848,7 +848,7 @@
                     </div>
                     <div class="email-bcc-row" style="margin-top:8px;width:100%">
                         <label class="email-bcc-toggle">
-                            <input type="checkbox" id="email-bcc-toggle">
+                            <input type="checkbox" id="email-bcc-toggle" checked>
                             BCC all recipients <span class="email-bcc-hint">(recipients won't see each other's email addresses)</span>
                         </label>
                     </div>
@@ -1351,6 +1351,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn" onclick="closeInviteModal()">Done</button>
+                    <button type="button" class="btn" id="invite-open-email-btn" style="display:none">Open Email</button>
                     <button type="button" class="btn btn-primary" onclick="resetInviteModal()">Invite Another</button>
                 </div>
             </div>
