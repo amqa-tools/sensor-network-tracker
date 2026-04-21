@@ -237,6 +237,10 @@ async function loadAllData() {
     // Clean up stale service statuses on sensors based on current ticket stage
     cleanupSensorServiceStatuses();
 
+    // Normalize audit-pod status for any In Progress audit — strips stale
+    // "In Transit Between Audits" that pre-dated the advance-path fix.
+    cleanupAuditPodStatuses();
+
     // Remove Collocation status from sensors with no active collocation
     cleanupStaleCollocationStatuses();
 
@@ -391,6 +395,36 @@ function cleanupSensorServiceStatuses() {
             persistSensor(s);
         }
     });
+}
+
+function cleanupAuditPodStatuses() {
+    // For every audit currently "In Progress," the audit pod should show
+    // Online + Auditing a Community — never "In Transit Between Audits"
+    // (contradictory — it can't be in transit and at the site at once).
+    // Fixes pods whose status was set before the advance-to-In-Progress
+    // path learned to strip the in-transit tag.
+    let count = 0;
+    audits.forEach(a => {
+        if (a.status !== 'In Progress' || !a.auditPodId) return;
+        const pod = sensors.find(x => x.id === a.auditPodId);
+        if (!pod) return;
+        const cur = getStatusArray(pod);
+        const cleaned = cur.filter(st => st !== 'Auditing a Community' && st !== 'In Transit Between Audits');
+        const next = new Set(cleaned);
+        next.add('Online');
+        next.add('Auditing a Community');
+        const nextArr = [...next];
+        const same = nextArr.length === cur.length && nextArr.slice().sort().join(',') === cur.slice().sort().join(',');
+        if (!same) {
+            pod.status = nextArr;
+            persistSensor(pod);
+            count++;
+        }
+    });
+    if (count > 0) {
+        console.log(`Normalized audit-pod status on ${count} sensor(s)`);
+        buildSensorSidebar();
+    }
 }
 
 function cleanupStaleCollocationStatuses() {
