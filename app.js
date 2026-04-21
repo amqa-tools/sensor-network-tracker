@@ -3571,7 +3571,7 @@ function showContactView(contactId) {
             <div class="info-item"><label>Organization</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'org')">${c.org || '<span class="field-placeholder">Organization</span>'}</p></div>
             <div class="info-item"><label>Email</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'email')">${c.email || '<span class="field-placeholder">Email</span>'}</p></div>
             <div class="info-item"><label>Phone</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'phone')">${c.phone || '<span class="field-placeholder">Phone</span>'}</p></div>
-            <div class="info-item"><label>Status</label><p>${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--navy-500);font-weight:600">Active</span>'}</p></div>
+            <div class="info-item"><label>Status</label><p class="editable-field" onclick="toggleContactActive('${c.id}')" title="Click to toggle active / inactive">${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--aurora-green);font-weight:600">Active</span>'}</p></div>
             <div class="info-item"><label>Primary Contact</label><p class="editable-field" onclick="togglePrimaryContact('${c.id}')">${c.primaryContact ? '<span class="contact-primary-badge">Primary</span>' : '<span class="field-placeholder">No</span>'}</p></div>
             <div class="info-item"><label>Mass Email List</label><p class="editable-field" onclick="toggleContactEmailList('${c.id}')">${c.emailList ? '<span style="color:var(--aurora-green);font-weight:600">Included</span>' : '<span class="field-placeholder">Not included</span>'}</p></div>
         `;
@@ -3762,6 +3762,27 @@ function togglePrimaryContact(contactId) {
     if (currentContact === contactId && document.getElementById('view-contact-detail')?.classList.contains('active')) {
         showContactView(contactId);
     }
+}
+
+function toggleContactActive(contactId) {
+    const c = contacts.find(x => x.id === contactId);
+    if (!c) return;
+    const wasActive = c.active !== false;
+    c.active = !wasActive;
+    persistContact(c);
+    if (!setupMode) {
+        const action = c.active ? 'reactivated' : 'marked as inactive';
+        createNote('Info Edit', `${c.name} ${action}.`, {
+            sensors: [], communities: c.community ? [c.community] : [], contacts: [contactId],
+        });
+    }
+    showSuccessToast(c.active ? 'Contact reactivated' : 'Contact marked inactive');
+    if (currentContact === contactId && document.getElementById('view-contact-detail')?.classList.contains('active')) {
+        showContactView(contactId);
+    }
+    // Also refresh the contacts list if it's the active view, since
+    // active/inactive changes which tab the row belongs on.
+    if (document.getElementById('view-contacts')?.classList.contains('active')) renderContacts();
 }
 
 function inlineEditContactCommunity(contactId) {
