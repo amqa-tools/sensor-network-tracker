@@ -324,19 +324,20 @@ function renderDashboardAlerts() {
         html += renderQuantAQAlertList(ongoing, false);
     }
 
-    // Resolved
-    if (filteredResolved.length > 0) {
-        html += `<h3 id="quantaq-resolved-section" class="quantaq-section-title" style="color:#16a34a">Resolved (${filteredResolved.length})</h3>`;
-        html += renderQuantAQAlertList(filteredResolved, false);
-    }
-
-    // Pending summary (shown on active tab)
+    // Pending summary (shown on active tab) — listed before Resolved so
+    // in-flight grace-period alerts are visible above already-cleared ones.
     if (pending.length > 0 && !quantaqFilter) {
         html += `<h3 class="quantaq-section-title" style="color:var(--gold-600)">Pending — Grace Period (${pending.length}) <a href="#" onclick="event.preventDefault();switchQuantAQTab('pending')" style="font-size:12px;font-weight:400;color:var(--slate-400);margin-left:8px">View all &rarr;</a></h3>`;
         html += renderPendingAlertList(pending.slice(0, 3));
         if (pending.length > 3) {
             html += `<p style="font-size:12px;color:var(--slate-400);margin:8px 0 16px"><a href="#" onclick="event.preventDefault();switchQuantAQTab('pending')" style="color:var(--navy-400)">+ ${pending.length - 3} more pending alerts</a></p>`;
         }
+    }
+
+    // Resolved
+    if (filteredResolved.length > 0) {
+        html += `<h3 id="quantaq-resolved-section" class="quantaq-section-title" style="color:#16a34a">Resolved (${filteredResolved.length})</h3>`;
+        html += renderQuantAQAlertList(filteredResolved, false);
     }
 
     // All clear
