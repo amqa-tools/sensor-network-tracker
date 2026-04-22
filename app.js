@@ -651,31 +651,44 @@ function cleanupOldMigrationNotes() {
 }
 
 function cleanupDuplicatedCollocationNoteTitles() {
-    // One-time fix: trim user-typed notes from the title of collocation notes
-    // The notes already exist in additionalInfo (italics below) — no need to duplicate in title
-    if (localStorage.getItem('snt_collocTitlesCleaned')) return;
+    // One-time fix: trim user-typed notes from the title of notes where the
+    // same text is duplicated in additionalInfo.userNotes (the italics block).
+    //
+    // v1 only scanned Collocation-typed notes whose title matched the exact
+    // "Collocation at <location>:" pattern, so any note whose type or title
+    // drifted from that shape (e.g. an older move/status note for a specific
+    // contact like Joy Bailey) still shows the duplicated body. v2 drops both
+    // restrictions and simply strips userNotes from the tail of the title
+    // when they're present verbatim, leaving the auto-generated summary
+    // untouched.
+    if (localStorage.getItem('snt_collocTitlesCleaned_v2')) return;
     let count = 0;
     notes.forEach(n => {
-        if (n.type !== 'Collocation' || !n.text || !n.additionalInfo) return;
-        // Only fix notes that match the auto-generated collocation title pattern
-        if (!/^Collocation at .+:/i.test(n.text)) return;
+        if (!n?.text || !n.additionalInfo) return;
         let parsed = null;
         try { parsed = JSON.parse(n.additionalInfo); } catch (_) {}
-        if (!parsed || !parsed.userNotes) return;
-        const userNotes = parsed.userNotes.trim();
+        const userNotes = parsed?.userNotes?.trim();
         if (!userNotes) return;
-        // If the title contains the user notes at the end, strip them
-        if (n.text.includes(userNotes)) {
-            const cleaned = n.text.replace(userNotes, '').replace(/\s+$/, '').replace(/\.\s*$/, '.');
-            if (cleaned !== n.text) {
-                n.text = cleaned;
-                db.updateNote(n.id, { text: cleaned }).catch(() => {});
-                count++;
-            }
-        }
+        const trimmed = n.text.trimEnd();
+        // Only strip when userNotes sits at the END of the title — never
+        // rewrite the whole note, and keep a sensible auto-summary prefix
+        // in front of what we trim off.
+        if (!trimmed.endsWith(userNotes)) return;
+        const beforeLen = trimmed.length - userNotes.length;
+        if (beforeLen < 2) return;
+        const head = n.text.slice(0, beforeLen)
+            .replace(/\s+$/, '')
+            .replace(/[—–\-:,.]+$/, '')
+            .trim();
+        if (!head || head === n.text) return;
+        const cleaned = head.endsWith('.') ? head : head + '.';
+        if (cleaned === n.text) return;
+        n.text = cleaned;
+        db.updateNote(n.id, { text: cleaned }).catch(() => {});
+        count++;
     });
-    if (count > 0) console.log(`Cleaned ${count} collocation note titles`);
-    localStorage.setItem('snt_collocTitlesCleaned', '1');
+    if (count > 0) console.log(`Cleaned ${count} duplicated note title(s)`);
+    localStorage.setItem('snt_collocTitlesCleaned_v2', '1');
 }
 
 
