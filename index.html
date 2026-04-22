@@ -322,8 +322,11 @@
                 </div>
 
                 <div id="tab-community-comms" class="tab-content">
-                    <div class="history-actions">
-                        <button class="btn btn-primary" onclick="openCommModal(currentCommunity)">+ Log Communication</button>
+                    <div class="history-actions" style="display:flex;gap:8px;flex-wrap:wrap">
+                        <button class="btn btn-primary" onclick="logPhoneForCommunity(currentCommunity)" title="Log a phone call">&#9742; Log Call</button>
+                        <button class="btn btn-primary" onclick="logEmailForCommunity(currentCommunity)" title="Log an email">&#9993; Log Email</button>
+                        <button class="btn" onclick="logVisitForCommunity(currentCommunity)" title="Log a site visit">&#128205; Log Site Visit</button>
+                        <button class="btn" onclick="openCommModal(currentCommunity)" title="Log another type (text, video call, etc.)">Other&hellip;</button>
                     </div>
                     <div id="community-comms-timeline" class="timeline"></div>
                 </div>

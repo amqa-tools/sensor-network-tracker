@@ -76,6 +76,40 @@ function showConfirm(title, message, onConfirm, options = {}) {
     modal.classList.add('open');
 }
 
+// Custom prompt using the existing confirm modal. The native prompt()
+// renders as a browser-stock dialog that looks broken on mobile and
+// ignores the app's mention autocomplete. Callback gets the entered
+// value (trimmed) or null if the user cancels.
+function showPrompt(title, message, defaultValue, onSubmit, options = {}) {
+    const modal = document.getElementById('modal-confirm');
+    document.getElementById('modal-confirm-title').textContent = title;
+    const inputType = options.multiline ? 'textarea' : 'input';
+    const inputMarkup = options.multiline
+        ? `<textarea id="modal-prompt-input" rows="4" class="mention-textarea" style="width:100%;font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5"></textarea>`
+        : `<input type="text" id="modal-prompt-input" style="width:100%;font-size:14px;padding:10px 12px;border:1px solid var(--slate-200);border-radius:8px">`;
+    document.getElementById('modal-confirm-body').innerHTML = `
+        ${message ? `<p style="margin:0 0 10px;font-size:13px;color:var(--slate-500)">${message}</p>` : ''}
+        ${inputMarkup}`;
+    const input = document.getElementById('modal-prompt-input');
+    input.value = defaultValue || '';
+    const okBtn = document.getElementById('modal-confirm-ok');
+    const cancelBtn = document.getElementById('modal-confirm-cancel');
+    okBtn.textContent = options.confirmText || 'Save';
+    okBtn.className = 'btn btn-primary';
+    cancelBtn.style.display = '';
+    cancelBtn.textContent = options.cancelText || 'Cancel';
+    _confirmCallback = () => onSubmit((input.value || '').trim());
+    _confirmDismissCallback = () => onSubmit(null);
+    modal.classList.add('open');
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+    // Enter submits on single-line; Shift+Enter / newline in multiline.
+    if (!options.multiline) {
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); acceptConfirmModal(); }
+        }, { once: true });
+    }
+}
+
 function showAlert(title, message, onDismiss) {
     const modal = document.getElementById('modal-confirm');
     document.getElementById('modal-confirm-title').textContent = title;
@@ -2561,36 +2595,38 @@ function inlineEditSensor(sensorId, field) {
     const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date' };
     const label = labels[field] || field;
     const oldVal = s[field] || '';
-    const promptMsg = field === 'location' ? `Edit ${label} (enter an address or GPS coordinates):` : `Edit ${label}:`;
-    const newVal = prompt(promptMsg, oldVal);
-    if (newVal === null || newVal.trim() === oldVal) return;
+    const promptMsg = field === 'location' ? `Enter an address or GPS coordinates.` : '';
 
-    // Validate SOA Tag ID uniqueness
-    if (field === 'soaTagId' && newVal.trim()) {
-        const soaDup = sensors.find(x => x.soaTagId === newVal.trim() && x.id !== sensorId);
-        if (soaDup) {
-            showAlert('Duplicate SOA Tag ID', `SOA Tag ID "${newVal.trim()}" is already assigned to ${soaDup.id}. Each sensor must have a unique SOA Tag ID.`);
-            return;
+    showPrompt(`Edit ${label}`, promptMsg, oldVal, (newVal) => {
+        if (newVal === null || newVal === oldVal) return;
+
+        // Validate SOA Tag ID uniqueness
+        if (field === 'soaTagId' && newVal) {
+            const soaDup = sensors.find(x => x.soaTagId === newVal && x.id !== sensorId);
+            if (soaDup) {
+                showAlert('Duplicate SOA Tag ID', `SOA Tag ID "${newVal}" is already assigned to ${soaDup.id}. Each sensor must have a unique SOA Tag ID.`);
+                return;
+            }
         }
-    }
 
-    s[field] = newVal.trim();
-    persistSensor(s);
-    showSensorView(sensorId);
+        s[field] = newVal;
+        persistSensor(s);
+        showSensorView(sensorId);
 
-    // Queue annotation for this change (skip in setup mode)
-    if (!setupMode) {
-        currentAnnotationSensorId = sensorId;
-        pendingAnnotations = [{
-            sensorId: sensorId,
-            summary: `${label} changed from "${oldVal || '(empty)'}" to "${newVal.trim()}"`,
-            field: field,
-            oldVal: oldVal || '(empty)',
-            newVal: newVal.trim(),
-            label: label,
-        }];
-        showNextAnnotation();
-    }
+        // Queue annotation for this change (skip in setup mode)
+        if (!setupMode) {
+            currentAnnotationSensorId = sensorId;
+            pendingAnnotations = [{
+                sensorId: sensorId,
+                summary: `${label} changed from "${oldVal || '(empty)'}" to "${newVal}"`,
+                field: field,
+                oldVal: oldVal || '(empty)',
+                newVal: newVal,
+                label: label,
+            }];
+            showNextAnnotation();
+        }
+    });
 }
 
 let typeChangeSensorId = null;
@@ -3113,18 +3149,17 @@ function renderContacts() {
 }
 
 function renameContactGroup(oldName) {
-    const newName = prompt('Rename group:', oldName);
-    if (!newName || newName.trim() === oldName) return;
-    const trimmed = newName.trim();
-    // Update org field for all contacts in this group
-    contacts.forEach(c => {
-        if (isNonCommunityContact(c) && (c.org || 'Unassigned') === oldName) {
-            c.org = trimmed === 'Unassigned' ? '' : trimmed;
-            persistContact(c);
-        }
+    showPrompt('Rename group', '', oldName, (newName) => {
+        if (!newName || newName === oldName) return;
+        contacts.forEach(c => {
+            if (isNonCommunityContact(c) && (c.org || 'Unassigned') === oldName) {
+                c.org = newName === 'Unassigned' ? '' : newName;
+                persistContact(c);
+            }
+        });
+        renderContacts();
+        showSuccessToast(`Group renamed to "${newName}"`);
     });
-    renderContacts();
-    showSuccessToast(`Group renamed to "${trimmed}"`);
 }
 
 function openAddContactModal() {
@@ -4120,12 +4155,27 @@ function saveNote(e) {
 }
 
 // ===== COMMUNICATIONS =====
-function openCommModal(communityId) {
+function openCommModal(communityId, presetType) {
     document.getElementById('comm-form').reset();
     document.getElementById('comm-community-id').value = communityId;
     document.getElementById('comm-date-input').value = nowDatetime();
+    if (presetType) {
+        const sel = document.getElementById('comm-type-input');
+        if (sel) {
+            // Match by value (handles "Phone Call", "Email", etc.)
+            const match = Array.from(sel.options).find(o => o.value.toLowerCase() === presetType.toLowerCase());
+            if (match) sel.value = match.value;
+        }
+    }
     openModal('modal-comm');
+    // Focus the summary so the user can type immediately.
+    setTimeout(() => document.getElementById('comm-text-input')?.focus(), 0);
 }
+
+// Shortcut handlers wired to the per-community header buttons.
+function logPhoneForCommunity(communityId) { openCommModal(communityId, 'Phone Call'); }
+function logEmailForCommunity(communityId) { openCommModal(communityId, 'Email'); }
+function logVisitForCommunity(communityId) { openCommModal(communityId, 'Site Visit'); }
 
 function saveComm(e) {
     e.preventDefault();
@@ -4317,19 +4367,18 @@ function editFollowUp(noteId, followUpIdx) {
     const match = oldLine.match(/^— (.+?\s*\(.+?\)):\s*(.+)$/);
     const oldText = match ? match[2] : oldLine.substring(2);
 
-    const newText = prompt('Edit note:', oldText);
-    if (newText === null || newText.trim() === oldText) return;
-
-    if (match) {
-        followUps[followUpIdx] = `— ${match[1]}: ${newText.trim()}`;
-    } else {
-        followUps[followUpIdx] = `— ${newText.trim()}`;
-    }
-
-    note.text = [...mainLines, ...followUps].join('\n');
-    db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
-    refreshCurrentView();
-    if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
+    showPrompt('Edit follow-up', '', oldText, (newText) => {
+        if (newText === null || newText === oldText) return;
+        if (match) {
+            followUps[followUpIdx] = `— ${match[1]}: ${newText}`;
+        } else {
+            followUps[followUpIdx] = `— ${newText}`;
+        }
+        note.text = [...mainLines, ...followUps].join('\n');
+        db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
+        refreshCurrentView();
+        if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
+    }, { multiline: true });
 }
 
 function deleteFollowUp(noteId, followUpIdx) {
@@ -6504,30 +6553,31 @@ function editCommunityName() {
     if (!currentCommunity) return;
     const c = COMMUNITIES.find(x => x.id === currentCommunity);
     if (!c) return;
-    const newName = prompt('Edit community name:', c.name);
-    if (!newName || newName.trim() === c.name) return;
 
-    const trimmedName = newName.trim();
-    const nameDup = COMMUNITIES.find(x => x.name.toLowerCase() === trimmedName.toLowerCase() && x.id !== currentCommunity);
-    if (nameDup) {
-        showAlert('Duplicate Community', `A community named "${nameDup.name}" already exists.`);
-        return;
-    }
+    showPrompt('Edit community name', '', c.name, (newName) => {
+        if (!newName || newName === c.name) return;
 
-    const oldName = c.name;
-    c.name = trimmedName;
-    communityNameMap[currentCommunity] = trimmedName;
-    db.updateCommunity(currentCommunity, { name: c.name }).catch(handleSaveError);
+        const nameDup = COMMUNITIES.find(x => x.name.toLowerCase() === newName.toLowerCase() && x.id !== currentCommunity);
+        if (nameDup) {
+            showAlert('Duplicate Community', `A community named "${nameDup.name}" already exists.`);
+            return;
+        }
 
-    if (!setupMode) {
-        createNote('Info Edit', `Community renamed from "${oldName}" to "${c.name}".`, {
-            sensors: [], communities: [currentCommunity], contacts: [],
-        });
-    }
+        const oldName = c.name;
+        c.name = newName;
+        communityNameMap[currentCommunity] = newName;
+        db.updateCommunity(currentCommunity, { name: c.name }).catch(handleSaveError);
 
-    showCommunityView(currentCommunity);
-    buildSidebar();
-    renderPinnedSidebar();
+        if (!setupMode) {
+            createNote('Info Edit', `Community renamed from "${oldName}" to "${c.name}".`, {
+                sensors: [], communities: [currentCommunity], contacts: [],
+            });
+        }
+
+        showCommunityView(currentCommunity);
+        buildSidebar();
+        renderPinnedSidebar();
+    });
 }
 
 function openChangeParentModal(communityId) {
@@ -6743,23 +6793,24 @@ let customSensorFields = loadData('customSensorFields', []);
 let wizardState = null;
 
 function openAddFieldModal() {
-    const name = prompt('Enter the new field name (e.g. "Serial Number", "Firmware Version"):');
-    if (!name || !name.trim()) return;
+    showPrompt('Add custom field', 'Enter the new field name (e.g. "Serial Number", "Firmware Version"):', '', (name) => {
+        if (!name) return;
 
-    const key = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    if (customSensorFields.find(f => f.key === key)) {
-        showAlert('Duplicate Field', 'A field with that name already exists.');
-        return;
-    }
+        const key = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+        if (customSensorFields.find(f => f.key === key)) {
+            showAlert('Duplicate Field', 'A field with that name already exists.');
+            return;
+        }
 
-    customSensorFields.push({ key, label: name.trim() });
-    saveData('customSensorFields', customSensorFields);
-    renderSensorTableHeader();
-    renderSensors();
+        customSensorFields.push({ key, label: name });
+        saveData('customSensorFields', customSensorFields);
+        renderSensorTableHeader();
+        renderSensors();
 
-    wizardState = { fieldKey: key, fieldLabel: name.trim(), index: 0 };
-    showWizardStep();
-    openModal('modal-field-wizard');
+        wizardState = { fieldKey: key, fieldLabel: name, index: 0 };
+        showWizardStep();
+        openModal('modal-field-wizard');
+    });
 }
 
 function showWizardStep() {
@@ -6826,13 +6877,13 @@ function editCustomField(sensorId, fieldKey) {
     if (!s) return;
     const cf = customSensorFields.find(f => f.key === fieldKey);
     const currentVal = (s.customFields || {})[fieldKey] || '';
-    const newVal = prompt(`Edit ${cf?.label || fieldKey}:`, currentVal);
-    if (newVal === null) return;
-
-    if (!s.customFields) s.customFields = {};
-    s.customFields[fieldKey] = newVal.trim();
-    saveCustomFieldData();
-    if (currentSensor) showSensorView(currentSensor);
+    showPrompt(`Edit ${cf?.label || fieldKey}`, '', currentVal, (newVal) => {
+        if (newVal === null) return;
+        if (!s.customFields) s.customFields = {};
+        s.customFields[fieldKey] = newVal;
+        saveCustomFieldData();
+        if (currentSensor) showSensorView(currentSensor);
+    });
 }
 
 function editCustomFieldInline(sensorId, fieldKey, value) {
