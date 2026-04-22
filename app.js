@@ -2808,7 +2808,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Location</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
             <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'}</p></div>
 
-            <div class="info-item"><label>SOA Tag ID</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'soaTagId')">${s.soaTagId || '—'}</p></div>
+            <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
         `;
@@ -2839,6 +2839,14 @@ function showSensorView(sensorId) {
 function inlineEditSensor(sensorId, field) {
     const s = sensors.find(x => x.id === sensorId);
     if (!s) return;
+
+    // SOA Tag IDs are an identity field we don't want casually changed —
+    // restrict edits to Setup Mode (which is admin-only). Matches the UI
+    // gating on the sensor detail page.
+    if (field === 'soaTagId' && !setupMode) {
+        showAlert('Setup Mode Required', 'SOA Tag IDs can only be changed in Setup Mode. Turn on Setup Mode from the sidebar (admins only) to edit.');
+        return;
+    }
 
     const labels = { soaTagId: 'SOA Tag ID', location: 'Location', datePurchased: 'Purchase Date' };
     const label = labels[field] || field;
