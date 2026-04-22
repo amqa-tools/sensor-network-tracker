@@ -593,17 +593,8 @@
                     <label class="note-action-option"><input type="checkbox" id="move-change-status" onchange="document.getElementById('move-status-list').style.display = this.checked ? '' : 'none'"> Also change sensor status</label>
                     <div id="move-status-list" class="status-toggle-list" style="display:none;margin-top:6px"></div>
                 </div>
-                <div class="form-group" id="move-contacts-group">
-                    <label>Tag Contacts (optional)</label>
-                    <div class="tag-chip-container" id="move-contacts-container">
-                        <div class="tag-chips">
-                            <input type="text" class="tag-chip-input" placeholder="Type to search contacts...">
-                        </div>
-                        <div class="tag-chip-dropdown mention-dropdown"></div>
-                    </div>
-                </div>
                 <div class="form-group" id="move-notes-group">
-                    <label>Additional Details (optional)</label>
+                    <label>Additional Details (optional) <span style="font-weight:400;color:var(--slate-400);font-size:12px">— type @ to tag any contacts involved</span></label>
                     <textarea id="move-additional-info" rows="4" class="mention-textarea" placeholder="e.g. Removed by AC for recommended servicing. Type @ to tag a contact."></textarea>
                     <div class="mention-dropdown" id="move-mention-dropdown"></div>
                 </div>
@@ -750,8 +741,8 @@
                     <input type="datetime-local" id="note-date-input">
                 </div>
                 <div class="form-group" style="position:relative">
-                    <label>Note</label>
-                    <textarea id="note-text-input" rows="4" required class="mention-textarea" placeholder="Type @ to tag contacts (autocomplete will appear)."></textarea>
+                    <label>Note <span style="font-weight:400;color:var(--slate-400);font-size:12px">— type @ to tag any contacts involved</span></label>
+                    <textarea id="note-text-input" rows="4" required class="mention-textarea" placeholder="Describe the note. Type @ to tag contacts (autocomplete will appear)."></textarea>
                     <div class="mention-dropdown" id="note-mention-dropdown"></div>
                 </div>
                 <div class="form-group">
@@ -768,15 +759,6 @@
                     <div class="tag-chip-container" id="tag-communities-container">
                         <div class="tag-chips">
                             <input type="text" class="tag-chip-input" placeholder="Type to search communities...">
-                        </div>
-                        <div class="tag-chip-dropdown mention-dropdown"></div>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Tag Contacts</label>
-                    <div class="tag-chip-container" id="tag-contacts-container">
-                        <div class="tag-chips">
-                            <input type="text" class="tag-chip-input" placeholder="Type to search contacts...">
                         </div>
                         <div class="tag-chip-dropdown mention-dropdown"></div>
                     </div>
@@ -813,12 +795,8 @@
                     <input type="datetime-local" id="comm-date-input">
                 </div>
                 <div class="form-group">
-                    <label>Contacts Involved (comma-separated names)</label>
-                    <input type="text" id="comm-contacts-input" placeholder="e.g. Patricia Valerio, Kim Sweet">
-                </div>
-                <div class="form-group">
-                    <label>Summary</label>
-                    <textarea id="comm-text-input" rows="4" required class="mention-textarea" placeholder="Describe the communication..."></textarea>
+                    <label>Summary <span style="font-weight:400;color:var(--slate-400);font-size:12px">— type @ to tag any contacts involved</span></label>
+                    <textarea id="comm-text-input" rows="4" required class="mention-textarea" placeholder="Describe the communication. Type @ to tag involved contacts (autocomplete will appear)."></textarea>
                     <div class="mention-dropdown" id="comm-mention-dropdown"></div>
                 </div>
                 <div class="modal-footer">

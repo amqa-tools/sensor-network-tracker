@@ -2651,10 +2651,8 @@ function openMoveSensorModal(sensorId) {
     statusCheckbox.checked = false;
     document.getElementById('move-status-list').style.display = 'none';
     renderStatusToggleList('move-status-list', getStatusArray(s));
-    // Contact tagging
-    document.querySelectorAll('#move-contacts-container .tag-chip').forEach(c => c.remove());
-    setupTagChipInput('move-contacts-container', () => contacts, c => c.name);
-    document.getElementById('move-contacts-group').style.display = setupMode ? 'none' : '';
+    // Tag-contacts chip was removed — contacts get tagged via @mentions in
+    // the Additional Details textarea.
     openModal('modal-move-sensor');
 }
 
@@ -2700,14 +2698,8 @@ function moveSensor(e) {
 
     let noteText = `${sensorId} removed from ${fromName} and brought to ${toName}.${statusChangeText}${locationChangeText}`;
 
+    // Contacts tagged via @mentions in the Additional Details textarea.
     const mentionedContacts = parseMentionedContacts(additionalInfo);
-    // Get contacts tagged via chip input
-    const chipContacts = getChipValues('move-contacts-container').map(name => {
-        const c = contacts.find(x => x.name.toLowerCase() === name.toLowerCase());
-        return c ? c.id : null;
-    }).filter(Boolean);
-    // Merge chip contacts with @mentioned contacts
-    chipContacts.forEach(id => { if (!mentionedContacts.includes(id)) mentionedContacts.push(id); });
     const taggedCommunities = [fromId, toCommunityId].filter(Boolean);
 
     const structuredInfo = JSON.stringify({
@@ -3986,12 +3978,19 @@ function openContactCommModal() {
     if (!currentContact) return;
     const c = contacts.find(x => x.id === currentContact);
     if (!c) return;
-    // Open the comm modal with the contact's community, and pre-fill the contact name
+    // Open the comm modal with the contact's community, and prefill the
+    // summary with a "@Name — " starter so the contact gets tagged the
+    // moment the user saves (mentions drive contact tagging now).
     document.getElementById('comm-form').reset();
     document.getElementById('comm-community-id').value = c.community;
     document.getElementById('comm-date-input').value = nowDatetime();
-    document.getElementById('comm-contacts-input').value = c.name;
+    const summary = document.getElementById('comm-text-input');
+    if (summary) summary.value = `@${c.name} — `;
     openModal('modal-comm');
+    // Move the cursor to the end so the user types right after the mention.
+    if (summary) {
+        setTimeout(() => { summary.focus(); const len = summary.value.length; summary.setSelectionRange(len, len); }, 0);
+    }
 }
 
 // ===== EMAIL COMPOSER =====
@@ -4246,10 +4245,8 @@ function openAddNoteModal(contextId, contextType) {
         () => COMMUNITIES,
         c => c.name
     );
-    setupTagChipInput('tag-contacts-container',
-        () => contacts,
-        c => c.name
-    );
+    // Tag-contacts chip was removed — contacts are tagged via @mentions in
+    // the note body now. Keep sensor + community chips.
 
     // Reset all action checkboxes
     document.querySelectorAll('#note-actions-list input[type="checkbox"]').forEach(cb => cb.checked = false);
@@ -4328,17 +4325,9 @@ function saveNote(e) {
             return c ? c.id : null;
         }).filter(Boolean);
 
-    const contactTags = getChipValues('tag-contacts-container')
-        .map(name => {
-            const c = contacts.find(c => c.name.toLowerCase() === name.toLowerCase());
-            return c ? c.id : null;
-        }).filter(Boolean);
-
-    // Also parse @mentions from the note text itself
-    const textMentions = parseMentionedContacts(text);
-    textMentions.forEach(id => {
-        if (!contactTags.includes(id)) contactTags.push(id);
-    });
+    // Contacts come from @mentions in the note body — the separate chip
+    // input was removed so there's a single source of truth.
+    const contactTags = parseMentionedContacts(text);
 
     const note = {
         id: generateId('n'),
@@ -4427,13 +4416,9 @@ function saveComm(e) {
     const commType = document.getElementById('comm-type-input').value;
     const commDate = document.getElementById('comm-date-input').value || nowDatetime();
     const text = document.getElementById('comm-text-input').value.trim();
-    const contactNames = document.getElementById('comm-contacts-input').value
-        .split(',').map(s => s.trim()).filter(Boolean);
 
-    const taggedContacts = contactNames.map(name => {
-        const c = contacts.find(c => c.name.toLowerCase() === name.toLowerCase());
-        return c ? c.id : null;
-    }).filter(Boolean);
+    // Contacts come from @mentions in the summary — no more separate field.
+    const taggedContacts = parseMentionedContacts(text);
 
     const comm = {
         id: generateId('comm'),
@@ -4981,7 +4966,7 @@ function highlightMentions(text) {
                 for (let i = idx; i < end; i++) if (consumed[i]) { overlaps = true; break; }
                 if (overlaps) continue;
                 for (let i = idx; i < end; i++) consumed[i] = true;
-                matches.push({ start: idx, end });
+                matches.push({ start: idx, end, contactId: c.id });
             }
         }
         matches.sort((a, b) => a.start - b.start);
@@ -4989,7 +4974,8 @@ function highlightMentions(text) {
         let cursor = 0;
         for (const m of matches) {
             out += text.slice(cursor, m.start);
-            out += `<strong style="color:var(--navy-600)">${text.slice(m.start, m.end)}</strong>`;
+            // Clickable mention — navigates to the contact's detail page.
+            out += `<a href="#" onclick="event.stopPropagation(); event.preventDefault(); showContactDetail('${m.contactId}')" style="color:var(--navy-600);font-weight:600;text-decoration:none;cursor:pointer">${text.slice(m.start, m.end)}</a>`;
             cursor = m.end;
         }
         out += text.slice(cursor);
