@@ -4060,7 +4060,9 @@ function confirmLogEmail() {
         commType: 'Email',
         subject: logSubject,
         fullBody: logNotes || _pendingEmailLog.body,
-        text: `[Email] Subject: ${logSubject}${logNotes ? ' — ' + logNotes : ''}`,
+        // Same reasoning as saveComm — don't prefix with "[Email]" because
+        // the timeline header already renders the commType.
+        text: `Subject: ${logSubject}${logNotes ? ' — ' + logNotes : ''}`,
         createdBy: getCurrentUserName(), createdById: currentUserId,
         community: involvedCommunities[0] || '',
         taggedContacts: selectedContactIds,
@@ -4340,7 +4342,9 @@ function saveComm(e) {
         date: commDate,
         type: 'Communication',
         commType: commType,
-        text: `[${commType}] ${text}`,
+        // Plain text — no "[CommType]" prefix. Timeline shows commType in the
+        // header already, prefixing here duplicates it in the body.
+        text,
         createdBy: getCurrentUserName(), createdById: currentUserId,
         community: communityId,
         taggedContacts: taggedContacts,
@@ -4410,7 +4414,7 @@ function renderTimeline(containerId, items) {
                     </div>
                     ${actions}
                 </div>
-                <div class="timeline-text">${renderNoteText(item.text, isNote ? item.id : null)}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
+                <div class="timeline-text">${renderNoteText(stripCommTypePrefix(item.text, item.commType), isNote ? item.id : null)}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
                 ${additionalInfoHtml}
                 ${hasFullBody ? `<div class="timeline-text-full">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
@@ -4428,6 +4432,22 @@ function renderTimeline(containerId, items) {
             </div>
         `;
     }).join('');
+}
+
+// Legacy comms were stored with a "[CommType] " prefix that gets rendered
+// underneath a header already showing the commType — cosmetic double-write.
+// New comms skip the prefix; strip it off historical rows at display time so
+// they look the same without needing a data migration.
+function stripCommTypePrefix(text, commType) {
+    if (!text || !commType) return text;
+    const needle = `[${commType}]`;
+    if (text.startsWith(needle)) {
+        return text.slice(needle.length).replace(/^\s+/, '');
+    }
+    // Email path wrote "[Email] Subject: …" — handle the literal Email prefix
+    // even when commType isn't Email (shouldn't happen, but cheap to check).
+    if (text.startsWith('[Email]')) return text.slice('[Email]'.length).replace(/^\s+/, '');
+    return text;
 }
 
 function renderNoteText(text, noteId) {
