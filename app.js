@@ -161,6 +161,25 @@ function saveData(key, data) {
     localStorage.setItem('snt_' + key, JSON.stringify(data));
 }
 
+// Populated by loadAllData — id → display name map used by the
+// "Last edited by X on Y" labels on detail pages.
+let profileNames = {};
+
+// Shared helper: format a "Last updated by Alice on Apr 22" line from
+// a row's updated_at / updated_by. Returns '' if neither is set.
+function formatLastUpdated(row, fallbackDate) {
+    if (!row) return '';
+    const ts = row.updated_at || row.updatedAt || fallbackDate || null;
+    const byId = row.updated_by || row.updatedBy || null;
+    if (!ts && !byId) return '';
+    const byName = byId ? (profileNames[byId] || 'Unknown') : '';
+    const date = ts ? formatDate(ts) : '';
+    if (byName && date) return `Last edited by ${escapeHtml(byName)} on ${date}`;
+    if (date) return `Last edited on ${date}`;
+    if (byName) return `Last edited by ${escapeHtml(byName)}`;
+    return '';
+}
+
 // Load all data from Supabase into memory
 async function loadAllData() {
     const results = await Promise.allSettled([
@@ -174,7 +193,9 @@ async function loadAllData() {
         db.getServiceTickets(),
         db.getAudits(),
         db.getCollocations(),
+        db.getProfileNames(),
     ]);
+    profileNames = results[10]?.status === 'fulfilled' ? (results[10].value || {}) : {};
     const getValue = (i) => results[i].status === 'fulfilled' ? results[i].value : [];
     const communitiesData = getValue(0);
     const tagsData = getValue(1);
@@ -219,6 +240,11 @@ async function loadAllData() {
         collocationDates: s.collocation_dates || '',
         dateInstalled: s.date_installed || '',
         customFields: {},
+        updated_at: s.updated_at || null,
+        updated_by: s.updated_by || null,
+        active: s.active !== false,
+        archived_at: s.archived_at || null,
+        archived_by: s.archived_by || null,
     }));
 
     // Load custom field values from localStorage
@@ -2545,6 +2571,7 @@ function showSensorView(sensorId) {
             </div>
         `;
     } else {
+        const lastEdited = formatLastUpdated(s);
         document.getElementById('sensor-info-card').innerHTML = `
             <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${s.type}</p></div>
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
@@ -2555,6 +2582,12 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
+            ${lastEdited ? `<div class="info-item" style="grid-column:1/-1;font-size:12px;color:var(--slate-400);border-top:1px solid var(--slate-100);padding-top:8px;margin-top:4px">${lastEdited}${s.active === false ? ' · <span style="color:var(--aurora-rose);font-weight:600">ARCHIVED</span>' : ''}</div>` : ''}
+            <div class="info-item" style="grid-column:1/-1;text-align:right;margin-top:4px">
+                ${s.active === false
+                    ? `<button class="btn btn-sm" onclick="restoreSensorFromArchive('${s.id}')">Restore from archive</button>`
+                    : `<a class="move-sensor-link" style="font-size:12px;color:var(--slate-400)" onclick="archiveSensor('${s.id}')">Archive this sensor</a>`}
+            </div>
         `;
     }
 
@@ -4887,6 +4920,46 @@ function insertMention(textarea, dropdown, startPos, name) {
     textarea.setSelectionRange(newPos, newPos);
     textarea.focus();
     dropdown.classList.remove('visible');
+    // Trigger the mention-chip-strip refresh that textareas wire up in
+    // attachMentionChipStrip — "input" event mirrors what user typing does.
+    textarea.dispatchEvent(new Event('input'));
+}
+
+// Attach a live chip strip below a mention-textarea that reflects who's
+// currently tagged as the user types @mentions. Gives users a visible,
+// clickable list of tagged contacts instead of relying on the faint
+// inline highlight alone. Idempotent — safe to call multiple times.
+function attachMentionChipStrip(textarea) {
+    if (!textarea || textarea._chipStripInit) return;
+    textarea._chipStripInit = true;
+    // Create or find the chip strip container immediately after the
+    // textarea's form-group-style wrapper.
+    let strip = textarea.parentElement?.querySelector(':scope > .mention-chip-strip');
+    if (!strip) {
+        strip = document.createElement('div');
+        strip.className = 'mention-chip-strip';
+        strip.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;min-height:0';
+        textarea.parentElement.appendChild(strip);
+    }
+    const refresh = () => {
+        const ids = parseMentionedContacts(textarea.value || '');
+        strip.innerHTML = ids.length
+            ? '<span style="font-size:11px;color:var(--slate-400);align-self:center;margin-right:2px">Tagged:</span>'
+              + ids.map(id => {
+                    const c = contacts.find(x => x.id === id);
+                    return c ? `<span class="tag tag-contact" style="font-size:11px;padding:2px 8px">${escapeHtml(c.name)}</span>` : '';
+                }).join('')
+            : '';
+    };
+    textarea.addEventListener('input', refresh);
+    textarea.addEventListener('focus', refresh);
+    refresh();
+}
+
+// Wire chip strips onto every mention-textarea present in the DOM. Call
+// after dynamic HTML injections that include mention textareas.
+function wireAllMentionChipStrips() {
+    document.querySelectorAll('textarea.mention-textarea').forEach(attachMentionChipStrip);
 }
 
 // ===== HELPER: Parse @mentions from text =====
@@ -5376,6 +5449,10 @@ function resetTabs(container) {
 // ===== MODALS =====
 function openModal(id) {
     document.getElementById(id).classList.add('open');
+    // Wire chip strips for any mention-textareas inside (idempotent).
+    if (typeof wireAllMentionChipStrips === 'function') {
+        setTimeout(wireAllMentionChipStrips, 0);
+    }
 }
 
 function closeModal(id) {
@@ -5440,6 +5517,123 @@ async function renderSettings() {
 
     await renderAllowedUsers(userEmail);
     await renderMfaSettings();
+
+    // Trash bin — admins only.
+    const trashSection = document.getElementById('settings-trash-section');
+    if (trashSection) {
+        trashSection.style.display = currentUserRole === 'admin' ? '' : 'none';
+        if (currentUserRole === 'admin') renderTrashBin('all');
+    }
+}
+
+// ===== TRASH BIN (admin-only) =====
+let _trashCache = null;
+
+async function loadTrashBin() {
+    // Don't join profiles — FK auto-name varies across Postgres versions and
+    // PostgREST's multi-FK hinting is brittle. Resolve deleted_by via the
+    // profileNames cache at render time.
+    const results = await Promise.allSettled([
+        supa.from('notes').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+        supa.from('comms').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+        supa.from('service_tickets').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+        supa.from('audits').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+        supa.from('collocations').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+        supa.from('sensors').select('*').eq('active', false).order('archived_at', { ascending: false, nullsFirst: false }),
+    ]);
+    const flat = [];
+    const labels = ['note', 'comm', 'service_ticket', 'audit', 'collocation', 'sensor'];
+    results.forEach((r, i) => {
+        if (r.status !== 'fulfilled') {
+            console.warn('[trash] load', labels[i], 'failed:', r.reason);
+            return;
+        }
+        (r.value.data || []).forEach(row => {
+            // Sensors use archived_at; unify the sort field to deleted_at
+            // at the flat-list level.
+            if (labels[i] === 'sensor') row.deleted_at = row.archived_at;
+            flat.push({ kind: labels[i], row });
+        });
+    });
+    flat.sort((a, b) => (b.row.deleted_at || '').localeCompare(a.row.deleted_at || ''));
+    return flat;
+}
+
+async function renderTrashBin(filter) {
+    const list = document.getElementById('settings-trash-list');
+    if (!list) return;
+    document.querySelectorAll('.trash-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.trashFilter === (filter || 'all')));
+    if (!_trashCache) {
+        list.innerHTML = '<p style="color:var(--slate-400);font-size:13px">Loading…</p>';
+        _trashCache = await loadTrashBin();
+    }
+    const items = (filter && filter !== 'all') ? _trashCache.filter(it => it.kind === filter) : _trashCache;
+    if (items.length === 0) {
+        list.innerHTML = '<p style="color:var(--slate-400);font-size:13px;padding:12px 0">Trash is empty.</p>';
+        return;
+    }
+    const kindLabel = { note: 'Note', comm: 'Communication', service_ticket: 'Service Ticket', audit: 'Audit', collocation: 'Collocation', sensor: 'Archived Sensor' };
+    list.innerHTML = items.map(({ kind, row }) => {
+        const actorId = kind === 'sensor' ? row.archived_by : row.deleted_by;
+        const actorName = actorId ? (profileNames[actorId] || '[Deleted User]') : 'Unknown';
+        const when = row.deleted_at ? formatDate(row.deleted_at) : '—';
+        const actionLabel = kind === 'sensor' ? 'Archived' : 'Deleted';
+        let preview = '';
+        if (kind === 'note' || kind === 'comm') {
+            preview = (row.text || '').slice(0, 160);
+        } else if (kind === 'service_ticket') {
+            preview = `${row.sensor_id || ''} — ${(row.issue_description || '').slice(0, 120)}`;
+        } else if (kind === 'audit') {
+            preview = `${row.community_name || row.sensor_sn || ''} ${row.scheduled_start || ''}`;
+        } else if (kind === 'collocation') {
+            preview = `${row.location_id || ''} ${row.start_date || ''}`;
+        } else if (kind === 'sensor') {
+            preview = `${row.id} · ${row.type || ''} · ${row.location || ''}`;
+        }
+        const purgeBtn = kind === 'sensor'
+            ? '' // Archived sensors don't get a "purge forever" — sensor deletion is a separate admin action with wider consequences (audit/ticket references).
+            : `<button class="btn btn-sm btn-danger" onclick="purgeFromTrash('${kind}','${row.id}')" style="font-size:11px;opacity:0.7">Purge</button>`;
+        return `<div style="border:1px solid var(--slate-100);border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start">
+            <div style="flex:1;min-width:0">
+                <div style="font-size:11px;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.4px">${kindLabel[kind]}</div>
+                <div style="font-size:13px;color:var(--slate-700);margin-top:2px;word-break:break-word">${escapeHtml(preview) || '<em style="color:var(--slate-400)">(empty)</em>'}</div>
+                <div style="font-size:11px;color:var(--slate-400);margin-top:4px">${actionLabel} by ${escapeHtml(actorName)} on ${when}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+                <button class="btn btn-sm btn-primary" onclick="restoreFromTrash('${kind}','${row.id}')">Restore</button>
+                ${purgeBtn}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function restoreFromTrash(kind, id) {
+    try {
+        if (kind === 'note') await db.restoreNote(id);
+        else if (kind === 'comm') await db.restoreComm(id);
+        else if (kind === 'service_ticket') await db.restoreServiceTicket(id);
+        else if (kind === 'audit') await db.restoreAudit(id);
+        else if (kind === 'collocation') await db.restoreCollocation(id);
+        else if (kind === 'sensor') await db.restoreSensor(id);
+        _trashCache = null;
+        showSuccessToast('Restored — reload to see it in context');
+        renderTrashBin(document.querySelector('.trash-filter-btn.active')?.dataset.trashFilter || 'all');
+    } catch (err) { handleSaveError(err); }
+}
+
+async function purgeFromTrash(kind, id) {
+    showConfirm('Purge Forever', 'Permanently delete this item? It will <strong>not</strong> be recoverable from the trash bin.', async () => {
+        try {
+            if (kind === 'note') await db.hardDeleteNote(id);
+            else if (kind === 'comm') await db.hardDeleteComm(id);
+            else if (kind === 'service_ticket') await db.hardDeleteServiceTicket(id);
+            else if (kind === 'audit') await db.hardDeleteAudit(id);
+            else if (kind === 'collocation') await db.hardDeleteCollocation(id);
+            _trashCache = null;
+            showSuccessToast('Purged');
+            renderTrashBin(document.querySelector('.trash-filter-btn.active')?.dataset.trashFilter || 'all');
+        } catch (err) { handleSaveError(err); }
+    }, { danger: true, confirmText: 'Delete Forever' });
 }
 
 function editProfileName(el) {
@@ -6547,6 +6741,41 @@ function updatePinButton(communityId) {
     const label = document.getElementById('pin-label');
     if (icon) icon.textContent = isPinned ? '\u2605' : '\u2606';
     if (label) label.textContent = isPinned ? 'Unpin' : 'Pin';
+}
+
+// Archive (soft-retire) a sensor. Preserves all history; sensor drops off
+// the active list but can be restored. Distinct from delete (which admins
+// can still do, and which soft-deletes into the trash bin).
+async function archiveSensor(sensorId) {
+    const s = sensors.find(x => x.id === sensorId);
+    if (!s) return;
+    showConfirm('Archive Sensor',
+        `Archive <strong>${escapeHtml(s.id)}</strong>?<br><br>This removes it from the active list but preserves its full history. You can restore it later. Use this when a sensor is decommissioned or permanently retired.`,
+        async () => {
+            try {
+                await db.archiveSensor(sensorId);
+                s.active = false;
+                s.archived_at = new Date().toISOString();
+                buildSensorSidebar();
+                showSensorView(sensorId);
+                showSuccessToast('Sensor archived');
+            } catch (err) { handleSaveError(err); }
+        },
+        { confirmText: 'Archive' });
+}
+
+async function restoreSensorFromArchive(sensorId) {
+    const s = sensors.find(x => x.id === sensorId);
+    if (!s) return;
+    try {
+        await db.restoreSensor(sensorId);
+        s.active = true;
+        s.archived_at = null;
+        s.archived_by = null;
+        buildSensorSidebar();
+        showSensorView(sensorId);
+        showSuccessToast('Sensor restored');
+    } catch (err) { handleSaveError(err); }
 }
 
 function editCommunityName() {

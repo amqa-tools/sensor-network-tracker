@@ -142,10 +142,28 @@ const db = {
     },
 
     // --- Sensors ---
-    async getSensors() {
-        const { data, error } = await supa.from('sensors').select('*').order('id');
+    // Default to active-only; callers that want archived pods pass
+    // {includeArchived: true}. Sensors use an 'active' flag rather than
+    // deleted_at because the UX reads more naturally as "Active / Archived"
+    // for physical inventory. Profile-name resolution for updated_by /
+    // archived_by is done at display time via the profiles cache.
+    async getSensors(opts = {}) {
+        let q = supa.from('sensors').select('*');
+        if (!opts.includeArchived) q = q.or('active.is.null,active.eq.true');
+        const { data, error } = await q.order('id');
         if (error) throw error;
         return data || [];
+    },
+
+    // Profile name lookup cache — populated once at login, consumed by
+    // "last edited by X" labels across detail pages. Returns a plain
+    // object { <id>: <display name>, ... }.
+    async getProfileNames() {
+        const { data, error } = await supa.from('profiles').select('id, name');
+        if (error) return {};
+        const out = {};
+        (data || []).forEach(p => { if (p.id) out[p.id] = p.name || ''; });
+        return out;
     },
 
     async upsertSensor(sensor) {
@@ -161,6 +179,23 @@ const db = {
             date_installed: sensor.dateInstalled || '',
             updated_at: new Date().toISOString(),
         });
+        if (error) throw error;
+    },
+
+    async archiveSensor(id) {
+        const { error } = await supa.from('sensors').update({
+            active: false,
+            archived_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async restoreSensor(id) {
+        const { error } = await supa.from('sensors').update({
+            active: true,
+            archived_at: null,
+            archived_by: null,
+        }).eq('id', id);
         if (error) throw error;
     },
 
