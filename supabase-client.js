@@ -256,9 +256,12 @@ const db = {
 
     // --- Notes ---
     async getNotes() {
+        // Disambiguate the FK — with updated_by and deleted_by also
+        // pointing at profiles, `profiles(name)` is now ambiguous and
+        // returns nothing. Pin the join to created_by specifically.
         const { data, error } = await supa
             .from('notes')
-            .select('*, note_tags(*), profiles(name)')
+            .select('*, note_tags(*), profiles:created_by(name)')
             .order('date', { ascending: false });
         if (error) throw error;
         // Filter soft-deleted rows client-side — robust against PostgREST
@@ -361,7 +364,7 @@ const db = {
     async getComms() {
         const { data, error } = await supa
             .from('comms')
-            .select('*, comm_tags(*), profiles(name)')
+            .select('*, comm_tags(*), profiles:created_by(name)')
             .order('date', { ascending: false });
         if (error) throw error;
         const live = (data || []).filter(r => !r.deleted_at);
@@ -486,7 +489,7 @@ const db = {
     // --- Audits ---
     async getAudits() {
         const { data, error } = await supa
-            .from('audits').select('*, profiles(name)')
+            .from('audits').select('*, profiles:created_by(name)')
             .order('scheduled_start', { ascending: false });
         if (error) throw error;
         const live = (data || []).filter(r => !r.deleted_at);
@@ -517,7 +520,7 @@ const db = {
             analysis_name: audit.analysisName || '', analysis_upload_date: audit.analysisUploadDate || null,
             analysis_uploaded_by: audit.analysisUploadedBy || '',
             analysis_chart_data: audit.analysisChartData || null, created_by: audit.createdById || null,
-        }).select('*, profiles(name)');
+        }).select('*, profiles:created_by(name)');
         if (error) throw error;
         const a = data[0];
         return {
@@ -555,7 +558,7 @@ const db = {
     // --- Collocations ---
     async getCollocations() {
         const { data, error } = await supa
-            .from('collocations').select('*, profiles(name)')
+            .from('collocations').select('*, profiles:created_by(name)')
             .order('start_date', { ascending: false });
         if (error) throw error;
         const live = (data || []).filter(r => !r.deleted_at);
@@ -581,7 +584,7 @@ const db = {
             sensor_ids: colloc.sensorIds || [], permanent_pod_id: colloc.permanentPodId || '',
             bam_source: colloc.bamSource || '', conducted_by: colloc.conductedBy || '',
             notes: serializeNotesField(colloc.progressNotes), created_by: colloc.createdById || null,
-        }).select('*, profiles(name)');
+        }).select('*, profiles:created_by(name)');
         if (error) throw error;
         const c = data[0];
         return {
@@ -636,7 +639,7 @@ const db = {
     // --- Service Tickets ---
     async getServiceTickets() {
         const { data, error } = await supa
-            .from('service_tickets').select('*, profiles(name)')
+            .from('service_tickets').select('*, profiles:created_by(name)')
             .order('created_at', { ascending: false });
         if (error) throw error;
         const live = (data || []).filter(r => !r.deleted_at);
@@ -670,7 +673,7 @@ const db = {
             fedex_tracking_to: ticket.fedexTrackingTo || '', fedex_tracking_from: ticket.fedexTrackingFrom || '',
             issue_description: ticket.issueDescription || '', quant_notes: JSON.stringify(ticket.progressNotes || []),
             work_completed: ticket.workCompleted || '', created_by: ticket.createdById || null,
-        }).select('*, profiles(name)');
+        }).select('*, profiles:created_by(name)');
         if (error) throw error;
         const t = data[0];
         const returnedIds = Array.isArray(t.sensor_ids) && t.sensor_ids.length > 0
