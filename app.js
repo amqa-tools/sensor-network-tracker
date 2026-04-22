@@ -7280,7 +7280,7 @@ function saveTicketField(ticketId, field, value) {
     persistServiceTicketUpdate(ticketId, { [field]: value });
 }
 
-function addProgressNote(ticketId) {
+async function addProgressNote(ticketId) {
     const input = document.getElementById('progress-note-input-' + ticketId);
     if (!input) return;
     const text = input.value.trim();
@@ -7289,19 +7289,22 @@ function addProgressNote(ticketId) {
     const ticket = serviceTickets.find(t => t.id === ticketId);
     if (!ticket) return;
 
-    if (!ticket.progressNotes) ticket.progressNotes = [];
-    ticket.progressNotes.push({
-        text: text,
-        by: getCurrentUserName(),
-        at: nowDatetime(),
-        taggedContacts: parseMentionedContacts(text),
-    });
+    // Atomic server-side append — prevents the read-modify-write race where
+    // two simultaneous "Add Note" clicks would overwrite each other.
+    try {
+        const saved = await db.appendProgressNote('service_ticket', ticketId, text, parseMentionedContacts(text));
+        if (!ticket.progressNotes) ticket.progressNotes = [];
+        ticket.progressNotes.push(saved || {
+            text, by: getCurrentUserName(), at: nowDatetime(),
+            taggedContacts: parseMentionedContacts(text),
+        });
+    } catch (err) {
+        handleSaveError(err);
+        return;
+    }
 
-    persistServiceTicketUpdate(ticketId, { progressNotes: ticket.progressNotes });
     input.value = '';
-    // Re-render the ticket detail to show the new note
     openTicketDetail(ticketId);
-    // Also refresh sensor ticket preview if visible
     if (currentSensor) renderSensorTickets(currentSensor);
 }
 
@@ -7428,30 +7431,34 @@ function handleProgressNoteKeydown(event, itemId, addFn) {
     if (typeof window[addFn] === 'function') window[addFn](itemId);
 }
 
-function addAuditProgressNote(auditId) {
+async function addAuditProgressNote(auditId) {
     const input = document.getElementById('progress-note-input-' + auditId);
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
-    if (!audit.progressNotes) audit.progressNotes = [];
-    audit.progressNotes.push({ text, by: getCurrentUserName(), at: nowDatetime(), taggedContacts: parseMentionedContacts(text) });
-    persistAuditUpdate(auditId, { progressNotes: audit.progressNotes });
+    try {
+        const saved = await db.appendProgressNote('audit', auditId, text, parseMentionedContacts(text));
+        if (!audit.progressNotes) audit.progressNotes = [];
+        audit.progressNotes.push(saved || { text, by: getCurrentUserName(), at: nowDatetime(), taggedContacts: parseMentionedContacts(text) });
+    } catch (err) { handleSaveError(err); return; }
     input.value = '';
     openAuditDetail(auditId);
 }
 
-function addCollocationProgressNote(collocId) {
+async function addCollocationProgressNote(collocId) {
     const input = document.getElementById('progress-note-input-' + collocId);
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
     const colloc = collocations.find(c => c.id === collocId);
     if (!colloc) return;
-    if (!colloc.progressNotes) colloc.progressNotes = [];
-    colloc.progressNotes.push({ text, by: getCurrentUserName(), at: nowDatetime(), taggedContacts: parseMentionedContacts(text) });
-    persistCollocationUpdate(collocId, { progressNotes: colloc.progressNotes });
+    try {
+        const saved = await db.appendProgressNote('collocation', collocId, text, parseMentionedContacts(text));
+        if (!colloc.progressNotes) colloc.progressNotes = [];
+        colloc.progressNotes.push(saved || { text, by: getCurrentUserName(), at: nowDatetime(), taggedContacts: parseMentionedContacts(text) });
+    } catch (err) { handleSaveError(err); return; }
     input.value = '';
     openCollocationDetail(collocId);
 }
@@ -7552,9 +7559,9 @@ async function deleteServiceTicket(ticketId) {
         // Delete auto-generated service notes
         await deleteAutoNotes('Service', ticketIds);
 
-        // Remove from database
+        // Soft delete — recoverable from the trash bin.
         try {
-            await supa.from('service_tickets').delete().eq('id', ticketId);
+            await db.deleteServiceTicket(ticketId);
         } catch (err) {
             console.error('Delete ticket error:', err);
         }
@@ -8316,9 +8323,9 @@ async function deleteAudit(auditId) {
         // Delete auto-generated audit notes
         await deleteAutoNotes('Audit', [audit.auditPodId, audit.communityPodId]);
 
-        // Remove from database
+        // Soft delete — recoverable from the trash bin.
         try {
-            await supa.from('audits').delete().eq('id', auditId);
+            await db.deleteAudit(auditId);
         } catch (err) {
             console.error('Delete audit error:', err);
         }

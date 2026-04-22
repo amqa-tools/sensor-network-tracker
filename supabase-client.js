@@ -213,6 +213,7 @@ const db = {
         const { data, error } = await supa
             .from('notes')
             .select('*, note_tags(*), profiles(name)')
+            .is('deleted_at', null)
             .order('date', { ascending: false });
         if (error) throw error;
 
@@ -284,8 +285,24 @@ const db = {
     },
 
     async deleteNote(id) {
-        // note_tags has ON DELETE CASCADE but explicit delete lets us surface
-        // permission errors on the tags table if RLS ever changes.
+        // Soft delete — keeps the row in the DB for recovery / audit. The
+        // trash bin UI filters these out by default; admins can restore.
+        const { error } = await supa.from('notes').update({
+            deleted_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async restoreNote(id) {
+        const { error } = await supa.from('notes').update({
+            deleted_at: null, deleted_by: null,
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async hardDeleteNote(id) {
+        // Admin-only permanent delete (trash-bin → purge). note_tags has
+        // ON DELETE CASCADE but explicit delete surfaces permission errors.
         const { error: tagErr } = await supa.from('note_tags').delete().eq('note_id', id);
         if (tagErr) throw tagErr;
         const { error } = await supa.from('notes').delete().eq('id', id);
@@ -297,6 +314,7 @@ const db = {
         const { data, error } = await supa
             .from('comms')
             .select('*, comm_tags(*), profiles(name)')
+            .is('deleted_at', null)
             .order('date', { ascending: false });
         if (error) throw error;
 
@@ -360,6 +378,21 @@ const db = {
     },
 
     async deleteComm(id) {
+        // Soft delete — recoverable from the trash bin.
+        const { error } = await supa.from('comms').update({
+            deleted_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async restoreComm(id) {
+        const { error } = await supa.from('comms').update({
+            deleted_at: null, deleted_by: null,
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async hardDeleteComm(id) {
         const { error: tagErr } = await supa.from('comm_tags').delete().eq('comm_id', id);
         if (tagErr) throw tagErr;
         const { error } = await supa.from('comms').delete().eq('id', id);
@@ -404,7 +437,10 @@ const db = {
 
     // --- Audits ---
     async getAudits() {
-        const { data, error } = await supa.from('audits').select('*, profiles(name)').order('scheduled_start', { ascending: false });
+        const { data, error } = await supa
+            .from('audits').select('*, profiles(name)')
+            .is('deleted_at', null)
+            .order('scheduled_start', { ascending: false });
         if (error) throw error;
         return (data || []).map(a => ({
             id: a.id, auditPodId: a.audit_pod_id, communityPodId: a.community_pod_id,
@@ -470,7 +506,10 @@ const db = {
 
     // --- Collocations ---
     async getCollocations() {
-        const { data, error } = await supa.from('collocations').select('*, profiles(name)').order('start_date', { ascending: false });
+        const { data, error } = await supa
+            .from('collocations').select('*, profiles(name)')
+            .is('deleted_at', null)
+            .order('start_date', { ascending: false });
         if (error) throw error;
         return (data || []).map(c => ({
             id: c.id, locationId: c.location_id, status: c.status,
@@ -528,13 +567,30 @@ const db = {
     },
 
     async deleteCollocation(id) {
+        const { error } = await supa.from('collocations').update({
+            deleted_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async restoreCollocation(id) {
+        const { error } = await supa.from('collocations').update({
+            deleted_at: null, deleted_by: null,
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async hardDeleteCollocation(id) {
         const { error } = await supa.from('collocations').delete().eq('id', id);
         if (error) throw error;
     },
 
     // --- Service Tickets ---
     async getServiceTickets() {
-        const { data, error } = await supa.from('service_tickets').select('*, profiles(name)').order('created_at', { ascending: false });
+        const { data, error } = await supa
+            .from('service_tickets').select('*, profiles(name)')
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false });
         if (error) throw error;
         return (data || []).map(t => {
             const sensorIds = Array.isArray(t.sensor_ids) && t.sensor_ids.length > 0
@@ -585,6 +641,60 @@ const db = {
         };
     },
 
+    async deleteServiceTicket(id) {
+        const { error } = await supa.from('service_tickets').update({
+            deleted_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async restoreServiceTicket(id) {
+        const { error } = await supa.from('service_tickets').update({
+            deleted_at: null, deleted_by: null,
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async hardDeleteServiceTicket(id) {
+        const { error } = await supa.from('service_tickets').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async deleteAudit(id) {
+        const { error } = await supa.from('audits').update({
+            deleted_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async restoreAudit(id) {
+        const { error } = await supa.from('audits').update({
+            deleted_at: null, deleted_by: null,
+        }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async hardDeleteAudit(id) {
+        const { error } = await supa.from('audits').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    // Atomic server-side append to a record's progress-notes JSON. Prevents
+    // the read-modify-write race where two users' simultaneous "Add Note"
+    // would overwrite each other — the RPC wraps the UPDATE in a single
+    // row-locked statement. recordKind is 'service_ticket' | 'audit' |
+    // 'collocation'. Returns the inserted note object.
+    async appendProgressNote(recordKind, recordId, noteText, taggedContacts) {
+        const { data, error } = await supa.rpc('append_progress_note', {
+            record_kind: recordKind,
+            record_id: recordId,
+            note_text: noteText,
+            tagged_contacts: (taggedContacts || []).map(String),
+        });
+        if (error) throw error;
+        return data;
+    },
+
     async updateServiceTicket(id, updates) {
         const row = { updated_at: new Date().toISOString() };
         const map = { rmaNumber: 'rma_number', fedexTrackingTo: 'fedex_tracking_to', fedexTrackingFrom: 'fedex_tracking_from', issueDescription: 'issue_description', progressNotes: 'quant_notes', workCompleted: 'work_completed', closedAt: 'closed_at', status: 'status' };
@@ -629,24 +739,26 @@ const db = {
 // ===== SANDBOX MODE =====
 // Activated by ?sandbox=1 — reads still hit Supabase, writes are no-ops.
 // Nothing you do in sandbox mode persists; refresh and it's gone.
+//
+// WRITE detection is name-based to avoid a brittle allow-list: any db.*
+// method whose name starts with one of these verbs is treated as a write.
+// New write methods added in the future are covered automatically.
 window.SANDBOX_MODE = new URLSearchParams(location.search).has('sandbox');
 if (window.SANDBOX_MODE) {
-    const WRITE_METHODS = [
-        'setAppSetting',
-        'insertCommunity', 'updateCommunity', 'deleteCommunity',
-        'setCommunityTags',
-        'upsertSensor', 'deleteSensor',
-        'upsertContact', 'deleteContact',
-        'insertNote', 'updateNote', 'deleteNote',
-        'insertComm', 'updateComm', 'deleteComm',
-        'uploadFile', 'deleteFile', 'renameCommunityFile',
-        'insertAudit', 'updateAudit',
-        'insertCollocation', 'updateCollocation', 'deleteCollocation',
-        'insertServiceTicket', 'updateServiceTicket',
-        'updateQuantAQAlert', 'deleteQuantAQAlert',
+    const WRITE_PREFIXES = [
+        'insert', 'update', 'upsert', 'delete', 'hardDelete',
+        'restore', 'set', 'upload', 'rename', 'append', 'add',
+        'send', 'archive', 'unarchive',
     ];
-    for (const name of WRITE_METHODS) {
+    const READ_EXCEPTIONS = new Set([
+        // Methods that look like writes but are safe reads — keep them live
+        // so the sandbox still works for diagnostics.
+        'getSession', 'getAppSetting', 'signIn', 'signOut', 'signUp',
+    ]);
+    for (const name of Object.keys(db)) {
         if (typeof db[name] !== 'function') continue;
+        if (READ_EXCEPTIONS.has(name)) continue;
+        if (!WRITE_PREFIXES.some(p => name.startsWith(p))) continue;
         db[name] = async function(...args) {
             console.log(`[sandbox] ${name} no-op`, args);
             // Return the first arg (usually the record being written) so callers
