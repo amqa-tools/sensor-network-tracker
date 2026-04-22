@@ -253,6 +253,11 @@ async function loadAllData() {
     // Merge duplicate status change notes with general notes created at same time
     mergeStatusChangeNotes();
 
+    // One-time: merge the two separate edits Ayla did for MOD-00656
+    // (move to Chickaloon + Location → "burn monitoring") into a single
+    // Movement note, mirroring the new move-with-location flow.
+    mergeMod656MoveAndLocation();
+
     // Ensure notes containing status change text have the Status Change type tag
     tagNotesWithStatusChange();
 
@@ -648,6 +653,71 @@ function cleanupOldMigrationNotes() {
         console.log('Cleaned up ' + toDelete.length + ' old migration notes');
     }
     localStorage.setItem('snt_collocMigration_cleaned', '1');
+}
+
+function mergeMod656MoveAndLocation() {
+    // One-shot: the move-sensor modal didn't include a location field until
+    // now, so moving MOD-00656 to Chickaloon and updating its location to
+    // "burn monitoring" left two separate notes (a Movement + an Info Edit).
+    // Fold them into a single Movement note — same shape the new modal would
+    // produce — and delete the Info Edit. Safe to run against untouched data:
+    // no-op if either note is missing or already merged.
+    if (localStorage.getItem('snt_mergeMod656MoveLocation_v1')) return;
+    const SN = 'MOD-00656';
+    const moveNote = notes.find(n =>
+        n.type === 'Movement'
+        && Array.isArray(n.taggedSensors) && n.taggedSensors.includes(SN)
+        && typeof n.text === 'string'
+        && /brought to Chickaloon/i.test(n.text)
+    );
+    const locNote = notes.find(n =>
+        n.type === 'Info Edit'
+        && Array.isArray(n.taggedSensors) && n.taggedSensors.includes(SN)
+        && typeof n.text === 'string'
+        && /location changed from/i.test(n.text)
+        && /burn monitoring/i.test(n.text)
+    );
+    if (!moveNote || !locNote) {
+        // If the move note is already merged (mentions the location change
+        // inline) we don't want to retry forever. Mark the flag to lock it.
+        if (moveNote && /Location changed from/i.test(moveNote.text)) {
+            localStorage.setItem('snt_mergeMod656MoveLocation_v1', '1');
+        }
+        return;
+    }
+    // Pull old/new location out of the Info Edit text: `... from "X" to "Y".`
+    const m = locNote.text.match(/from "([^"]*)" to "([^"]*)"/i);
+    const beforeLocation = m ? m[1] : '';
+    const afterLocation = m ? m[2] : 'Burn Monitoring';
+    // Update the Movement note's body to include the location change.
+    if (!/Location changed from/i.test(moveNote.text)) {
+        moveNote.text = moveNote.text.replace(/\s*$/, '') +
+            `\nLocation changed from "${beforeLocation || '(empty)'}" to "${afterLocation || '(empty)'}".`;
+    }
+    // Fold the location change into structured additionalInfo so the timeline
+    // and any future revert path see it.
+    let parsed = {};
+    try { parsed = JSON.parse(moveNote.additionalInfo || '{}') || {}; } catch (_) { parsed = {}; }
+    parsed.beforeLocation = parsed.beforeLocation ?? beforeLocation;
+    parsed.afterLocation = parsed.afterLocation ?? afterLocation;
+    moveNote.additionalInfo = JSON.stringify(parsed);
+    // Absorb any taggedContacts the Info Edit note had (shouldn't be any
+    // for location changes, but safer to preserve).
+    for (const cId of (locNote.taggedContacts || [])) {
+        if (!moveNote.taggedContacts) moveNote.taggedContacts = [];
+        if (!moveNote.taggedContacts.includes(cId)) moveNote.taggedContacts.push(cId);
+    }
+    // Persist the merged Movement note and delete the Info Edit.
+    db.updateNote(moveNote.id, { text: moveNote.text, additional_info: moveNote.additionalInfo })
+        .catch(err => console.warn('[mergeMod656] update move note failed', err));
+    db.deleteNote(locNote.id)
+        .then(() => {
+            const idx = notes.indexOf(locNote);
+            if (idx >= 0) notes.splice(idx, 1);
+        })
+        .catch(err => console.warn('[mergeMod656] delete location note failed', err));
+    localStorage.setItem('snt_mergeMod656MoveLocation_v1', '1');
+    console.log('[mergeMod656] merged move + location-change notes for MOD-00656');
 }
 
 function cleanupDuplicatedCollocationNoteTitles() {
@@ -2567,10 +2637,12 @@ function openMoveSensorModal(sensorId) {
     document.getElementById('move-sensor-label').textContent = s.id;
     document.getElementById('move-from-label').textContent = getCommunityName(s.community);
     document.getElementById('move-additional-info').value = '';
+    document.getElementById('move-location-input').value = s.location || '';
     document.getElementById('move-date').value = nowDatetime();
     populateGroupedCommunitySelect('move-to-community');
-    // Hide date and notes fields in setup mode
+    // Hide date, location, and notes fields in setup mode
     document.getElementById('move-date-group').style.display = setupMode ? 'none' : '';
+    document.getElementById('move-location-group').style.display = setupMode ? 'none' : '';
     document.getElementById('move-notes-group').style.display = setupMode ? 'none' : '';
     // Status change option
     const statusGroup = document.getElementById('move-status-group');
@@ -2592,6 +2664,7 @@ function moveSensor(e) {
     const toCommunityId = document.getElementById('move-to-community').value;
     const additionalInfo = document.getElementById('move-additional-info').value.trim();
     const moveDate = document.getElementById('move-date').value || nowDatetime();
+    const newLocation = (document.getElementById('move-location-input')?.value || '').trim();
 
     const s = sensors.find(x => x.id === sensorId);
     if (!s) return;
@@ -2600,6 +2673,7 @@ function moveSensor(e) {
     const fromName = getCommunityName(fromId);
     const toName = getCommunityName(toCommunityId);
     const beforeDateInstalled = s.dateInstalled || '';
+    const beforeLocation = s.location || '';
 
     s.community = toCommunityId;
 
@@ -2614,9 +2688,17 @@ function moveSensor(e) {
         }
     }
 
+    // Apply optional location change (fold into the same Movement note so
+    // it's one event, not two).
+    let locationChangeText = '';
+    if (newLocation !== beforeLocation) {
+        s.location = newLocation;
+        locationChangeText = `\nLocation changed from "${beforeLocation || '(empty)'}" to "${newLocation || '(empty)'}".`;
+    }
+
     persistSensor(s);
 
-    let noteText = `${sensorId} removed from ${fromName} and brought to ${toName}.${statusChangeText}`;
+    let noteText = `${sensorId} removed from ${fromName} and brought to ${toName}.${statusChangeText}${locationChangeText}`;
 
     const mentionedContacts = parseMentionedContacts(additionalInfo);
     // Get contacts tagged via chip input
@@ -2634,6 +2716,8 @@ function moveSensor(e) {
         fromCommunity: fromId || '',
         toCommunity: toCommunityId,
         beforeDateInstalled: beforeDateInstalled,
+        beforeLocation: beforeLocation,
+        afterLocation: s.location || '',
     });
 
     const note = {
