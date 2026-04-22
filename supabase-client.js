@@ -148,11 +148,12 @@ const db = {
     // for physical inventory. Profile-name resolution for updated_by /
     // archived_by is done at display time via the profiles cache.
     async getSensors(opts = {}) {
-        let q = supa.from('sensors').select('*');
-        if (!opts.includeArchived) q = q.or('active.is.null,active.eq.true');
-        const { data, error } = await q.order('id');
+        const { data, error } = await supa.from('sensors').select('*').order('id');
         if (error) throw error;
-        return data || [];
+        // Client-side active-filter so a stale PostgREST schema cache
+        // can't wipe the sensor list when the 'active' column was just added.
+        if (opts.includeArchived) return data || [];
+        return (data || []).filter(s => s.active === undefined || s.active === null || s.active === true);
     },
 
     // Profile name lookup cache — populated once at login, consumed by
@@ -258,11 +259,13 @@ const db = {
         const { data, error } = await supa
             .from('notes')
             .select('*, note_tags(*), profiles(name)')
-            .is('deleted_at', null)
             .order('date', { ascending: false });
         if (error) throw error;
+        // Filter soft-deleted rows client-side — robust against PostgREST
+        // schema-cache hiccups where a just-added column isn't visible yet.
+        const live = (data || []).filter(r => !r.deleted_at);
 
-        return (data || []).map(note => {
+        return live.map(note => {
             const tags = note.note_tags || [];
             return {
                 id: note.id,
@@ -359,11 +362,11 @@ const db = {
         const { data, error } = await supa
             .from('comms')
             .select('*, comm_tags(*), profiles(name)')
-            .is('deleted_at', null)
             .order('date', { ascending: false });
         if (error) throw error;
+        const live = (data || []).filter(r => !r.deleted_at);
 
-        return (data || []).map(comm => {
+        return live.map(comm => {
             const tags = comm.comm_tags || [];
             return {
                 id: comm.id,
@@ -484,10 +487,10 @@ const db = {
     async getAudits() {
         const { data, error } = await supa
             .from('audits').select('*, profiles(name)')
-            .is('deleted_at', null)
             .order('scheduled_start', { ascending: false });
         if (error) throw error;
-        return (data || []).map(a => ({
+        const live = (data || []).filter(r => !r.deleted_at);
+        return live.map(a => ({
             id: a.id, auditPodId: a.audit_pod_id, communityPodId: a.community_pod_id,
             communityId: a.community_id, status: a.status,
             scheduledStart: a.scheduled_start, scheduledEnd: a.scheduled_end,
@@ -553,10 +556,10 @@ const db = {
     async getCollocations() {
         const { data, error } = await supa
             .from('collocations').select('*, profiles(name)')
-            .is('deleted_at', null)
             .order('start_date', { ascending: false });
         if (error) throw error;
-        return (data || []).map(c => ({
+        const live = (data || []).filter(r => !r.deleted_at);
+        return live.map(c => ({
             id: c.id, locationId: c.location_id, status: c.status,
             startDate: c.start_date || '', endDate: c.end_date || '',
             sensorIds: c.sensor_ids || [], permanentPodId: c.permanent_pod_id || '',
@@ -634,10 +637,10 @@ const db = {
     async getServiceTickets() {
         const { data, error } = await supa
             .from('service_tickets').select('*, profiles(name)')
-            .is('deleted_at', null)
             .order('created_at', { ascending: false });
         if (error) throw error;
-        return (data || []).map(t => {
+        const live = (data || []).filter(r => !r.deleted_at);
+        return live.map(t => {
             const sensorIds = Array.isArray(t.sensor_ids) && t.sensor_ids.length > 0
                 ? t.sensor_ids
                 : (t.sensor_id ? [t.sensor_id] : []);

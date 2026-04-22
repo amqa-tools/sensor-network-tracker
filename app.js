@@ -5553,17 +5553,31 @@ async function renderSettings() {
 let _trashCache = null;
 
 async function loadTrashBin() {
-    // Don't join profiles — FK auto-name varies across Postgres versions and
-    // PostgREST's multi-FK hinting is brittle. Resolve deleted_by via the
-    // profileNames cache at render time.
+    // Select all and filter client-side. Avoids the "schema cache says
+    // column doesn't exist" failure mode that wiped the sensor/ticket/
+    // audit/collocation lists once already.
     const results = await Promise.allSettled([
-        supa.from('notes').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
-        supa.from('comms').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
-        supa.from('service_tickets').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
-        supa.from('audits').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
-        supa.from('collocations').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
-        supa.from('sensors').select('*').eq('active', false).order('archived_at', { ascending: false, nullsFirst: false }),
+        supa.from('notes').select('*'),
+        supa.from('comms').select('*'),
+        supa.from('service_tickets').select('*'),
+        supa.from('audits').select('*'),
+        supa.from('collocations').select('*'),
+        supa.from('sensors').select('*'),
     ]);
+    // Filter each to just the deleted/archived rows.
+    const filters = [
+        r => r.deleted_at,
+        r => r.deleted_at,
+        r => r.deleted_at,
+        r => r.deleted_at,
+        r => r.deleted_at,
+        r => r.active === false,
+    ];
+    results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value?.data) {
+            r.value.data = r.value.data.filter(filters[i]);
+        }
+    });
     const flat = [];
     const labels = ['note', 'comm', 'service_ticket', 'audit', 'collocation', 'sensor'];
     results.forEach((r, i) => {
