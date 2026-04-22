@@ -158,6 +158,16 @@ const db = {
     // Profile name lookup cache — populated once at login, consumed by
     // "last edited by X" labels across detail pages. Returns a plain
     // object { <id>: <display name>, ... }.
+    async getAppSettingMeta(key) {
+        const { data, error } = await supa
+            .from('app_settings')
+            .select('key, value, updated_at, updated_by')
+            .eq('key', key)
+            .maybeSingle();
+        if (error) return null;
+        return data || null;
+    },
+
     async getProfileNames() {
         const { data, error } = await supa.from('profiles').select('id, name');
         if (error) return {};

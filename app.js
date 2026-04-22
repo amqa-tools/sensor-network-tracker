@@ -1977,6 +1977,7 @@ function renderSensors() {
     const cols = getVisibleColumns();
     const totalCols = cols.length + 3; // checkbox + sensor ID + actions
 
+    setTimeout(labelAllTables, 0); // pick up the just-rendered rows
     document.getElementById('sensors-tbody').innerHTML = filtered.map(s => {
         const checkbox = `<td><input type="checkbox" class="sensor-checkbox" data-sensor-id="${s.id}" onchange="toggleSensorCheckbox('${s.id}', this.checked)" ${selectedSensors.has(s.id) ? 'checked' : ''}></td>`;
         const idCell = setupMode
@@ -3095,6 +3096,7 @@ function isNonCommunityContact(c) {
 function renderContacts() {
     const search = (document.getElementById('contact-search')?.value || '').toLowerCase();
     const isSearching = search.length > 0;
+    setTimeout(labelAllTables, 0);
 
     // Update tab counts
     const nonCommContacts = contacts.filter(c => isNonCommunityContact(c));
@@ -4923,6 +4925,27 @@ function insertMention(textarea, dropdown, startPos, name) {
     // Trigger the mention-chip-strip refresh that textareas wire up in
     // attachMentionChipStrip — "input" event mirrors what user typing does.
     textarea.dispatchEvent(new Event('input'));
+}
+
+// Populate data-label on every td in a table from its thead row. Enables
+// the mobile card-layout fallback (styles.css) to show column names
+// alongside each cell when the table collapses to stacked cards on phones.
+function labelTableCells(tableEl) {
+    if (!tableEl) return;
+    const headers = Array.from(tableEl.querySelectorAll('thead th')).map(th => th.textContent.trim().replace(/\s+/g, ' '));
+    if (headers.length === 0) return;
+    tableEl.querySelectorAll('tbody tr').forEach(tr => {
+        Array.from(tr.children).forEach((td, i) => {
+            if (td.tagName === 'TD' && headers[i] != null && !td.dataset.label) {
+                td.dataset.label = headers[i];
+            }
+        });
+    });
+}
+
+// Walk every table on the page and label its cells. Cheap and idempotent.
+function labelAllTables() {
+    document.querySelectorAll('#sensors-table, table.sensors-table, table.contacts-table').forEach(labelTableCells);
 }
 
 // Attach a live chip strip below a mention-textarea that reflects who's
@@ -11966,6 +11989,16 @@ async function renderUserGuide() {
     const container = document.getElementById('user-guide-content');
     if (!container) return;
     container.style.display = '';
+
+    // "Last edited by X on Apr 22" strip above the guide so readers know how
+    // fresh the content is. Quiet when the guide hasn't been customized yet.
+    const meta = document.getElementById('user-guide-meta');
+    if (meta) {
+        try {
+            const row = await db.getAppSettingMeta('user_guide_body');
+            meta.innerHTML = row ? formatLastUpdated(row) : '';
+        } catch (_) { meta.innerHTML = ''; }
+    }
 
     // Prefer the admin-edited version stored in Supabase so in-app edits are
     // live for everyone instantly. Fall back to the static user-guide.html

@@ -898,6 +898,51 @@ body.has-sandbox-banner #app { height: calc(100vh - 36px); }
     .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
     .analysis-chart-card { padding-left: 24px; }
     .dqo-summary-table { min-width: 600px; }
+
+    /* Sensor + contact tables → card layout at phone widths. Keeps data
+       legible without a horizontal scroll, which field users can't do
+       one-handed on a phone. Uses data-label attrs for column labels. */
+    #sensors-table thead, .sensors-table thead, .contacts-table thead { display: none; }
+    #sensors-table tr, .sensors-table tr, .contacts-table tr {
+        display: block;
+        background: var(--surface);
+        border: 1px solid var(--slate-100);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        box-shadow: var(--shadow-sm);
+    }
+    #sensors-table td, .sensors-table td, .contacts-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        padding: 4px 0;
+        border: none;
+        font-size: 13px;
+    }
+    #sensors-table td::before, .sensors-table td::before, .contacts-table td::before {
+        content: attr(data-label);
+        flex-shrink: 0;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--slate-400);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    #sensors-table td:first-child, .sensors-table td:first-child, .contacts-table td:first-child {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        border-bottom: 1px solid var(--slate-100);
+        padding-bottom: 8px;
+        margin-bottom: 4px;
+    }
+    #sensors-table td:first-child::before, .sensors-table td:first-child::before,
+    .contacts-table td:first-child::before { display: none; }
+
+    /* Pipeline column cards — shrink paddings on phones. */
+    .service-pipeline-column, .audit-pipeline-column { padding: 10px; }
 }
 
 /* ===== COMMUNITIES LIST ===== */
@@ -4297,7 +4342,10 @@ th:hover .field-reorder-btns {
 .service-badge-count { background: var(--aurora-rose); color: white; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; margin-left: auto; }
 .btn-service { background: rgba(167, 139, 250, 0.1); color: #6d28d9; border: 1px solid rgba(167, 139, 250, 0.3); }
 .btn-service:hover { background: rgba(167, 139, 250, 0.2); }
-.service-pipeline { display: flex; flex-direction: column; gap: 16px; }
+.service-pipeline { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 900px)  { .service-pipeline { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1200px) { .service-pipeline { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1500px) { .service-pipeline { grid-template-columns: repeat(6, minmax(180px, 1fr)); } }
 .service-pipeline-column { background: var(--slate-50); border-radius: var(--radius-md); padding: 14px; }
 .service-pipeline-column-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--slate-200); }
 .service-pipeline-column-header h3 { font-size: 12px; font-weight: 600; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
@@ -4391,7 +4439,9 @@ th:hover .field-reorder-btns {
 }
 
 /* ===== AUDITS ===== */
-.audit-pipeline { display: flex; flex-direction: column; gap: 16px; }
+.audit-pipeline { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 900px)  { .audit-pipeline { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1200px) { .audit-pipeline { grid-template-columns: repeat(4, minmax(220px, 1fr)); } }
 .audit-pipeline-column { background: var(--slate-50); border-radius: var(--radius-md); padding: 14px; }
 .audit-pipeline-column-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--slate-200); }
 .audit-pipeline-column-header h3 { font-size: 12px; font-weight: 600; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
