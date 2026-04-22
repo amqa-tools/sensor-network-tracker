@@ -4072,10 +4072,11 @@ function confirmLogEmail() {
         type: 'Communication',
         commType: 'Email',
         subject: logSubject,
+        // Notes (and/or the original email body) live in fullBody — shown
+        // in the expandable block. The title line is just the subject so
+        // the note text doesn't appear twice.
         fullBody: logNotes || _pendingEmailLog.body,
-        // Same reasoning as saveComm — don't prefix with "[Email]" because
-        // the timeline header already renders the commType.
-        text: `Subject: ${logSubject}${logNotes ? ' — ' + logNotes : ''}`,
+        text: `Subject: ${logSubject}`,
         createdBy: getCurrentUserName(), createdById: currentUserId,
         community: involvedCommunities[0] || '',
         taggedContacts: selectedContactIds,
@@ -4427,7 +4428,7 @@ function renderTimeline(containerId, items) {
                     </div>
                     ${actions}
                 </div>
-                <div class="timeline-text">${renderNoteText(stripCommTypePrefix(item.text, item.commType), isNote ? item.id : null)}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
+                <div class="timeline-text">${renderNoteText(stripTrailingFullBodyFromTitle(stripCommTypePrefix(item.text, item.commType), item.fullBody), isNote ? item.id : null)}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
                 ${additionalInfoHtml}
                 ${hasFullBody ? `<div class="timeline-text-full">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
@@ -4461,6 +4462,23 @@ function stripCommTypePrefix(text, commType) {
     // even when commType isn't Email (shouldn't happen, but cheap to check).
     if (text.startsWith('[Email]')) return text.slice('[Email]'.length).replace(/^\s+/, '');
     return text;
+}
+
+// Legacy email logs stored notes as " — <notes>" appended to the title line,
+// and the same notes also lived in fullBody (expandable block). Strip the
+// appended tail at render time so the title shows just the subject — keeps
+// historical rows clean without rewriting the database.
+function stripTrailingFullBodyFromTitle(text, fullBody) {
+    if (!text || !fullBody) return text;
+    const body = fullBody.trim();
+    if (body.length < 2) return text;
+    const trimmed = text.trimEnd();
+    if (!trimmed.endsWith(body)) return text;
+    const head = trimmed.slice(0, trimmed.length - body.length)
+        .replace(/\s+$/, '')
+        .replace(/\s*[—–\-]+\s*$/, '')
+        .trim();
+    return head || text;
 }
 
 function renderNoteText(text, noteId) {
