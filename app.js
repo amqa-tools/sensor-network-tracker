@@ -8103,7 +8103,10 @@ function showAuditPodStatusPicker(audit, onConfirm) {
         </div>
         <p style="font-size:11px;color:var(--slate-400);margin:-4px 0 10px">Leave every box unchecked to leave the pod's status as-is.</p>
         <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.4px">Note (optional)</label>
-        <textarea id="pod-status-note" class="mention-textarea" rows="2" placeholder="e.g. Shipped out via UPS Monday. Type @ to tag a contact." style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical;margin-top:4px"></textarea>
+        <div style="position:relative;margin-top:4px">
+            <textarea id="pod-status-note" class="mention-textarea" rows="2" placeholder="e.g. Shipped out via UPS Monday. Type @ to tag a contact." style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
+            <div id="pod-status-note-mention-dropdown" class="mention-dropdown" style="left:0;width:100%"></div>
+        </div>
     `;
     const okBtn = document.getElementById('modal-confirm-ok');
     const cancelBtn = document.getElementById('modal-confirm-cancel');
@@ -8118,7 +8121,17 @@ function showAuditPodStatusPicker(audit, onConfirm) {
     };
     _confirmDismissCallback = null;
     modal.classList.add('open');
-    setTimeout(wireAllMentionChipStrips, 0);
+    // Wire the @mention autocomplete + chip strip on the note textarea.
+    // Runs after the DOM update so the elements exist.
+    setTimeout(() => {
+        const ta = document.getElementById('pod-status-note');
+        const dd = document.getElementById('pod-status-note-mention-dropdown');
+        if (ta && dd && typeof setupMentionAutocomplete === 'function' && !ta._mentionInit) {
+            setupMentionAutocomplete(ta, dd);
+            ta._mentionInit = true;
+        }
+        if (typeof wireAllMentionChipStrips === 'function') wireAllMentionChipStrips();
+    }, 0);
 }
 
 function revertAuditStatus(auditId) {
