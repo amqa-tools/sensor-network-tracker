@@ -8183,6 +8183,31 @@ const DQO_THRESHOLDS = {
     rmse: { max: 7 },
 };
 
+// Acceptable-range strings used in the DQO table header row. Shown once
+// under each metric column name instead of repeated under every value,
+// so the table scans cleanly.
+const DQO_RANGE_LABELS = {
+    r2: '\u2265 0.70',
+    slope: '0.65 \u2013 1.35',
+    intercept: '\u00B15',
+    sd: '\u2264 5',
+    rmse: '\u2264 7',
+};
+
+function dqoTableHeader() {
+    const sub = (label, metric) => `<th scope="col"><div>${label}</div><div style="font-weight:400;font-size:10px;color:var(--slate-400);text-transform:none;letter-spacing:0.2px;margin-top:1px">(${DQO_RANGE_LABELS[metric]})</div></th>`;
+    return `<thead><tr>
+        <th scope="col">Parameter</th>
+        ${sub('R\u00B2', 'r2')}
+        ${sub('Slope', 'slope')}
+        ${sub('Intercept', 'intercept')}
+        ${sub('SD', 'sd')}
+        ${sub('RMSE', 'rmse')}
+        <th>n</th>
+        <th>Result</th>
+    </tr></thead>`;
+}
+
 const SAMPLE_SIZE_TIERS = { critical: 10, minimum: 24, adequate: 72, ideal: 168 };
 
 // ===== FAILSAFE VALIDATION =====
@@ -9377,30 +9402,20 @@ function renderSavedAnalysisView(auditId) {
         </div>
         <div style="overflow-x:auto;margin-top:16px">
         <table class="dqo-summary-table">
-            <thead><tr>
-                <th scope="col">Parameter</th>
-                <th>R\u00B2</th>
-                <th>Slope</th>
-                <th>Intercept</th>
-                <th>SD</th>
-                <th>RMSE</th>
-                <th>n</th>
-                <th>Result</th>
-            </tr></thead>
+            ${dqoTableHeader()}
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
-                    const T = DQO_THRESHOLDS;
                     if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
                     const cls = (pass) => pass ? 'dqo-cell-pass' : 'dqo-cell-fail';
                     return `<tr>
                         <td>${p.labelHtml} (${p.unit})</td>
-                        <td class="${cls(d.r2)}">${r.r2} <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></td>
-                        <td class="${cls(d.slope)}">${r.slope} <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></td>
-                        <td class="${cls(d.intercept)}">${r.intercept} <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></td>
-                        <td class="${cls(d.sd)}">${r.sd} <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></td>
-                        <td class="${cls(d.rmse)}">${r.rmse} <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></td>
+                        <td class="${cls(d.r2)}">${r.r2}</td>
+                        <td class="${cls(d.slope)}">${r.slope}</td>
+                        <td class="${cls(d.intercept)}">${r.intercept}</td>
+                        <td class="${cls(d.sd)}">${r.sd}</td>
+                        <td class="${cls(d.rmse)}">${r.rmse}</td>
                         <td style="text-align:center">${r.n || '\u2014'}</td>
                         <td>${r.pass ? '<span class="dqo-pass">PASS</span>' : '<span class="dqo-fail">FAIL</span>'}</td>
                     </tr>`;
@@ -9408,7 +9423,6 @@ function renderSavedAnalysisView(auditId) {
             </tbody>
         </table>
         </div>
-        <div class="analysis-dqo-thresholds"><span style="font-size:10px">DQO Thresholds: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35, Intercept \u00B15, SD \u2264 5, RMSE \u2264 7.</span></div>
         <p style="font-size:13px;color:var(--slate-400);margin-top:16px">To view scatter plots, time series, and raw data, re-upload the original Excel file.</p>
         <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
             <button class="btn btn-primary" onclick="generateAuditReport('${auditId}')">Generate Report</button>
@@ -9423,30 +9437,20 @@ function renderDQOSection(results, overallPass) {
     el.innerHTML = `
         <div style="overflow-x:auto">
         <table class="dqo-summary-table">
-            <thead><tr>
-                <th scope="col">Parameter</th>
-                <th>R\u00B2</th>
-                <th>Slope</th>
-                <th>Intercept</th>
-                <th>SD</th>
-                <th>RMSE</th>
-                <th>n</th>
-                <th>Result</th>
-            </tr></thead>
+            ${dqoTableHeader()}
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
-                    const T = DQO_THRESHOLDS;
                     if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
                     const cls = (pass) => pass ? 'dqo-cell-pass' : 'dqo-cell-fail';
                     return `<tr>
                         <td>${p.labelHtml} (${p.unit})</td>
-                        <td class="${cls(d.r2)}">${r.r2} <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></td>
-                        <td class="${cls(d.slope)}">${r.slope} <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></td>
-                        <td class="${cls(d.intercept)}">${r.intercept} <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></td>
-                        <td class="${cls(d.sd)}">${r.sd} <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></td>
-                        <td class="${cls(d.rmse)}">${r.rmse} <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></td>
+                        <td class="${cls(d.r2)}">${r.r2}</td>
+                        <td class="${cls(d.slope)}">${r.slope}</td>
+                        <td class="${cls(d.intercept)}">${r.intercept}</td>
+                        <td class="${cls(d.sd)}">${r.sd}</td>
+                        <td class="${cls(d.rmse)}">${r.rmse}</td>
                         <td style="text-align:center">${r.n || '\u2014'}</td>
                         <td>${r.pass ? '<span class="dqo-pass">PASS</span>' : '<span class="dqo-fail">FAIL</span>'}</td>
                     </tr>`;
@@ -9454,7 +9458,7 @@ function renderDQOSection(results, overallPass) {
             </tbody>
         </table>
         </div>
-        <div class="analysis-dqo-thresholds"><span style="font-size:10px">DQO Thresholds: R\u00B2 \u2265 0.70, Slope 0.65\u20131.35, Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated before analysis.</span></div>
+        <div class="analysis-dqo-thresholds"><span style="font-size:10px">PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated before analysis.</span></div>
     `;
 }
 
@@ -9496,14 +9500,24 @@ function createScatterChart(canvasId, regression, param, parsed) {
     const minX = Math.min(...xVals);
     const maxX = Math.max(...xVals);
 
+    // Per-point DQO coloring: a point is "within DQO" if its deviation
+    // from the 1:1 line is <= the absolute-intercept tolerance. Outliers
+    // that drag the regression out of DQO show up red, so reviewers can
+    // spot the bad hours at a glance.
+    const tol = DQO_THRESHOLDS.intercept.max;
+    const pointColors = regression.pairs.map(pt => Math.abs(pt.y - pt.x) <= tol ? 'rgba(26,127,55,0.55)' : 'rgba(197,48,48,0.65)');
+    const pointBorders = regression.pairs.map(pt => Math.abs(pt.y - pt.x) <= tol ? 'rgba(26,127,55,0.8)'  : 'rgba(197,48,48,0.9)');
+    // Regression line takes the overall DQO pass/fail color.
+    const lineColor = regression.pass ? '#1a7f37' : '#c53030';
+
     const chart = new Chart(canvas, {
         type: 'scatter',
         data: {
             datasets: [
                 {
                     data: regression.pairs,
-                    backgroundColor: 'rgba(27,42,74,0.4)',
-                    borderColor: 'rgba(27,42,74,0.5)',
+                    backgroundColor: pointColors,
+                    borderColor: pointBorders,
                     pointRadius: 3,
                     pointHitRadius: 10,
                     pointHoverRadius: 6,
@@ -9514,7 +9528,7 @@ function createScatterChart(canvasId, regression, param, parsed) {
                         { x: maxX, y: regression.slope * maxX + regression.intercept },
                     ],
                     type: 'line',
-                    borderColor: '#C9A84C',
+                    borderColor: lineColor,
                     borderWidth: 2,
                     pointRadius: 0,
                     pointHitRadius: 0,
@@ -9605,11 +9619,28 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
     const yMax = allVals.length > 0 ? Math.max(...allVals) : 10;
     const yPad = (yMax - yMin) * 0.05 || 1;
 
+    // Point-level DQO divergence flag: at each hour, if the two sensors
+    // differ by more than the DQO intercept tolerance, render a red dot
+    // on both series so outlier hours are visually obvious.
+    const tol = DQO_THRESHOLDS.intercept.max;
+    const divergent = rows.map((r, i) => {
+        const va = seriesA[i], vb = seriesB[i];
+        if (va == null || vb == null) return false;
+        return Math.abs(va - vb) > tol;
+    });
+    const pointRadiusA = divergent.map(d => d ? 3 : 0);
+    const pointRadiusB = divergent.map(d => d ? 3 : 0);
+    const pointColorsDivergent = divergent.map(d => d ? '#c53030' : 'transparent');
+
     const chart = new Chart(canvas, {
         type: 'line',
         data: { labels, datasets: [
-            { data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5, pointRadius: 0, pointHitRadius: 5, tension: 0.2, fill: false },
-            { data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5, pointRadius: 0, pointHitRadius: 5, tension: 0.2, fill: false },
+            { data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5,
+              pointRadius: pointRadiusA, pointBackgroundColor: pointColorsDivergent, pointBorderColor: pointColorsDivergent,
+              pointHitRadius: 5, tension: 0.2, fill: false },
+            { data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5,
+              pointRadius: pointRadiusB, pointBackgroundColor: pointColorsDivergent, pointBorderColor: pointColorsDivergent,
+              pointHitRadius: 5, tension: 0.2, fill: false },
         ]},
         options: {
             responsive: true,
@@ -9974,26 +10005,39 @@ function generateAuditReport(auditId) {
         ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })}`
         : '\u2014';
 
-    // DQO table rows — using labelHtml for subscripts
+    // DQO table rows — using labelHtml for subscripts. Ranges live in the
+    // header row (reportDqoHeader below), not repeated under every value.
     const dqoRows = AUDIT_PARAMETERS.map(p => {
         const r = results[p.key];
-        const T = DQO_THRESHOLDS;
         if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:#64748b">No data</td></tr>`;
         const d = r.dqo || {};
         const cls = (pass) => pass ? 'color:#1a7f37' : 'color:#c53030;font-weight:700';
         return `<tr>
             <td style="font-family:'DM Sans',sans-serif;font-weight:600">${p.labelHtml} (${p.unit})</td>
-            <td style="${cls(d.r2)}">${r.r2} <span class="dqo-thresh">(\u2265 ${T.r2.min})</span></td>
-            <td style="${cls(d.slope)}">${r.slope} <span class="dqo-thresh">(${T.slope.min}\u2013${T.slope.max})</span></td>
-            <td style="${cls(d.intercept)}">${r.intercept} <span class="dqo-thresh">(${T.intercept.min} to ${T.intercept.max})</span></td>
-            <td style="${cls(d.sd)}">${r.sd} <span class="dqo-thresh">(\u2264 ${T.sd.max})</span></td>
-            <td style="${cls(d.rmse)}">${r.rmse} <span class="dqo-thresh">(\u2264 ${T.rmse.max})</span></td>
+            <td style="${cls(d.r2)}">${r.r2}</td>
+            <td style="${cls(d.slope)}">${r.slope}</td>
+            <td style="${cls(d.intercept)}">${r.intercept}</td>
+            <td style="${cls(d.sd)}">${r.sd}</td>
+            <td style="${cls(d.rmse)}">${r.rmse}</td>
             <td style="text-align:center">${r.n || '\u2014'}</td>
             <td style="text-align:center">${r.pass
                 ? '<span style="background:#e6f9ed;color:#1a7f37;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">PASS</span>'
                 : '<span style="background:#fde8e8;color:#c53030;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">FAIL</span>'}</td>
         </tr>`;
     }).join('');
+
+    const reportDqoHeaderCell = (label, metric) =>
+        `<th><div>${label}</div><div style="font-weight:400;font-size:10px;color:#64748b;text-transform:none;letter-spacing:0.2px;margin-top:1px">(${DQO_RANGE_LABELS[metric]})</div></th>`;
+    const reportDqoHeader = `<thead><tr>
+        <th>Parameter</th>
+        ${reportDqoHeaderCell('R\u00B2', 'r2')}
+        ${reportDqoHeaderCell('Slope', 'slope')}
+        ${reportDqoHeaderCell('Intercept', 'intercept')}
+        ${reportDqoHeaderCell('SD', 'sd')}
+        ${reportDqoHeaderCell('RMSE', 'rmse')}
+        <th>n</th>
+        <th>Result</th>
+    </tr></thead>`;
 
     // Data summary
     const trimInfo = cached
@@ -10284,20 +10328,11 @@ function generateAuditReport(auditId) {
     <h2>Data Quality Objectives (DQO) Summary</h2>
     <span class="trim-note">${trimInfo}</span>
     <table class="dqo">
-        <thead><tr>
-            <th scope="col">Parameter</th>
-            <th>R\u00B2</th>
-            <th>Slope</th>
-            <th>Intercept</th>
-            <th>SD</th>
-            <th>RMSE</th>
-            <th>n</th>
-            <th>Result</th>
-        </tr></thead>
+        ${reportDqoHeader}
         <tbody>${dqoRows}</tbody>
     </table>
     ${audit.analysisNotes ? '<div class="thresholds" style="margin-bottom:8px"><strong>Analysis Note:</strong> ' + escapeHtml(audit.analysisNotes) + '</div>' : ''}
-    <div class="thresholds">DQO Thresholds (all parameters): R\u00B2 \u2265 0.70, Slope 0.65\u20131.35, Intercept \u00B15, SD \u2264 5, RMSE \u2264 7. PM<sub>10</sub> values exceeding 1000 \u00B5g/m\u00B3 were invalidated prior to analysis.</div>
+    <div class="thresholds">PM<sub>10</sub> values exceeding 1000 \u00B5g/m\u00B3 were invalidated prior to analysis.</div>
     </section>
 
     ${tsHtml ? `
