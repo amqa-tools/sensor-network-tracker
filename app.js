@@ -8030,10 +8030,36 @@ function advanceAuditStatus(auditId) {
         buildSensorSidebar();
 
         const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
+        // Keep the auto-advance note minimal — status transition + what the
+        // audit pod changed to. The user's free-form note gets its own home
+        // (audit progress notes + a pod-tagged event note) so it's easier
+        // to find later and doesn't bloat the advance log.
         let noteText = `Audit advanced: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`;
         if (overrides.length > 0) noteText += ` Audit pod ${audit.auditPodId} set to "${overrides.join(', ')}".`;
-        if (podStatusNote) noteText += ` ${podStatusNote}`;
         createNote('Audit', noteText, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
+
+        if (podStatusNote) {
+            // (1) Append to the audit's Progress Notes so it shows up in the
+            // audit detail modal's Progress Notes tab.
+            db.appendProgressNote('audit', auditId, podStatusNote, parseMentionedContacts(podStatusNote))
+                .then(saved => {
+                    if (!audit.progressNotes) audit.progressNotes = [];
+                    audit.progressNotes.push(saved || {
+                        text: podStatusNote, by: getCurrentUserName(), at: nowDatetime(),
+                        taggedContacts: parseMentionedContacts(podStatusNote),
+                    });
+                })
+                .catch(handleSaveError);
+            // (2) Standalone sensor-timeline note tagged to the audit pod so
+            // anyone browsing the pod's history sees the context without
+            // having to open the audit detail.
+            createNote('Audit', podStatusNote, {
+                sensors: [audit.auditPodId],
+                communities: audit.communityId ? [audit.communityId] : [],
+                contacts: parseMentionedContacts(podStatusNote),
+            });
+        }
+
         openAuditDetail(auditId);
         updateSidebarAuditCount();
         if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
