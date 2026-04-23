@@ -177,6 +177,10 @@
                     <button class="btn" onclick="openMassActionNote()">Mass Action</button>
                     <button class="btn" onclick="exportSensors()">Export as Spreadsheet</button>
                 </div>
+                <div class="community-list-tabs" style="margin-bottom:12px">
+                    <button class="community-list-tab active" id="sensors-tab-active" onclick="switchSensorsTab('active')">Active <span class="community-tab-count" id="sensors-active-count"></span></button>
+                    <button class="community-list-tab" id="sensors-tab-archived" onclick="switchSensorsTab('archived')">Archived <span class="community-tab-count" id="sensors-archived-count"></span></button>
+                </div>
                 <div id="sensor-type-filters" class="community-tag-filters"></div>
                 <div class="filter-bar">
                     <input type="text" id="sensor-search" placeholder="Search sensors..." oninput="renderSensors()" aria-label="Search sensors">

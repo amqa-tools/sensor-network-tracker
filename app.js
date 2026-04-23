@@ -1948,7 +1948,12 @@ function renderSensors() {
     const search = (document.getElementById('sensor-search')?.value || '').toLowerCase();
     const statusFilter = document.getElementById('sensor-status-filter')?.value || '';
 
-    let filtered = sensors.filter(s => {
+    // Pool = active sensors from the main array, or archived ones when the
+    // Archived tab is selected.
+    const pool = sensorsListTab === 'archived' ? (archivedSensors || []) : sensors;
+    updateSensorsTabCounts();
+
+    let filtered = pool.filter(s => {
         if (search && !s.id.toLowerCase().includes(search) && !getCommunityName(s.community).toLowerCase().includes(search) && !(s.soaTagId || '').toLowerCase().includes(search)) return false;
         if (statusFilter && !getStatusArray(s).includes(statusFilter)) return false;
         if (sensorTagFilter) {
@@ -2525,7 +2530,7 @@ function showSensorDetail(sensorId) {
 }
 
 function showSensorView(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     currentSensor = sensorId;
 
@@ -6202,6 +6207,56 @@ function getSensorTags() {
 }
 
 let sensorTagFilter = '';
+// All Sensors page has Active/Archived tabs (mirrors the Communities
+// pattern). Archived sensors live in a parallel `archivedSensors` array
+// populated lazily the first time the Archived tab is opened, and when
+// a sensor is archived/restored the record moves between the two arrays.
+let sensorsListTab = 'active';
+let archivedSensors = null; // null = not loaded yet; [] = loaded, empty
+
+function _mapSensorRow(s) {
+    return {
+        id: s.id, soaTagId: s.soa_tag_id || '', type: s.type || 'Community Pod',
+        status: s.status || [], community: s.community_id || '',
+        location: s.location || '', datePurchased: s.date_purchased || '',
+        collocationDates: s.collocation_dates || '', dateInstalled: s.date_installed || '',
+        customFields: {},
+        updated_at: s.updated_at || null, updated_by: s.updated_by || null,
+        active: s.active !== false,
+        archived_at: s.archived_at || null, archived_by: s.archived_by || null,
+    };
+}
+
+// Finder that checks both pools so sensor-detail navigation, status
+// computations, etc. keep working for archived sensors without every
+// caller needing to know which array to look in.
+function findSensor(sensorId) {
+    return sensors.find(x => x.id === sensorId)
+        || (archivedSensors || []).find(x => x.id === sensorId);
+}
+
+async function switchSensorsTab(tab) {
+    sensorsListTab = tab;
+    document.getElementById('sensors-tab-active').classList.toggle('active', tab === 'active');
+    document.getElementById('sensors-tab-archived').classList.toggle('active', tab === 'archived');
+    if (tab === 'archived' && archivedSensors === null) {
+        try {
+            const rows = await db.getSensors({ includeArchived: true });
+            archivedSensors = (rows || []).filter(s => s.active === false).map(_mapSensorRow);
+        } catch (err) {
+            console.error('[archived sensors] load failed:', err);
+            archivedSensors = [];
+        }
+    }
+    renderSensors();
+}
+
+function updateSensorsTabCounts() {
+    const activeEl = document.getElementById('sensors-active-count');
+    const archivedEl = document.getElementById('sensors-archived-count');
+    if (activeEl) activeEl.textContent = `(${sensors.length})`;
+    if (archivedEl && archivedSensors !== null) archivedEl.textContent = `(${archivedSensors.length})`;
+}
 
 function buildSensorSidebar() {
     const list = document.getElementById('sensor-tag-list');
@@ -6784,7 +6839,7 @@ function updatePinButton(communityId) {
 // the active list but can be restored. Distinct from delete (which admins
 // can still do, and which soft-deletes into the trash bin).
 async function archiveSensor(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     showConfirm('Archive Sensor',
         `Archive <strong>${escapeHtml(s.id)}</strong>?<br><br>This removes it from the active list but preserves its full history. You can restore it later. Use this when a sensor is decommissioned or permanently retired.`,
@@ -6793,7 +6848,13 @@ async function archiveSensor(sensorId) {
                 await db.archiveSensor(sensorId);
                 s.active = false;
                 s.archived_at = new Date().toISOString();
+                // Move from active → archived pool.
+                const idx = sensors.indexOf(s);
+                if (idx >= 0) sensors.splice(idx, 1);
+                if (archivedSensors === null) archivedSensors = [];
+                if (!archivedSensors.includes(s)) archivedSensors.unshift(s);
                 buildSensorSidebar();
+                if (typeof renderSensors === 'function') renderSensors();
                 showSensorView(sensorId);
                 showSuccessToast('Sensor archived');
             } catch (err) { handleSaveError(err); }
@@ -6802,14 +6863,21 @@ async function archiveSensor(sensorId) {
 }
 
 async function restoreSensorFromArchive(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     try {
         await db.restoreSensor(sensorId);
         s.active = true;
         s.archived_at = null;
         s.archived_by = null;
+        // Move from archived → active pool.
+        if (archivedSensors) {
+            const idx = archivedSensors.indexOf(s);
+            if (idx >= 0) archivedSensors.splice(idx, 1);
+        }
+        if (!sensors.includes(s)) sensors.push(s);
         buildSensorSidebar();
+        if (typeof renderSensors === 'function') renderSensors();
         showSensorView(sensorId);
         showSuccessToast('Sensor restored');
     } catch (err) { handleSaveError(err); }
