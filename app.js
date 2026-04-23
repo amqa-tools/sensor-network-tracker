@@ -7894,7 +7894,7 @@ function openAuditDetail(auditId) {
 
     const analysisHtml = Object.keys(audit.analysisResults || {}).length > 0
         ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQO Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th><th>Result</th></tr></thead><tbody>
-            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; return `<tr><td>${p.label} (${p.unit})</td><td>${r.r2 ?? '—'}</td><td>${r.slope ?? '—'}</td><td>${r.intercept ?? '—'}</td><td>${r.pass ? '<span style="color:var(--aurora-green);font-weight:600">PASS</span>' : '<span style="color:var(--aurora-rose);font-weight:600">FAIL</span>'}</td></tr>`; }).join('')}
+            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; return `<tr><td>${p.label} (${p.unit})</td><td>${r.r2 ?? '—'}</td><td>${r.slope ?? '—'}</td><td>${r.intercept ?? '—'}</td><td>${r.pass ? '<span class="dqo-pass">PASS</span>' : '<span class="dqo-fail">FAIL</span>'}</td></tr>`; }).join('')}
            </tbody></table>`
         : '<p style="font-size:13px;color:var(--slate-400)">No analysis results yet.</p>';
 
@@ -8223,6 +8223,17 @@ const DQO_RANGE_LABELS = {
     sd: '\u2264 5',
     rmse: '\u2264 7',
 };
+
+// Render the best-fit equation with each metric (slope, intercept, R²)
+// colored independently based on its own DQO pass/fail. Gives reviewers
+// an at-a-glance view of which specific metric is failing on each chart.
+function renderEquationLine(r) {
+    if (!r) return '';
+    const d = r.dqo || {};
+    const css = (pass) => pass ? 'color:var(--dqo-pass);font-weight:600' : 'color:var(--dqo-fail);font-weight:700';
+    const sign = r.intercept >= 0 ? '+' : '\u2212';
+    return `y = <span style="${css(d.slope)}">${r.slope}</span>x ${sign} <span style="${css(d.intercept)}">${Math.abs(r.intercept)}</span>,&nbsp;&nbsp;&nbsp;&nbsp; R\u00B2 = <span style="${css(d.r2)}">${r.r2}</span>`;
+}
 
 function dqoTableHeader() {
     const sub = (label, metric) => `<th scope="col"><div>${label}</div><div style="font-weight:400;font-size:10px;color:var(--slate-400);text-transform:none;letter-spacing:0.2px;margin-top:1px">(${DQO_RANGE_LABELS[metric]})</div></th>`;
@@ -9501,15 +9512,13 @@ function renderScatterSection(auditId, parsed, results) {
         <div class="analysis-chart-grid">
         ${AUDIT_PARAMETERS.map(p => {
             const r = results[p.key];
-            const eqSign = r ? (r.intercept >= 0 ? '+' : '\u2212') : '';
-            const eqText = r ? `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)},&nbsp;&nbsp;&nbsp;&nbsp; R\u00B2 = ${r.r2}` : '';
             return `<div class="analysis-chart-card">
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short}: <strong>${p.labelHtml}</strong></div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998;</span></div>
             <div class="chart-canvas-wrap"><canvas id="scatter-${auditId}-${p.key}"></canvas></div>
             <div class="chart-axis-label chart-axis-x" onclick="editChartTitle(this)">${parsed.sensorA.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'x', this)">&#9998;</span></div>
-            <div class="chart-equation">${eqText}</div>
+            <div class="chart-equation">${renderEquationLine(r)}</div>
         </div>`; }).join('')}
     </div>`;
 
@@ -9530,15 +9539,10 @@ function createScatterChart(canvasId, regression, param, parsed) {
     const minX = Math.min(...xVals);
     const maxX = Math.max(...xVals);
 
-    // Per-point DQO coloring: a point is "within DQO" if its deviation
-    // from the 1:1 line is <= the absolute-intercept tolerance. Outliers
-    // that drag the regression out of DQO show up red, so reviewers can
-    // spot the bad hours at a glance.
-    const tol = DQO_THRESHOLDS.intercept.max;
-    const pointColors = regression.pairs.map(pt => Math.abs(pt.y - pt.x) <= tol ? 'rgba(26,127,55,0.55)' : 'rgba(197,48,48,0.65)');
-    const pointBorders = regression.pairs.map(pt => Math.abs(pt.y - pt.x) <= tol ? 'rgba(26,127,55,0.8)'  : 'rgba(197,48,48,0.9)');
-    // Regression line takes the overall DQO pass/fail color.
-    const lineColor = regression.pass ? '#1a7f37' : '#c53030';
+    // Regression line color reflects the overall DQO pass/fail, so
+    // reviewers can tell at a glance whether the fit meets DQO.
+    // Colorblind-safe Okabe-Ito palette (same as the CSS badges).
+    const lineColor = regression.pass ? '#009E73' : '#D55E00';
 
     const chart = new Chart(canvas, {
         type: 'scatter',
@@ -9546,8 +9550,8 @@ function createScatterChart(canvasId, regression, param, parsed) {
             datasets: [
                 {
                     data: regression.pairs,
-                    backgroundColor: pointColors,
-                    borderColor: pointBorders,
+                    backgroundColor: 'rgba(27,42,74,0.4)',
+                    borderColor: 'rgba(27,42,74,0.5)',
                     pointRadius: 3,
                     pointHitRadius: 10,
                     pointHoverRadius: 6,
@@ -9649,28 +9653,11 @@ function createTimeSeriesChart(canvasId, parsed, param, audit) {
     const yMax = allVals.length > 0 ? Math.max(...allVals) : 10;
     const yPad = (yMax - yMin) * 0.05 || 1;
 
-    // Point-level DQO divergence flag: at each hour, if the two sensors
-    // differ by more than the DQO intercept tolerance, render a red dot
-    // on both series so outlier hours are visually obvious.
-    const tol = DQO_THRESHOLDS.intercept.max;
-    const divergent = rows.map((r, i) => {
-        const va = seriesA[i], vb = seriesB[i];
-        if (va == null || vb == null) return false;
-        return Math.abs(va - vb) > tol;
-    });
-    const pointRadiusA = divergent.map(d => d ? 3 : 0);
-    const pointRadiusB = divergent.map(d => d ? 3 : 0);
-    const pointColorsDivergent = divergent.map(d => d ? '#c53030' : 'transparent');
-
     const chart = new Chart(canvas, {
         type: 'line',
         data: { labels, datasets: [
-            { data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5,
-              pointRadius: pointRadiusA, pointBackgroundColor: pointColorsDivergent, pointBorderColor: pointColorsDivergent,
-              pointHitRadius: 5, tension: 0.2, fill: false },
-            { data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5,
-              pointRadius: pointRadiusB, pointBackgroundColor: pointColorsDivergent, pointBorderColor: pointColorsDivergent,
-              pointHitRadius: 5, tension: 0.2, fill: false },
+            { data: seriesA, borderColor: '#1B2A4A', borderWidth: 1.5, pointRadius: 0, pointHitRadius: 5, tension: 0.2, fill: false },
+            { data: seriesB, borderColor: '#C9A84C', borderWidth: 1.5, pointRadius: 0, pointHitRadius: 5, tension: 0.2, fill: false },
         ]},
         options: {
             responsive: true,
@@ -10037,11 +10024,16 @@ function generateAuditReport(auditId) {
 
     // DQO table rows — using labelHtml for subscripts. Ranges live in the
     // header row (reportDqoHeader below), not repeated under every value.
+    // Colorblind-safe Okabe-Ito palette — matches the in-app badges.
+    const DQO_PASS_FG = '#009E73';
+    const DQO_PASS_BG = '#e0f5ed';
+    const DQO_FAIL_FG = '#D55E00';
+    const DQO_FAIL_BG = '#fcecdd';
     const dqoRows = AUDIT_PARAMETERS.map(p => {
         const r = results[p.key];
         if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:#64748b">No data</td></tr>`;
         const d = r.dqo || {};
-        const cls = (pass) => pass ? 'color:#1a7f37' : 'color:#c53030;font-weight:700';
+        const cls = (pass) => pass ? `color:${DQO_PASS_FG}` : `color:${DQO_FAIL_FG};font-weight:700`;
         return `<tr>
             <td style="font-family:'DM Sans',sans-serif;font-weight:600">${p.labelHtml} (${p.unit})</td>
             <td style="${cls(d.r2)}">${r.r2}</td>
@@ -10051,8 +10043,8 @@ function generateAuditReport(auditId) {
             <td style="${cls(d.rmse)}">${r.rmse}</td>
             <td style="text-align:center">${r.n || '\u2014'}</td>
             <td style="text-align:center">${r.pass
-                ? '<span style="background:#e6f9ed;color:#1a7f37;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">PASS</span>'
-                : '<span style="background:#fde8e8;color:#c53030;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">FAIL</span>'}</td>
+                ? `<span style="background:${DQO_PASS_BG};color:${DQO_PASS_FG};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">PASS</span>`
+                : `<span style="background:${DQO_FAIL_BG};color:${DQO_FAIL_FG};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">FAIL</span>`}</td>
         </tr>`;
     }).join('');
 
@@ -10195,8 +10187,14 @@ function generateAuditReport(auditId) {
         </div>` : '').join('');
     const scatterCards = AUDIT_PARAMETERS.map(p => {
         const r = (cached?.regressionResults || results)[p.key];
-        const eqSign = r ? (r.intercept >= 0 ? '+' : '\u2212') : '';
-        const eqText = r ? `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)},&nbsp;&nbsp;&nbsp;&nbsp; R\u00B2 = ${r.r2}` : '';
+        // Color each metric in the equation by its own DQO pass/fail —
+        // same as the in-app view so the printed report stays consistent.
+        const eqCss = (pass) => pass ? `color:${DQO_PASS_FG}` : `color:${DQO_FAIL_FG};font-weight:700`;
+        const d = (r && r.dqo) || {};
+        const sign = r && r.intercept >= 0 ? '+' : '\u2212';
+        const eqText = r
+            ? `y = <span style="${eqCss(d.slope)}">${r.slope}</span>x ${sign} <span style="${eqCss(d.intercept)}">${Math.abs(r.intercept)}</span>,&nbsp;&nbsp;&nbsp;&nbsp; R\u00B2 = <span style="${eqCss(d.r2)}">${r.r2}</span>`
+            : '';
         return chartImages['scatter-' + p.key]
         ? `<div class="chart-card">
             <h3>${escapeHtml(shortB)} and ${escapeHtml(shortA)}: <strong>${p.labelHtml}</strong></h3>
@@ -11563,16 +11561,25 @@ function _renderCollocRegChart(parsed, results, tabName) {
             // Scatter points
             traces.push({ x: xArr, y: yArr, type: 'scatter', mode: 'markers', marker: { color: _collocPodColor(parsed.podIds.indexOf(podId)), size: 4, opacity: 0.4 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'x+y' });
 
-            // Regression line
-            traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
+            // Per-metric DQO checks with colorblind-safe (Okabe-Ito) palette
+            // shared with audit regression equations.
+            const T = DQO_THRESHOLDS;
+            const slopePass = reg.slope >= T.slope.min && reg.slope <= T.slope.max;
+            const intPass = reg.intercept >= T.intercept.min && reg.intercept <= T.intercept.max;
+            const r2Pass = reg.r2 >= T.r2.min;
+            const overallPass = slopePass && intPass && r2Pass;
+            const PASS = '#009E73', FAIL = '#D55E00';
+            const slopeColor = slopePass ? PASS : FAIL;
+            const intColor = intPass ? PASS : FAIL;
+            const r2Color = r2Pass ? PASS : FAIL;
+
+            // Regression line inherits the overall pass/fail color so the
+            // fit quality reads at a glance, matching audit scatter plots.
+            traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: overallPass ? PASS : FAIL, width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
 
             // Title annotation
             annotations.push({ text: `<b>${shortSensorId(podId)} vs ${refKey}</b>`, xref: xax + ' domain', yref: yax + ' domain', x: 0.5, y: 1.08, showarrow: false, font: { size: 12, color: '#0a1628' } });
 
-            // Stats annotation with DQO coloring
-            const slopeColor = (reg.slope >= 0.65 && reg.slope <= 1.35) ? '#2ca02c' : '#d62728';
-            const intColor = (reg.intercept >= -5 && reg.intercept <= 5) ? '#2ca02c' : '#d62728';
-            const r2Color = (reg.r2 >= 0.7) ? '#2ca02c' : '#d62728';
             const sign = reg.intercept >= 0 ? ' + ' : ' \u2212 ';
             const eqText = `y = <span style="color:${slopeColor}">${reg.slope.toFixed(3)}</span>x${sign}<span style="color:${intColor}">${Math.abs(reg.intercept).toFixed(2)}</span>`;
             const r2text = `<span style="color:${r2Color}">R\u00b2 = ${reg.r2.toFixed(4)}</span>  (n=${reg.n})`;
@@ -11688,13 +11695,21 @@ function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed
 
         const color = pairColors[idx % pairColors.length];
         traces.push({ x: xArr, y: yArr, type: 'scatter', mode: 'markers', marker: { color, size: 4, opacity: 0.4 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'x+y' });
-        traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
+
+        const T = DQO_THRESHOLDS;
+        const slopePass = reg.slope >= T.slope.min && reg.slope <= T.slope.max;
+        const intPass = reg.intercept >= T.intercept.min && reg.intercept <= T.intercept.max;
+        const r2Pass = reg.r2 >= T.r2.min;
+        const overallPass = slopePass && intPass && r2Pass;
+        const PASS = '#009E73', FAIL = '#D55E00';
+
+        traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: overallPass ? PASS : FAIL, width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
 
         annotations.push({ text: `<b>${shortSensorId(pair.pod)} vs ${shortSensorId(pair.ref)}</b>`, xref: xax + ' domain', yref: yax + ' domain', x: 0.5, y: 1.08, showarrow: false, font: { size: 12, color: '#0a1628' } });
 
-        const slopeColor = (reg.slope >= 0.65 && reg.slope <= 1.35) ? '#2ca02c' : '#d62728';
-        const intColor = (reg.intercept >= -5 && reg.intercept <= 5) ? '#2ca02c' : '#d62728';
-        const r2Color = (reg.r2 >= 0.7) ? '#2ca02c' : '#d62728';
+        const slopeColor = slopePass ? PASS : FAIL;
+        const intColor = intPass ? PASS : FAIL;
+        const r2Color = r2Pass ? PASS : FAIL;
         const sign = reg.intercept >= 0 ? ' + ' : ' \u2212 ';
         const eqText = `y = <span style="color:${slopeColor}">${reg.slope.toFixed(3)}</span>x${sign}<span style="color:${intColor}">${Math.abs(reg.intercept).toFixed(2)}</span>`;
         const r2text = `<span style="color:${r2Color}">R\u00b2 = ${reg.r2.toFixed(4)}</span>  (n=${reg.n})`;
@@ -12097,12 +12112,14 @@ function buildRegRow(divId, paramKey, sensorList, refLabel, getRegData) {
     layout['yaxis'+suffix] = {domain:[0,1], title:idx===0?paramLabels[paramKey]:'', gridcolor:'#eee', zeroline:false, range:[Math.floor(yLo/yDt)*yDt,Math.ceil(yHi/yDt)*yDt], dtick:yDt, tickfont:{size:10}};
     if (idx>0) { layout['xaxis'+suffix].anchor=yax; layout['yaxis'+suffix].anchor=xax; }
     traces.push({x:rd.x,y:rd.y,type:'scatter',mode:'markers',marker:{color:podColors[DATA.podIds.indexOf(sid)%podColors.length]||'#666',size:4,opacity:0.4},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'x+y'});
-    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:'#0a1628',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
+    var sp=(rd.slope>=0.65&&rd.slope<=1.35), ip=(rd.intercept>=-5&&rd.intercept<=5), rp=(rd.r2>=0.7);
+    var overallPass=sp&&ip&&rp;
+    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:overallPass?'#009E73':'#D55E00',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
     var sLabel = typeof sid === 'string' && sid.includes('_vs_') ? sid.replace(/_vs_/,' vs ') : (DATA.podShorts[DATA.podIds.indexOf(sid)] || sid);
     annotations.push({text:'<b>'+sLabel+' vs '+refLabel.split(' ')[0]+'</b>',xref:xax+' domain',yref:yax+' domain',x:0.5,y:1.08,showarrow:false,font:{size:12,color:'#0a1628'}});
-    var sc=(rd.slope>=0.65&&rd.slope<=1.35)?'#2ca02c':'#d62728';
-    var ic=(rd.intercept>=-5&&rd.intercept<=5)?'#2ca02c':'#d62728';
-    var rc=(rd.r2>=0.7)?'#2ca02c':'#d62728';
+    var sc=sp?'#009E73':'#D55E00';
+    var ic=ip?'#009E73':'#D55E00';
+    var rc=rp?'#009E73':'#D55E00';
     var sign=rd.intercept>=0?' + ':' \\u2212 ';
     annotations.push({text:'y = <span style="color:'+sc+'">'+rd.slope.toFixed(3)+'</span>x'+sign+'<span style="color:'+ic+'">'+Math.abs(rd.intercept).toFixed(2)+'</span><br><span style="color:'+rc+'">R\\u00b2 = '+rd.r2.toFixed(4)+'</span>  (n='+rd.n+')',xref:xax+' domain',yref:yax+' domain',x:0.03,y:0.97,showarrow:false,font:{size:10.5,color:'#444'},align:'left',bgcolor:'rgba(255,255,255,0.92)',borderpad:3});
   });
@@ -12138,11 +12155,13 @@ function buildInterRegRow(divId, paramKey, pairs) {
     layout['yaxis'+suffix]={domain:[0,1],title:idx===0?paramLabels[paramKey]:'',gridcolor:'#eee',zeroline:false,range:[Math.floor(yLo/yDt)*yDt,Math.ceil(yHi/yDt)*yDt],dtick:yDt,tickfont:{size:10}};
     if(idx>0){layout['xaxis'+suffix].anchor=yax;layout['yaxis'+suffix].anchor=xax;}
     traces.push({x:rd.x,y:rd.y,type:'scatter',mode:'markers',marker:{color:pairColors[idx%pairColors.length],size:4,opacity:0.4},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'x+y'});
-    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:'#0a1628',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
+    var sp=(rd.slope>=0.65&&rd.slope<=1.35), ip=(rd.intercept>=-5&&rd.intercept<=5), rp=(rd.r2>=0.7);
+    var overallPass=sp&&ip&&rp;
+    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:overallPass?'#009E73':'#D55E00',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
     annotations.push({text:'<b>'+pk.replace(/_vs_/,' vs ')+'</b>',xref:xax+' domain',yref:yax+' domain',x:0.5,y:1.08,showarrow:false,font:{size:12,color:'#0a1628'}});
-    var sc=(rd.slope>=0.65&&rd.slope<=1.35)?'#2ca02c':'#d62728';
-    var ic=(rd.intercept>=-5&&rd.intercept<=5)?'#2ca02c':'#d62728';
-    var rc=(rd.r2>=0.7)?'#2ca02c':'#d62728';
+    var sc=sp?'#009E73':'#D55E00';
+    var ic=ip?'#009E73':'#D55E00';
+    var rc=rp?'#009E73':'#D55E00';
     var sign=rd.intercept>=0?' + ':' \\u2212 ';
     annotations.push({text:'y = <span style="color:'+sc+'">'+rd.slope.toFixed(3)+'</span>x'+sign+'<span style="color:'+ic+'">'+Math.abs(rd.intercept).toFixed(2)+'</span><br><span style="color:'+rc+'">R\\u00b2 = '+rd.r2.toFixed(4)+'</span>  (n='+rd.n+')',xref:xax+' domain',yref:yax+' domain',x:0.03,y:0.97,showarrow:false,font:{size:10.5,color:'#444'},align:'left',bgcolor:'rgba(255,255,255,0.92)',borderpad:3});
   });

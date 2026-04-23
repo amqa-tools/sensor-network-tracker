@@ -71,6 +71,18 @@ button:focus-visible, .btn:focus-visible {
     --aurora-amber: #f59e0b;
     --aurora-violet: #a78bfa;
 
+    /* Pass/fail palette — Okabe-Ito-inspired choices that stay distinct
+       under all common types of color blindness (protanopia, deuteranopia,
+       tritanopia). Pass is a blue-green (reads clearly green to most);
+       fail is vermillion-orange (reads distinctly different from pass
+       in every common colorblind simulation). Used across audit + colloc
+       DQO tables, scatter regression lines, equation text, and badges
+       so the visual language is consistent. */
+    --dqo-pass: #009E73;
+    --dqo-pass-bg: #e0f5ed;
+    --dqo-fail: #D55E00;
+    --dqo-fail-bg: #fcecdd;
+
     --surface: #ffffff;
 
     --radius-sm: 6px;
@@ -2366,8 +2378,8 @@ tr:hover .contact-delete-btn {
 
 .dqo-pass {
     display: inline-block;
-    background: #e6f9ed;
-    color: #1a7f37;
+    background: var(--dqo-pass-bg);
+    color: var(--dqo-pass);
     padding: 2px 10px;
     border-radius: 10px;
     font-size: 11px;
@@ -2378,8 +2390,8 @@ tr:hover .contact-delete-btn {
 
 .dqo-fail {
     display: inline-block;
-    background: #fde8e8;
-    color: #c53030;
+    background: var(--dqo-fail-bg);
+    color: var(--dqo-fail);
     padding: 2px 10px;
     border-radius: 10px;
     font-size: 11px;
@@ -2389,11 +2401,11 @@ tr:hover .contact-delete-btn {
 }
 
 .dqo-cell-pass {
-    color: #1a7f37;
+    color: var(--dqo-pass);
 }
 
 .dqo-cell-fail {
-    color: #c53030;
+    color: var(--dqo-fail);
     font-weight: 700;
 }
 
@@ -2407,15 +2419,15 @@ tr:hover .contact-delete-btn {
 }
 
 .dqo-overall.pass {
-    background: #e6f9ed;
-    color: #1a7f37;
-    border: 1px solid #a3e4b8;
+    background: var(--dqo-pass-bg);
+    color: var(--dqo-pass);
+    border: 1px solid rgba(0, 158, 115, 0.35);
 }
 
 .dqo-overall.fail {
-    background: #fde8e8;
-    color: #c53030;
-    border: 1px solid #f5b3b3;
+    background: var(--dqo-fail-bg);
+    color: var(--dqo-fail);
+    border: 1px solid rgba(213, 94, 0, 0.35);
 }
 
 /* Chart Grid */
@@ -2919,13 +2931,13 @@ tr:hover .contact-delete-btn {
 }
 
 .audit-param-badge.pass {
-    background: #e6f9ed;
-    color: #1a7f37;
+    background: var(--dqo-pass-bg);
+    color: var(--dqo-pass);
 }
 
 .audit-param-badge.fail {
-    background: #fde8e8;
-    color: #c53030;
+    background: var(--dqo-fail-bg);
+    color: var(--dqo-fail);
 }
 
 .audit-param-badge.pending {
