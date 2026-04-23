@@ -9539,10 +9539,10 @@ function createScatterChart(canvasId, regression, param, parsed) {
     const minX = Math.min(...xVals);
     const maxX = Math.max(...xVals);
 
-    // Regression line color reflects the overall DQO pass/fail, so
-    // reviewers can tell at a glance whether the fit meets DQO.
-    // Colorblind-safe Okabe-Ito palette (same as the CSS badges).
-    const lineColor = regression.pass ? '#009E73' : '#D55E00';
+    // Regression line: neutral dark navy. Don't color the line by DQO —
+    // the equation text already carries the pass/fail coloring, and
+    // point/line palette stays consistent with the collocation plots.
+    const lineColor = '#0a1628';
 
     const chart = new Chart(canvas, {
         type: 'scatter',
@@ -11561,21 +11561,20 @@ function _renderCollocRegChart(parsed, results, tabName) {
             // Scatter points
             traces.push({ x: xArr, y: yArr, type: 'scatter', mode: 'markers', marker: { color: _collocPodColor(parsed.podIds.indexOf(podId)), size: 4, opacity: 0.4 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'x+y' });
 
-            // Per-metric DQO checks with colorblind-safe (Okabe-Ito) palette
-            // shared with audit regression equations.
+            // Per-metric DQO checks — colors the equation text only, not
+            // the regression line or points. Colorblind-safe Okabe-Ito
+            // palette shared with audit scatter plots.
             const T = DQO_THRESHOLDS;
             const slopePass = reg.slope >= T.slope.min && reg.slope <= T.slope.max;
             const intPass = reg.intercept >= T.intercept.min && reg.intercept <= T.intercept.max;
             const r2Pass = reg.r2 >= T.r2.min;
-            const overallPass = slopePass && intPass && r2Pass;
             const PASS = '#009E73', FAIL = '#D55E00';
             const slopeColor = slopePass ? PASS : FAIL;
             const intColor = intPass ? PASS : FAIL;
             const r2Color = r2Pass ? PASS : FAIL;
 
-            // Regression line inherits the overall pass/fail color so the
-            // fit quality reads at a glance, matching audit scatter plots.
-            traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: overallPass ? PASS : FAIL, width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
+            // Regression line: neutral dark navy, matching audit scatter.
+            traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
 
             // Title annotation
             annotations.push({ text: `<b>${shortSensorId(podId)} vs ${refKey}</b>`, xref: xax + ' domain', yref: yax + ' domain', x: 0.5, y: 1.08, showarrow: false, font: { size: 12, color: '#0a1628' } });
@@ -11700,10 +11699,12 @@ function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed
         const slopePass = reg.slope >= T.slope.min && reg.slope <= T.slope.max;
         const intPass = reg.intercept >= T.intercept.min && reg.intercept <= T.intercept.max;
         const r2Pass = reg.r2 >= T.r2.min;
-        const overallPass = slopePass && intPass && r2Pass;
         const PASS = '#009E73', FAIL = '#D55E00';
 
-        traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: overallPass ? PASS : FAIL, width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
+        // Regression line: neutral dark navy, consistent across audit +
+        // collocation plots. DQO pass/fail is conveyed in the equation
+        // text coloring only.
+        traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
 
         annotations.push({ text: `<b>${shortSensorId(pair.pod)} vs ${shortSensorId(pair.ref)}</b>`, xref: xax + ' domain', yref: yax + ' domain', x: 0.5, y: 1.08, showarrow: false, font: { size: 12, color: '#0a1628' } });
 
@@ -12113,8 +12114,7 @@ function buildRegRow(divId, paramKey, sensorList, refLabel, getRegData) {
     if (idx>0) { layout['xaxis'+suffix].anchor=yax; layout['yaxis'+suffix].anchor=xax; }
     traces.push({x:rd.x,y:rd.y,type:'scatter',mode:'markers',marker:{color:podColors[DATA.podIds.indexOf(sid)%podColors.length]||'#666',size:4,opacity:0.4},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'x+y'});
     var sp=(rd.slope>=0.65&&rd.slope<=1.35), ip=(rd.intercept>=-5&&rd.intercept<=5), rp=(rd.r2>=0.7);
-    var overallPass=sp&&ip&&rp;
-    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:overallPass?'#009E73':'#D55E00',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
+    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:'#0a1628',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
     var sLabel = typeof sid === 'string' && sid.includes('_vs_') ? sid.replace(/_vs_/,' vs ') : (DATA.podShorts[DATA.podIds.indexOf(sid)] || sid);
     annotations.push({text:'<b>'+sLabel+' vs '+refLabel.split(' ')[0]+'</b>',xref:xax+' domain',yref:yax+' domain',x:0.5,y:1.08,showarrow:false,font:{size:12,color:'#0a1628'}});
     var sc=sp?'#009E73':'#D55E00';
@@ -12156,8 +12156,7 @@ function buildInterRegRow(divId, paramKey, pairs) {
     if(idx>0){layout['xaxis'+suffix].anchor=yax;layout['yaxis'+suffix].anchor=xax;}
     traces.push({x:rd.x,y:rd.y,type:'scatter',mode:'markers',marker:{color:pairColors[idx%pairColors.length],size:4,opacity:0.4},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'x+y'});
     var sp=(rd.slope>=0.65&&rd.slope<=1.35), ip=(rd.intercept>=-5&&rd.intercept<=5), rp=(rd.r2>=0.7);
-    var overallPass=sp&&ip&&rp;
-    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:overallPass?'#009E73':'#D55E00',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
+    traces.push({x:[xLo,xHi],y:[rd.slope*xLo+rd.intercept,rd.slope*xHi+rd.intercept],type:'scatter',mode:'lines',line:{color:'#0a1628',width:2.5},xaxis:xax,yaxis:yax,showlegend:false,hoverinfo:'skip'});
     annotations.push({text:'<b>'+pk.replace(/_vs_/,' vs ')+'</b>',xref:xax+' domain',yref:yax+' domain',x:0.5,y:1.08,showarrow:false,font:{size:12,color:'#0a1628'}});
     var sc=sp?'#009E73':'#D55E00';
     var ic=ip?'#009E73':'#D55E00';
