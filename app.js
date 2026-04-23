@@ -8039,24 +8039,41 @@ function advanceAuditStatus(auditId) {
         createNote('Audit', noteText, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
 
         if (podStatusNote) {
-            // (1) Append to the audit's Progress Notes so it shows up in the
-            // audit detail modal's Progress Notes tab.
-            db.appendProgressNote('audit', auditId, podStatusNote, parseMentionedContacts(podStatusNote))
+            const mentions = parseMentionedContacts(podStatusNote);
+            // (1) Append to the audit's Progress Notes. Push optimistically
+            // into audit.progressNotes first so the audit detail re-opens
+            // with the note already visible; the RPC then replaces it with
+            // the server row (mostly identical — server adds the auth user
+            // name for `by` and canonical ISO `at`). If the RPC rejects,
+            // roll back the optimistic push and surface the error.
+            if (!audit.progressNotes) audit.progressNotes = [];
+            const pendingNote = {
+                text: podStatusNote,
+                by: getCurrentUserName(),
+                at: nowDatetime(),
+                taggedContacts: mentions,
+            };
+            audit.progressNotes.push(pendingNote);
+            db.appendProgressNote('audit', auditId, podStatusNote, mentions)
                 .then(saved => {
-                    if (!audit.progressNotes) audit.progressNotes = [];
-                    audit.progressNotes.push(saved || {
-                        text: podStatusNote, by: getCurrentUserName(), at: nowDatetime(),
-                        taggedContacts: parseMentionedContacts(podStatusNote),
-                    });
+                    if (!saved) return;
+                    const idx = audit.progressNotes.indexOf(pendingNote);
+                    if (idx >= 0) audit.progressNotes[idx] = saved;
                 })
-                .catch(handleSaveError);
+                .catch(err => {
+                    const idx = audit.progressNotes.indexOf(pendingNote);
+                    if (idx >= 0) audit.progressNotes.splice(idx, 1);
+                    handleSaveError(err);
+                });
             // (2) Standalone sensor-timeline note tagged to the audit pod so
             // anyone browsing the pod's history sees the context without
-            // having to open the audit detail.
+            // having to open the audit detail. createNote already parses
+            // + persists taggedContacts via note_tags, so @mentions surface
+            // on the tagged contacts' pages too.
             createNote('Audit', podStatusNote, {
                 sensors: [audit.auditPodId],
                 communities: audit.communityId ? [audit.communityId] : [],
-                contacts: parseMentionedContacts(podStatusNote),
+                contacts: mentions,
             });
         }
 
