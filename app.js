@@ -10022,8 +10022,16 @@ function generateAuditReport(auditId) {
     const shortA = `${auditPodSensor?.type || 'Audit Pod'} ${shortSensorId(audit.auditPodId)}`;
     const shortB = `${communityName} Pod ${shortSensorId(audit.communityPodId)}`;
 
-    const dateRange = audit.scheduledStart
-        ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })}`
+    // Report the actual period the audit ran, not what was scheduled.
+    // Scheduled dates routinely drift from the real pickup/takedown
+    // because weather / logistics push field work around; using them
+    // in the report makes the DQO analysis look like it came from the
+    // wrong window. Fall back to scheduled dates only if actuals
+    // weren't recorded.
+    const reportStart = audit.actualStart || audit.scheduledStart;
+    const reportEnd = audit.actualEnd || audit.scheduledEnd;
+    const dateRange = reportStart
+        ? `${new Date(reportStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })} \u2013 ${new Date(reportEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })}`
         : '\u2014';
 
     // DQO table rows — using labelHtml for subscripts. Ranges live in the
@@ -10212,7 +10220,7 @@ function generateAuditReport(auditId) {
     const reportHtml = `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8">
-<title>Audit Report \u2014 ${escapeHtml(communityName)} ${escapeHtml(audit.auditPodId)} ${audit.scheduledStart || ''}</title>
+<title>Audit Report \u2014 ${escapeHtml(communityName)} ${escapeHtml(audit.auditPodId)} ${reportStart || ''}</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -10415,7 +10423,7 @@ function generateAuditReport(auditId) {
     const blob = new Blob([reportHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const fileName = `Audit_${communityName.replace(/\s+/g, '_')}_${audit.auditPodId}_${audit.scheduledStart || 'undated'}.html`;
+    const fileName = `Audit_${communityName.replace(/\s+/g, '_')}_${audit.auditPodId}_${reportStart || 'undated'}.html`;
     a.href = url;
     a.download = fileName;
     document.body.appendChild(a);
