@@ -6841,25 +6841,71 @@ function updatePinButton(communityId) {
 async function archiveSensor(sensorId) {
     const s = findSensor(sensorId);
     if (!s) return;
-    showConfirm('Archive Sensor',
-        `Archive <strong>${escapeHtml(s.id)}</strong>?<br><br>This removes it from the active list but preserves its full history. You can restore it later. Use this when a sensor is decommissioned or permanently retired.`,
-        async () => {
-            try {
-                await db.archiveSensor(sensorId);
-                s.active = false;
-                s.archived_at = new Date().toISOString();
-                // Move from active → archived pool.
-                const idx = sensors.indexOf(s);
-                if (idx >= 0) sensors.splice(idx, 1);
-                if (archivedSensors === null) archivedSensors = [];
-                if (!archivedSensors.includes(s)) archivedSensors.unshift(s);
-                buildSensorSidebar();
-                if (typeof renderSensors === 'function') renderSensors();
-                showSensorView(sensorId);
-                showSuccessToast('Sensor archived');
-            } catch (err) { handleSaveError(err); }
-        },
-        { confirmText: 'Archive' });
+
+    // Custom body inside the confirm modal: message + optional reason
+    // textarea with @mention autocomplete. Captures why the sensor was
+    // archived (e.g. "Pulled from Seward, shipped back for refurb") so
+    // the reason ends up on the sensor's history.
+    const modal = document.getElementById('modal-confirm');
+    document.getElementById('modal-confirm-title').textContent = 'Archive Sensor';
+    document.getElementById('modal-confirm-body').innerHTML = `
+        <p style="margin:0 0 10px;font-size:13px;color:var(--slate-600)">
+            Archive <strong>${escapeHtml(s.id)}</strong>?
+        </p>
+        <p style="margin:0 0 12px;font-size:13px;color:var(--slate-500)">
+            Removes it from the active list but preserves its full history. You can restore it later. Use this when a sensor is decommissioned or permanently retired.
+        </p>
+        <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.4px">Reason for archiving (optional)</label>
+        <div style="position:relative;margin-top:4px">
+            <textarea id="archive-sensor-reason" class="mention-textarea" rows="3" placeholder="e.g. Retired after 4-year deployment. Shipped back to Quant. Type @ to tag a contact." style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
+            <div id="archive-sensor-reason-mention-dropdown" class="mention-dropdown" style="left:0;width:100%"></div>
+        </div>
+    `;
+    const okBtn = document.getElementById('modal-confirm-ok');
+    const cancelBtn = document.getElementById('modal-confirm-cancel');
+    okBtn.textContent = 'Archive';
+    okBtn.className = 'btn btn-confirm-danger';
+    cancelBtn.style.display = '';
+    cancelBtn.textContent = 'Cancel';
+    _confirmCallback = async () => {
+        const reason = (document.getElementById('archive-sensor-reason')?.value || '').trim();
+        try {
+            await db.archiveSensor(sensorId);
+            s.active = false;
+            s.archived_at = new Date().toISOString();
+            // Move from active → archived pool.
+            const idx = sensors.indexOf(s);
+            if (idx >= 0) sensors.splice(idx, 1);
+            if (archivedSensors === null) archivedSensors = [];
+            if (!archivedSensors.includes(s)) archivedSensors.unshift(s);
+            // Log the archive as a Status Change note tagged to the sensor
+            // so it shows up on the sensor's History timeline. Body = the
+            // reason if given, otherwise just the "archived" summary.
+            const summary = `${s.id} archived.`;
+            const noteText = reason ? `${summary} ${reason}` : summary;
+            createNote('Status Change', noteText, {
+                sensors: [sensorId],
+                communities: s.community ? [s.community] : [],
+                contacts: parseMentionedContacts(reason),
+            });
+            buildSensorSidebar();
+            if (typeof renderSensors === 'function') renderSensors();
+            showSensorView(sensorId);
+            showSuccessToast('Sensor archived');
+        } catch (err) { handleSaveError(err); }
+    };
+    _confirmDismissCallback = null;
+    modal.classList.add('open');
+    setTimeout(() => {
+        const ta = document.getElementById('archive-sensor-reason');
+        const dd = document.getElementById('archive-sensor-reason-mention-dropdown');
+        if (ta && dd && typeof setupMentionAutocomplete === 'function' && !ta._mentionInit) {
+            setupMentionAutocomplete(ta, dd);
+            ta._mentionInit = true;
+        }
+        if (typeof wireAllMentionChipStrips === 'function') wireAllMentionChipStrips();
+        ta?.focus();
+    }, 0);
 }
 
 async function restoreSensorFromArchive(sensorId) {
@@ -7974,7 +8020,7 @@ function openAuditDetail(auditId) {
             ${idx > 0 ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
             <span class="action-spacer"></span>
             ${audit.status === 'Finished, Analysis Pending' || audit.status === 'Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
-            ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn" onclick="reuploadAuditData('${audit.id}')">Re-upload Data</button>` : ''}
+            ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn" onclick="reuploadAuditData('${audit.id}')" style="font-size:11px;opacity:0.7">Re-upload Data</button>` : ''}
             ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn btn-danger" onclick="deleteAuditDataset('${audit.id}')" style="font-size:11px;opacity:0.7">Delete Dataset</button>` : ''}
             <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
         </div>
