@@ -5208,13 +5208,14 @@ function addCustomTag() {
 
 // ===== STATUS TOGGLE LIST =====
 const MANUAL_STATUSES = [
-    'Online', 'Offline', 'Lost Connection', 'Lab Storage', 'Ready for Deployment', 'Needs Repair'
+    'Online', 'Offline', 'Lost Connection', 'In Transit Between Audits',
+    'Lab Storage', 'Ready for Deployment', 'Needs Repair'
 ];
 
 // Statuses that are normally managed by workflows (collocation tool, audit workflow, Quant service tickets,
 // or detected from sensor data). Users can still pick them, but a warning confirms they really want to override.
 const AUTO_STATUSES = [
-    'Collocation', 'Auditing a Community', 'In Transit Between Audits',
+    'Collocation', 'Auditing a Community',
     'Service at Quant', 'Quant Ticket in Progress',
     'PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue'
 ];
@@ -5222,7 +5223,6 @@ const AUTO_STATUSES = [
 const AUTO_STATUS_WARNINGS = {
     'Collocation': '<strong>Collocation</strong> is typically applied automatically when you start a collocation. Consider using the Collocation tool instead.<br><br>Apply this status manually anyway?',
     'Auditing a Community': '<strong>Auditing a Community</strong> is typically applied automatically when an audit begins. Consider starting the audit from the Collocation tool instead.<br><br>Apply this status manually anyway?',
-    'In Transit Between Audits': '<strong>In Transit Between Audits</strong> is typically applied automatically as audit pods move between communities. Consider using the Collocation/audit workflow instead.<br><br>Apply this status manually anyway?',
     'Service at Quant': '<strong>Service at Quant</strong> is typically applied automatically by Quant service ticket progression. Consider opening or advancing a Quant ticket instead.<br><br>Apply this status manually anyway?',
     'Quant Ticket in Progress': '<strong>Quant Ticket in Progress</strong> is typically applied automatically when a Quant service ticket is opened. Consider creating a ticket from the Service section instead.<br><br>Apply this status manually anyway?',
     'PM Sensor Issue': '<strong>PM Sensor Issue</strong> is typically applied automatically from sensor data QA/audit results. Consider logging the issue through the audit or service workflow instead.<br><br>Apply this status manually anyway?',
@@ -7962,7 +7962,11 @@ function advanceAuditStatus(auditId) {
         ? AUDIT_STATUSES[idx + 1]
         : 'Complete';
 
-    const doAdvance = () => {
+    // When advancing to "Finished, Analysis Pending," the audit pod is
+    // physically being picked up and is heading somewhere — warehouse,
+    // another audit, storage, repair. Ask the user what status to apply
+    // instead of silently defaulting to Online.
+    const doAdvance = (podStatusOverride, podStatusNote) => {
         audit.status = newStatus;
         const updates = { status: newStatus };
 
@@ -7996,6 +8000,18 @@ function advanceAuditStatus(auditId) {
                 next.add('Online');
                 next.add('Auditing a Community');
                 auditPod.status = [...next];
+            } else if (podStatusOverride) {
+                // User picked a specific status via the advance-to-Finished
+                // prompt. Strip audit/transit tags and apply the chosen one.
+                const cleaned = getStatusArray(auditPod).filter(st =>
+                    st !== 'Auditing a Community'
+                    && st !== 'In Transit Between Audits'
+                    && st !== 'Online'
+                    && st !== 'Offline'
+                    && st !== 'Lab Storage'
+                    && st !== 'Ready for Deployment'
+                );
+                auditPod.status = [...cleaned, podStatusOverride];
             } else {
                 const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
                 auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
@@ -8005,18 +8021,65 @@ function advanceAuditStatus(auditId) {
         buildSensorSidebar();
 
         const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
-        createNote('Audit', `Audit advanced: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
+        let noteText = `Audit advanced: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`;
+        if (podStatusOverride) noteText += ` Audit pod ${audit.auditPodId} set to "${podStatusOverride}".`;
+        if (podStatusNote) noteText += ` ${podStatusNote}`;
+        createNote('Audit', noteText, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
         openAuditDetail(auditId);
         updateSidebarAuditCount();
         if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
     };
 
+    // Finished, Analysis Pending → ask where the audit pod is going next.
+    if (newStatus === 'Finished, Analysis Pending') {
+        showAuditPodStatusPicker(audit, (podStatus, note) => doAdvance(podStatus, note));
+        return;
+    }
+
     // Warn if skipping analysis
     if (newStatus === 'Complete' && Object.keys(audit.analysisResults || {}).length === 0) {
-        showConfirm('No Analysis Data', 'No analysis data has been uploaded for this audit. Are you sure you want to mark it as complete without DQO analysis?', doAdvance);
+        showConfirm('No Analysis Data', 'No analysis data has been uploaded for this audit. Are you sure you want to mark it as complete without DQO analysis?', () => doAdvance());
     } else {
         doAdvance();
     }
+}
+
+// Modal that asks what status to apply to the audit pod when an audit
+// moves to Finished, Analysis Pending. Reuses the confirm-modal shell.
+function showAuditPodStatusPicker(audit, onConfirm) {
+    const modal = document.getElementById('modal-confirm');
+    const podId = audit.auditPodId;
+    document.getElementById('modal-confirm-title').textContent = 'Update Audit Pod Status';
+    document.getElementById('modal-confirm-body').innerHTML = `
+        <p style="margin:0 0 10px;font-size:13px;color:var(--slate-500)">
+            The audit pod <strong>${escapeHtml(podId || '')}</strong> is being picked up.
+            Where is it going next?
+        </p>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="In Transit Between Audits" checked> In Transit Between Audits</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="Lab Storage"> Lab Storage</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="Ready for Deployment"> Ready for Deployment</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="Needs Repair"> Needs Repair</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="Offline"> Offline</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value=""> Skip — leave pod status as-is</label>
+        </div>
+        <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.4px">Note (optional)</label>
+        <textarea id="pod-status-note" class="mention-textarea" rows="2" placeholder="e.g. Shipped out via UPS Monday. Type @ to tag a contact." style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical;margin-top:4px"></textarea>
+    `;
+    const okBtn = document.getElementById('modal-confirm-ok');
+    const cancelBtn = document.getElementById('modal-confirm-cancel');
+    okBtn.textContent = 'Advance Audit';
+    okBtn.className = 'btn btn-primary';
+    cancelBtn.style.display = '';
+    cancelBtn.textContent = 'Cancel';
+    _confirmCallback = () => {
+        const chosen = document.querySelector('input[name="pod-status-choice"]:checked')?.value || '';
+        const note = (document.getElementById('pod-status-note')?.value || '').trim();
+        onConfirm(chosen || null, note || null);
+    };
+    _confirmDismissCallback = null;
+    modal.classList.add('open');
+    setTimeout(wireAllMentionChipStrips, 0);
 }
 
 function revertAuditStatus(auditId) {
