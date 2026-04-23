@@ -10352,7 +10352,11 @@ function generateAuditReport(auditId) {
         <dt>Audit Pod ID</dt><dd><span class="mono">${escapeHtml(audit.auditPodId)}</span></dd>
         <dt>Community Pod Location</dt><dd>${escapeHtml(communityPodSensor?.location || '\u2014')}</dd>
         <dt>Installation / Removal By</dt><dd>${escapeHtml(audit.conductedBy || '\u2014')}</dd>
-        ${(audit.progressNotes || []).length > 0 ? `<dt>Notes</dt><dd style="grid-column:span 3">${audit.progressNotes.map(n => escapeHtml(n.text) + (n.by ? ' — ' + escapeHtml(n.by) : '')).join('<br>')}</dd>` : ''}
+        ${(audit.progressNotes || []).length > 0 ? `<dt>Notes</dt><dd style="grid-column:span 3">${audit.progressNotes.map(n => {
+            const when = n.at ? `<span style="font-size:10.5px;color:#64748b">${escapeHtml(formatDate(n.at))}</span>` : '';
+            const byline = n.by ? `<span style="font-size:10.5px;color:#64748b"> &mdash; ${escapeHtml(n.by)}</span>` : '';
+            return `<div style="margin-bottom:6px">${when}${byline}${when || byline ? '<br>' : ''}${escapeHtml(n.text)}</div>`;
+        }).join('')}</dd>` : ''}
     </dl>
     </section>
 
