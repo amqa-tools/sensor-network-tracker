@@ -8065,12 +8065,16 @@ function advanceAuditStatus(auditId) {
                     if (idx >= 0) audit.progressNotes.splice(idx, 1);
                     handleSaveError(err);
                 });
-            // (2) Standalone sensor-timeline note tagged to the audit pod so
-            // anyone browsing the pod's history sees the context without
-            // having to open the audit detail. createNote already parses
-            // + persists taggedContacts via note_tags, so @mentions surface
-            // on the tagged contacts' pages too.
-            createNote('Audit', podStatusNote, {
+            // (2) Standalone sensor-timeline note tagged to the audit pod.
+            // Use "Status Change" (not "Audit") — the sensor history
+            // timeline filters out Audit/Collocation/Service types into
+            // their own tabs, so an Audit-typed note here would land in
+            // the DB but never render on the sensor's main history.
+            // The user's popup note *is* a status-change log, so the
+            // type also reads accurately. createNote parses + persists
+            // taggedContacts via note_tags, so @mentions surface on each
+            // tagged contact's page too.
+            createNote('Status Change', podStatusNote, {
                 sensors: [audit.auditPodId],
                 communities: audit.communityId ? [audit.communityId] : [],
                 contacts: mentions,
