@@ -7964,9 +7964,13 @@ function advanceAuditStatus(auditId) {
 
     // When advancing to "Finished, Analysis Pending," the audit pod is
     // physically being picked up and is heading somewhere — warehouse,
-    // another audit, storage, repair. Ask the user what status to apply
-    // instead of silently defaulting to Online.
+    // another audit, storage, repair. Ask the user what status(es) to
+    // apply instead of silently defaulting to Online. Accepts an array
+    // so users can pick combinations like In Transit + Offline.
     const doAdvance = (podStatusOverride, podStatusNote) => {
+        const overrides = Array.isArray(podStatusOverride)
+            ? podStatusOverride.filter(Boolean)
+            : (podStatusOverride ? [podStatusOverride] : []);
         audit.status = newStatus;
         const updates = { status: newStatus };
 
@@ -8000,9 +8004,12 @@ function advanceAuditStatus(auditId) {
                 next.add('Online');
                 next.add('Auditing a Community');
                 auditPod.status = [...next];
-            } else if (podStatusOverride) {
-                // User picked a specific status via the advance-to-Finished
-                // prompt. Strip audit/transit tags and apply the chosen one.
+            } else if (overrides.length > 0) {
+                // User picked one or more statuses via the advance-to-Finished
+                // prompt (e.g. In Transit + Offline). Strip the audit tag,
+                // the transit tag, and every deployment-state status so the
+                // pod ends up with exactly the chosen combo — no lingering
+                // Online when the pod is being boxed up for shipping.
                 const cleaned = getStatusArray(auditPod).filter(st =>
                     st !== 'Auditing a Community'
                     && st !== 'In Transit Between Audits'
@@ -8010,8 +8017,10 @@ function advanceAuditStatus(auditId) {
                     && st !== 'Offline'
                     && st !== 'Lab Storage'
                     && st !== 'Ready for Deployment'
+                    && st !== 'Needs Repair'
                 );
-                auditPod.status = [...cleaned, podStatusOverride];
+                const next = new Set([...cleaned, ...overrides]);
+                auditPod.status = [...next];
             } else {
                 const cleaned = getStatusArray(auditPod).filter(st => st !== 'Auditing a Community');
                 auditPod.status = cleaned.length > 0 ? cleaned : ['Online'];
@@ -8022,7 +8031,7 @@ function advanceAuditStatus(auditId) {
 
         const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
         let noteText = `Audit advanced: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`;
-        if (podStatusOverride) noteText += ` Audit pod ${audit.auditPodId} set to "${podStatusOverride}".`;
+        if (overrides.length > 0) noteText += ` Audit pod ${audit.auditPodId} set to "${overrides.join(', ')}".`;
         if (podStatusNote) noteText += ` ${podStatusNote}`;
         createNote('Audit', noteText, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
         openAuditDetail(auditId);
@@ -8044,8 +8053,11 @@ function advanceAuditStatus(auditId) {
     }
 }
 
-// Modal that asks what status to apply to the audit pod when an audit
-// moves to Finished, Analysis Pending. Reuses the confirm-modal shell.
+// Modal that asks what status(es) to apply to the audit pod when an audit
+// moves to Finished, Analysis Pending. Checkboxes so the user can pick a
+// combination (e.g. In Transit + Offline — on a plane, not reporting).
+// Whatever is chosen replaces any existing Online / Offline / Lab Storage /
+// Ready for Deployment / Needs Repair + the audit/transit tags on the pod.
 function showAuditPodStatusPicker(audit, onConfirm) {
     const modal = document.getElementById('modal-confirm');
     const podId = audit.auditPodId;
@@ -8053,16 +8065,17 @@ function showAuditPodStatusPicker(audit, onConfirm) {
     document.getElementById('modal-confirm-body').innerHTML = `
         <p style="margin:0 0 10px;font-size:13px;color:var(--slate-500)">
             The audit pod <strong>${escapeHtml(podId || '')}</strong> is being picked up.
-            Where is it going next?
+            Pick one or more statuses — whatever you choose replaces the pod's
+            current Online / deployment tags so it reads accurately.
         </p>
         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="In Transit Between Audits" checked> In Transit Between Audits</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="Lab Storage"> Lab Storage</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="Ready for Deployment"> Ready for Deployment</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="Needs Repair"> Needs Repair</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value="Offline"> Offline</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="radio" name="pod-status-choice" value=""> Skip — leave pod status as-is</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="In Transit Between Audits" checked> In Transit Between Audits</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Offline"> Offline</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Lab Storage"> Lab Storage</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Ready for Deployment"> Ready for Deployment</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Needs Repair"> Needs Repair</label>
         </div>
+        <p style="font-size:11px;color:var(--slate-400);margin:-4px 0 10px">Leave every box unchecked to leave the pod's status as-is.</p>
         <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.4px">Note (optional)</label>
         <textarea id="pod-status-note" class="mention-textarea" rows="2" placeholder="e.g. Shipped out via UPS Monday. Type @ to tag a contact." style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical;margin-top:4px"></textarea>
     `;
@@ -8073,9 +8086,9 @@ function showAuditPodStatusPicker(audit, onConfirm) {
     cancelBtn.style.display = '';
     cancelBtn.textContent = 'Cancel';
     _confirmCallback = () => {
-        const chosen = document.querySelector('input[name="pod-status-choice"]:checked')?.value || '';
+        const chosen = Array.from(document.querySelectorAll('.pod-status-choice:checked')).map(el => el.value);
         const note = (document.getElementById('pod-status-note')?.value || '').trim();
-        onConfirm(chosen || null, note || null);
+        onConfirm(chosen, note || null);
     };
     _confirmDismissCallback = null;
     modal.classList.add('open');
