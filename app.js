@@ -7906,7 +7906,8 @@ function openAuditDetail(auditId) {
             ${idx > 0 ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
             <span class="action-spacer"></span>
             ${audit.status === 'Finished, Analysis Pending' || audit.status === 'Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
-            ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn" onclick="delete analysisDataCache['${audit.id}']; beginAnalysis('${audit.id}')">Re-upload Data</button>` : ''}
+            ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn" onclick="reuploadAuditData('${audit.id}')">Re-upload Data</button>` : ''}
+            ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn btn-danger" onclick="deleteAuditDataset('${audit.id}')" style="font-size:11px;opacity:0.7">Delete Dataset</button>` : ''}
             <button class="btn" onclick="closeModal('modal-audit-detail')">Done</button>
         </div>
         <div class="ticket-detail-grid">
@@ -8382,6 +8383,59 @@ async function deleteAudit(auditId) {
         if (currentCommunity) showCommunityView(currentCommunity);
         if (currentSensor) showSensorView(currentSensor);
     }, { danger: true });
+}
+
+// Re-upload data flow for audits — mirrors reuploadCollocationData. The
+// previous implementation only cleared the client-side analysisDataCache,
+// but beginAnalysis still saw audit.analysisResults populated and routed
+// to the results view. Clear the persisted analysis fields too so the
+// next beginAnalysis call lands on the upload form.
+function reuploadAuditData(auditId) {
+    const audit = audits.find(a => a.id === auditId);
+    if (!audit) return;
+    delete analysisDataCache[auditId];
+    audit.analysisResults = {};
+    audit.analysisChartData = null;
+    audit.analysisName = '';
+    audit.analysisUploadDate = null;
+    audit.analysisUploadedBy = '';
+    persistAuditUpdate(auditId, {
+        analysisResults: {},
+        analysisChartData: null,
+        analysisName: '',
+        analysisUploadDate: null,
+        analysisUploadedBy: '',
+    });
+    beginAnalysis(auditId);
+}
+
+// Clear the dataset on an audit entirely — leaves the audit but removes
+// all analysis results, chart data, and upload metadata. Different from
+// Re-upload in that it doesn't open the upload modal; the audit just
+// returns to a pre-analysis state.
+function deleteAuditDataset(auditId) {
+    const audit = audits.find(a => a.id === auditId);
+    if (!audit) return;
+    showConfirm('Delete Audit Dataset',
+        `Clear the analysis dataset for this audit?<br><br>This removes the uploaded data, chart data, and DQO results. The audit record, progress notes, and photos stay intact. You can upload a new dataset later by clicking Begin Analysis.<br><br><strong>This can't be undone.</strong>`,
+        () => {
+            delete analysisDataCache[auditId];
+            audit.analysisResults = {};
+            audit.analysisChartData = null;
+            audit.analysisName = '';
+            audit.analysisUploadDate = null;
+            audit.analysisUploadedBy = '';
+            persistAuditUpdate(auditId, {
+                analysisResults: {},
+                analysisChartData: null,
+                analysisName: '',
+                analysisUploadDate: null,
+                analysisUploadedBy: '',
+            });
+            showSuccessToast('Dataset deleted');
+            openAuditDetail(auditId);
+        },
+        { danger: true, confirmText: 'Delete Dataset' });
 }
 
 function beginAnalysis(auditId) {
