@@ -267,7 +267,7 @@
 <p>The Dashboard is the landing page when you open the app. It gives you a quick network health snapshot: counts of active sensors, deployed communities, open service tickets, audits in progress, and the live feed of QuantAQ performance alerts.</p>
 
 <h3>How QuantAQ Alerts Work</h3>
-<p>The app automatically scans QuantAQ's API on a daily schedule to catch and record sensor component malfunctions and power failures. Every scan pulls a window of recent raw readings per sensor and translates the QuantAQ flag bitmask into a defined sensor status.</p>
+<p>The app automatically scans QuantAQ's API <strong>every 2 hours, every day</strong> to catch and record sensor component malfunctions and power failures. Every scan pulls a window of recent raw readings per sensor and translates the QuantAQ flag bitmask into a defined sensor status.</p>
 
 <p>Four kinds of alerts can fire:</p>
 <ul>
@@ -288,11 +288,20 @@
 <h3>What Happens to the Sensor's Status</h3>
 <p>When a PM, SD, or Gas alert becomes active, the corresponding status tag (e.g., "PM Sensor Issue") is automatically added to the sensor's status — but <strong>"Online" stays</strong>. The sensor is still reporting data, just with a fault flagged alongside. Only a Lost Connection alert (or a manual status change you make yourself) removes the "Online" tag.</p>
 
+<p>When the underlying issue clears, the alert is marked resolved and the matching status tag is <strong>automatically removed from the sensor</strong>. So a sensor whose Gaseous Sensor Issue gets sorted out will lose that status tag on the next scan with no manual cleanup needed.</p>
+
+<h3>Dismissing Alerts</h3>
+<p>If you want to silence an alert that's still active in QuantAQ but you've handled in the field, click <strong>Dismiss</strong> on the alert card. The dismiss panel includes:</p>
+<ul>
+  <li>An optional note explaining why you dismissed it.</li>
+  <li>A checkbox: <strong>"Also clear [Issue Type] from [Sensor] status"</strong> — checked by default whenever the sensor currently carries that status flag. Leaving it on wipes the status from the sensor in the same click; uncheck if you want the alert hidden but the status to remain visible.</li>
+</ul>
+
 <h3>Acknowledging &amp; Linking to History</h3>
 <p>Click an alert card to write a follow-up note or jump to the sensor's detail page. Writing a follow-up creates a row in the sensor's event history so the alert and your response are linked — useful when you're reviewing a sensor weeks later and want to know what happened or what actions were taken to resolve the issue.</p>
 
 <h3>Run Check Now</h3>
-<p>The dashboard has a "Run Check Now" button that kicks off a scan on demand if you don't want to wait for the next scheduled run (Mon-Fri at 6:00am AKST). The scan runs server-side and takes a minute or two. The "last check" / "next check" timestamps next to the button reflect the daily schedule.</p>
+<p>The dashboard has a "Run Check Now" button that kicks off a scan on demand if you don't want to wait for the next scheduled run. The scan runs server-side and takes a minute or two. The "last check" / "next check" timestamps next to the button reflect the live cron schedule.</p>
 
 <div class="callout tip">
   <div class="callout-label">Expected Offline Statuses</div>
@@ -302,6 +311,18 @@
 <h2 id="sensors">4. Working with Sensors</h2>
 
 <p>The All Sensors page is the main view. You can search by sensor ID, filter by status, and click any sensor to see its full detail page.</p>
+
+<h3>Active &amp; Archived Tabs</h3>
+<p>At the top of the All Sensors page, two tabs separate the live fleet from retired pods:</p>
+<ul>
+  <li><strong>Active</strong> — Every sensor currently in use. This is what you usually want.</li>
+  <li><strong>Archived</strong> — Sensors that have been pulled out of service (decommissioned, retired, etc). Their full history is preserved and they can be restored at any time.</li>
+</ul>
+
+<h3>Archiving a Sensor</h3>
+<p>From the sensor's detail page, click <strong>Archive Sensor</strong>. The confirm popup includes an optional <strong>"Reason for archiving"</strong> textarea where you can explain why (e.g., "Shipped back to Quant after 4-year deployment"). Type @ to tag a contact in the reason. Whatever you write gets logged as a Status Change note on the sensor's history, so future-you knows what happened.</p>
+
+<p>Archived sensors aren't deleted — they're hidden from the active list. Restore them from the Archived tab or from the Trash Bin in Settings.</p>
 
 <h3>Sensor Statuses</h3>
 <p>Each sensor can have one or more status tags. Statuses fall into two groups: ones you apply manually, and ones that get applied automatically by workflows (collocations, audits, QuantAQ alerts, and service tickets).</p>
@@ -396,8 +417,16 @@
 
 <p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — handy for logging things like "Installed 3 sensors at NCore for collocation following their Quant calibration"</p>
 
-<h3>Editing Notes</h3>
-<p>Click the pencil icon on any note in the timeline to edit it. The edit modal shows the full text in a text area so you can make changes without losing any content. Click "Done" to save.</p>
+<h3>Editing Notes &amp; Communications</h3>
+<p>Click the pencil icon on any note or communication log in the timeline. It re-opens the <strong>full Add Note / Log Communication modal</strong> prefilled with everything that was originally entered — type, date, text, sensor/community tags, and contact @mentions. Edit anything, click <strong>Save Changes</strong>, and the timeline entry updates in place. The action checkboxes (Move Sensors / Status Change / etc.) are hidden during edit since those are creation-time actions and shouldn't re-fire on every save.</p>
+
+<h3>Adding a Follow-Up to an Existing Note</h3>
+<p>Each note in the timeline has an <strong>Add Note</strong> button that lets you append a follow-up directly under that note. Follow-ups are timestamped with your name and date and stay visually grouped with the parent. Type @ inside a follow-up to tag a contact, and they'll be added to the parent note's tags so the follow-up shows up on their contact page too.</p>
+
+<h3>Deleting a Note</h3>
+<p>Click the trash icon. For ordinary notes, you'll get a confirm dialog. For <strong>Status Change</strong> and <strong>Movement</strong> notes, the confirm dialog includes an extra checkbox: <strong>"Also revert sensor changes."</strong> Leaving it checked rolls the sensor's status (or community) back to what it was before the note was created — handy when you log a status change by mistake. Uncheck it if you only want to delete the note record without touching the sensor.</p>
+
+<p>Deletes are soft — the record goes to the Trash Bin (Settings → Trash Bin, admin-only) for 30 days before being auto-purged. See <a href="#trash">Section 14. Trash Bin &amp; Archived Items</a>.</p>
 
 <h3>Event History Filters</h3>
 <p>On sensor pages, the event history dropdown lets you filter by:</p>
@@ -430,6 +459,9 @@
 </div>
 
 <p>As you advance the ticket through each stage, the sensor's status updates automatically. For example, advancing to "Shipped to Quant" adds that status to the sensor and removes any previous shipping status.</p>
+
+<h3>Multi-Sensor Tickets</h3>
+<p>A single ticket can cover several sensors at once — useful when you ship a batch back to QuantAQ together. Tag every sensor on the ticket and they all advance through the workflow as one unit. Each sensor's individual page links back to the shared ticket, and progress notes appear on all of their histories.</p>
 
 <h3>Progress Notes</h3>
 <p>Each ticket has a Progress Notes section where you can add timestamped updates as things progress. These notes show on both the ticket detail and the sensor page's ticket preview, so you can see the latest status without clicking into the ticket.</p>
@@ -488,6 +520,15 @@
 
 <p>Each audit tracks the audit pod, community pod, community, dates, and who installed/removed the equipment. Like collocations, audits have progress notes and a full analysis pipeline.</p>
 
+<h3>Updating the Audit Pod's Status</h3>
+<p>From the audit detail view, click <strong>Update Audit Pod Status</strong> to change what the audit pod is doing between or during audits. The picker is a multi-select — you can flip the pod between "In Transit Between Audits," "Offline," "Auditing a Community," etc. — and includes a note textarea with @mention autocomplete for tagging contacts who shipped or received the pod. The note posts to:</p>
+<ul>
+  <li>The audit's progress notes</li>
+  <li>The audit pod sensor's event history</li>
+  <li>Each tagged contact's history</li>
+</ul>
+<p>So a single status update gives you a full paper trail without having to log it in three places.</p>
+
 <h2 id="analysis">10. Data Analysis &amp; Reports</h2>
 
 <p>Once a collocation or audit reaches "Complete," you can upload an Excel data file and the app runs the full regression analysis for you.</p>
@@ -525,6 +566,13 @@
 
 <h3>Saving Reports</h3>
 <p>Click "Save as HTML" to download a standalone report file. It opens in any browser with all the interactive charts — no server needed. The filename follows the format: <code>Garden_Collocation_Analysis_445_451_674_Mar19_Apr1_2026.html</code></p>
+
+<h3>How Audit Reports Read</h3>
+<ul>
+  <li><strong>DQO equation coloring</strong> — Slope, intercept, and R² are each colored independently in the equation line: green when the value passes its DQO threshold, orange when it fails. (Colorblind-safe palette.) Plot lines themselves stay neutral so the colors only signal what they need to.</li>
+  <li><strong>Audit dates</strong> — Reports use the <strong>Actual Start</strong> and <strong>Actual End</strong> fields from the audit, not the scheduled dates, so the header reflects what really happened.</li>
+  <li><strong>Progress note timestamps</strong> — Each progress note in the report shows a small timestamp so you can see when it was logged.</li>
+</ul>
 
 <h3>Validation Checks</h3>
 <p>Every analysis includes automated failsafe checks (click the validation dropdown to review):</p>
