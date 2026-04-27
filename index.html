@@ -514,7 +514,7 @@
 
                 <div class="settings-section" id="settings-trash-section" style="display:none">
                     <h3 class="settings-section-title">Trash Bin <span style="font-weight:400;font-size:12px;color:var(--slate-400);margin-left:8px">Admins only</span></h3>
-                    <p class="settings-description">Soft-deleted notes, communications, service tickets, audits, and collocations. Restore puts the item back where it came from; Delete permanently removes it (can't be undone).</p>
+                    <p class="settings-description">Soft-deleted notes, communications, service tickets, audits, and collocations. Restore puts the item back where it came from; Purge permanently removes it (can't be undone). Items left here are <strong>auto-purged after 30 days</strong>. Archived sensors don't auto-purge.</p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
                         <button class="btn btn-sm trash-filter-btn active" data-trash-filter="all" onclick="renderTrashBin('all')">All</button>
                         <button class="btn btn-sm trash-filter-btn" data-trash-filter="note" onclick="renderTrashBin('note')">Notes</button>
