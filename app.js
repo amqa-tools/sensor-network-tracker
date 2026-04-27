@@ -1515,22 +1515,33 @@ function nextCronRun(schedule, fromDate) {
     const [mStr, hStr, domStr, monStr, dowStr] = parts;
 
     const parseField = (str, min, max) => {
-        if (str === '*') {
-            const set = new Set();
-            for (let i = min; i <= max; i++) set.add(i);
-            return set;
-        }
+        // Each comma-separated piece can be one of:
+        //   *           every value in [min, max]
+        //   N           single value
+        //   A-B         inclusive range
+        //   */N         every Nth value across the full range
+        //   A-B/N       every Nth value across the given range
         const set = new Set();
         for (const piece of str.split(',')) {
-            if (piece.includes('-')) {
-                const [a, b] = piece.split('-').map(Number);
+            const [body, stepStr] = piece.split('/');
+            const step = stepStr === undefined ? 1 : Number(stepStr);
+            if (isNaN(step) || step < 1) return null;
+            let lo, hi;
+            if (body === '*') {
+                lo = min; hi = max;
+            } else if (body.includes('-')) {
+                const [a, b] = body.split('-').map(Number);
                 if (isNaN(a) || isNaN(b)) return null;
-                for (let i = a; i <= b; i++) set.add(i);
+                lo = a; hi = b;
             } else {
-                const n = Number(piece);
+                const n = Number(body);
                 if (isNaN(n)) return null;
-                set.add(n);
+                if (step === 1) { set.add(n); continue; }
+                // A bare value with a step like "5/15" is unusual but pg_cron
+                // treats it as "starting at 5, every 15 up to max".
+                lo = n; hi = max;
             }
+            for (let i = lo; i <= hi; i += step) set.add(i);
         }
         return set;
     };
