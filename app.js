@@ -83,9 +83,15 @@ function showConfirm(title, message, onConfirm, options = {}) {
 function showPrompt(title, message, defaultValue, onSubmit, options = {}) {
     const modal = document.getElementById('modal-confirm');
     document.getElementById('modal-confirm-title').textContent = title;
-    const inputType = options.multiline ? 'textarea' : 'input';
+    // Pass `mention: true` to attach @-contact autocomplete on the textarea.
+    // Adds the required sibling .mention-dropdown element so the
+    // setupMentionAutocomplete helper has something to render into.
+    const wantsMention = options.multiline && options.mention;
     const inputMarkup = options.multiline
-        ? `<textarea id="modal-prompt-input" rows="4" class="mention-textarea" style="width:100%;font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5"></textarea>`
+        ? `<div style="position:relative">
+                <textarea id="modal-prompt-input" rows="4" class="mention-textarea" style="width:100%;font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5"></textarea>
+                ${wantsMention ? `<div id="modal-prompt-mention-dropdown" class="mention-dropdown" style="left:0;width:100%"></div>` : ''}
+            </div>`
         : `<input type="text" id="modal-prompt-input" style="width:100%;font-size:14px;padding:10px 12px;border:1px solid var(--slate-200);border-radius:8px">`;
     document.getElementById('modal-confirm-body').innerHTML = `
         ${message ? `<p style="margin:0 0 10px;font-size:13px;color:var(--slate-500)">${message}</p>` : ''}
@@ -101,7 +107,18 @@ function showPrompt(title, message, defaultValue, onSubmit, options = {}) {
     _confirmCallback = () => onSubmit((input.value || '').trim());
     _confirmDismissCallback = () => onSubmit(null);
     modal.classList.add('open');
-    setTimeout(() => { input.focus(); input.select(); }, 0);
+    setTimeout(() => {
+        input.focus();
+        input.select();
+        if (wantsMention && typeof setupMentionAutocomplete === 'function') {
+            const dd = document.getElementById('modal-prompt-mention-dropdown');
+            if (dd && !input._mentionInit) {
+                setupMentionAutocomplete(input, dd);
+                input._mentionInit = true;
+            }
+        }
+        if (wantsMention && typeof wireAllMentionChipStrips === 'function') wireAllMentionChipStrips();
+    }, 0);
     // Enter submits on single-line; Shift+Enter / newline in multiline.
     if (!options.multiline) {
         input.addEventListener('keydown', function(e) {
@@ -4472,10 +4489,21 @@ function editFollowUp(noteId, followUpIdx) {
             followUps[followUpIdx] = `— ${newText}`;
         }
         note.text = [...mainLines, ...followUps].join('\n');
+        // Pick up any contacts the user @mentioned in the edited follow-up
+        // and add them to the parent note's tag set, so they appear in
+        // that contact's history and the chip strip stays accurate.
+        const mentioned = parseMentionedContacts(newText);
+        if (mentioned.length) {
+            db.addNoteContactTags(noteId, mentioned).then(added => {
+                if (!added?.length) return;
+                if (!note.taggedContacts) note.taggedContacts = [];
+                added.forEach(id => { if (!note.taggedContacts.includes(id)) note.taggedContacts.push(id); });
+            }).catch(handleSaveError);
+        }
         db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
         refreshCurrentView();
         if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
-    }, { multiline: true });
+    }, { multiline: true, mention: true });
 }
 
 function deleteFollowUp(noteId, followUpIdx) {
