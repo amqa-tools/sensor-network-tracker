@@ -213,6 +213,7 @@
     <li><a href="#contacts">Contacts</a></li>
     <li><a href="#exporting">Exporting Data</a></li>
     <li><a href="#admin-modes">Admin Modes (Setup &amp; Sandbox)</a></li>
+    <li><a href="#trash">Trash Bin &amp; Archived Items</a></li>
     <li><a href="#tips">Tips &amp; Good-to-Knows</a></li>
   </ol>
 </div>
@@ -605,7 +606,30 @@
   <strong>Doing a lot of real cleanup/backfill and want to skip the auto-notes?</strong> Setup Mode. Everything persists.
 </div>
 
-<h2 id="tips">14. Tips &amp; Good-to-Knows</h2>
+<h2 id="trash">14. Trash Bin &amp; Archived Items</h2>
+
+<p>Deletes in this app are <strong>soft deletes</strong>. When you click the trash icon on a note, comm log, service ticket, audit, or collocation, the record disappears from its normal lists but stays in the database — admins can restore it from the Trash Bin in Settings.</p>
+
+<p>Archived sensors live alongside the trash. You can also flip back to them via the Active / Archived tabs at the top of the All Sensors page.</p>
+
+<h3>Where to Find It</h3>
+<p>Settings → <strong>Trash Bin</strong> (admins only). Filter buttons let you narrow the list by item type: notes, communications, service tickets, audits, collocations, or archived sensors.</p>
+
+<h3>Restore vs. Purge</h3>
+<ul>
+  <li><strong>Restore</strong> — puts the item back exactly where it came from (sensor history, community page, ticket list, etc).</li>
+  <li><strong>Purge</strong> — permanently deletes it. There's no undo.</li>
+</ul>
+
+<h3>Auto-Purge After 30 Days</h3>
+<p>Items in the trash bin are automatically purged 30 days after deletion. The window gives you time to recover an accidental delete without letting old junk pile up forever. <strong>Archived sensors don't auto-purge</strong> — they stay until an admin explicitly removes them, because tickets, audits, and notes can still reference them.</p>
+
+<div class="callout heads-up">
+  <div class="callout-label">Heads Up</div>
+  If you soft-delete something and want it gone immediately, click <strong>Purge</strong> in the Trash Bin instead of waiting for the 30-day cleanup. Purging is permanent.
+</div>
+
+<h2 id="tips">15. Tips &amp; Good-to-Knows</h2>
 
 <div class="callout">
   <div class="callout-label">Timezones</div>
