@@ -734,13 +734,14 @@
     <div id="modal-add-note" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Add Note</h2>
+                <h2 id="modal-add-note-title">Add Note</h2>
                 <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-add-note')">&times;</button>
             </div>
             <form id="note-form" onsubmit="saveNote(event)">
                 <input type="hidden" id="note-context-id">
                 <input type="hidden" id="note-context-type">
-                <div class="form-group">
+                <input type="hidden" id="note-edit-id">
+                <div class="form-group" id="note-actions-group">
                     <label>Actions <span style="font-weight:400;color:var(--slate-400)">(optional)</span></label>
                     <div id="note-actions-list" style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
                         <label class="note-action-option"><input type="checkbox" id="note-action-move" onchange="onNoteActionsChange()"> <span id="note-action-move-label">Move Sensors</span></label>
@@ -788,7 +789,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn" onclick="closeModal('modal-add-note')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Note</button>
+                    <button type="submit" class="btn btn-primary" id="modal-add-note-submit">Save Note</button>
                 </div>
             </form>
         </div>
@@ -798,11 +799,12 @@
     <div id="modal-comm" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Log Communication</h2>
+                <h2 id="modal-comm-title">Log Communication</h2>
                 <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-comm')">&times;</button>
             </div>
             <form id="comm-form" onsubmit="saveComm(event)">
                 <input type="hidden" id="comm-community-id">
+                <input type="hidden" id="comm-edit-id">
                 <div class="form-group">
                     <label>Type</label>
                     <select id="comm-type-input">
@@ -824,7 +826,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn" onclick="closeModal('modal-comm')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="submit" class="btn btn-primary" id="modal-comm-submit">Save</button>
                 </div>
             </form>
         </div>

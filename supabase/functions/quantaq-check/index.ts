@@ -584,6 +584,13 @@ async function runScan(): Promise<Response> {
   // first scan) — the LC tag never landed. This pass re-queries the
   // currently-active alerts and forces sensor.status into agreement,
   // self-healing any historical misses including already-stored rows.
+  //
+  // Also strips orphaned auto-managed statuses: if a sensor still carries
+  // "Gaseous Sensor Issue" (or PM / SD / Lost Connection) but no
+  // corresponding active alert exists, the resolve path didn't catch it
+  // (silent dismissal, partial scan, dismissed-pending alert that had
+  // already promoted, etc). Reconciliation cleans those up so the UI
+  // never shows a stale auto-flag the system can no longer back up.
   const activeRes = await supa
     .from("quantaq_alerts")
     .select("sensor_sn, issue_type")
@@ -596,20 +603,43 @@ async function runScan(): Promise<Response> {
     if (!set) { set = new Set(); neededBySensor.set(a.sensor_sn, set); }
     set.add(a.issue_type);
   }
-  for (const [sn, needed] of neededBySensor) {
-    const s = sensorById.get(sn);
-    if (!s) continue;
+  // Statuses we own end-to-end. Anything outside this set is human-managed
+  // and stays untouched (Online, Offline, In Transit, Service at Quant,
+  // Collocation, Auditing a Community, Lab Storage, etc).
+  const QAQ_MANAGED = new Set([
+    "Lost Connection",
+    "PM Sensor Issue",
+    "Gaseous Sensor Issue",
+    "SD Card Issue",
+  ]);
+  // Reconcile every sensor we have, not just the ones with active alerts —
+  // we need to spot the ones whose status flag is stuck on without any
+  // backing alert.
+  for (const s of sensors) {
     const cur = getStatusArray(s);
-    const merged = new Set([...cur, ...needed]);
-    // Lost Connection trumps Online — sensor truly isn't reporting.
-    if (needed.has("Lost Connection")) merged.delete("Online");
-    const final = [...merged];
-    if (final.slice().sort().join(",") !== cur.slice().sort().join(",")) {
+    const needed = neededBySensor.get(s.id) ?? new Set<string>();
+    // Drop any auto-managed status that no longer has an active alert.
+    let next = cur.filter((st) => !QAQ_MANAGED.has(st) || needed.has(st));
+    // Add any auto-managed status that an active alert says we should have.
+    for (const st of needed) if (!next.includes(st)) next.push(st);
+    // Lost Connection vs Online is mutually exclusive.
+    if (needed.has("Lost Connection")) next = next.filter((st) => st !== "Online");
+    else if (cur.includes("Lost Connection") && !needed.has("Lost Connection")) {
+      // Just stripped Lost Connection — make sure Online is back unless
+      // a human has already moved the sensor into another lifecycle state
+      // (In Transit, Lab Storage, etc).
+      const HUMAN_LIFECYCLE = new Set(["In Transit", "Service at Quant", "Collocation", "Auditing a Community", "Lab Storage", "Needs Repair", "Ready for Deployment"]);
+      const inLifecycle = next.some((st) => HUMAN_LIFECYCLE.has(st));
+      if (!inLifecycle && !next.includes("Online") && !next.includes("Offline")) next.unshift("Online");
+    }
+    // Empty after stripping → Online fallback (matches the resolve path).
+    if (next.length === 0) next = ["Online"];
+    if (next.slice().sort().join(",") !== cur.slice().sort().join(",")) {
       check(
         "reconcile sensor status against active alerts",
-        await supa.from("sensors").update({ status: final, updated_at: now }).eq("id", s.id),
+        await supa.from("sensors").update({ status: next, updated_at: now }).eq("id", s.id),
       );
-      s.status = final;
+      s.status = next;
     }
   }
 

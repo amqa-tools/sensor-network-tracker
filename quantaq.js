@@ -489,14 +489,29 @@ function renderQuantAQAlertList(alerts, isNew) {
                 ${a.acknowledgedBy ? `<span style="font-size:11px;color:var(--slate-400)">Dismissed by ${escapeHtml(a.acknowledgedBy)}</span> <button class="btn btn-sm" style="font-size:10px;color:var(--slate-400);border-color:var(--slate-200)" onclick="undismissQuantAQAlert('${a.id}')">Restore</button>` : ''}
                 ${setupMode && a.acknowledgedBy ? `<button class="btn btn-sm" style="font-size:10px;color:#dc2626;border-color:#fecdd3" onclick="deleteQuantAQAlert('${a.id}')">Delete</button>` : ''}
             </div>
-            ${!isResolved && !a.acknowledgedBy ? `<div id="quantaq-dismiss-panel-${a.id}" class="quantaq-action-panel" style="display:none">
-                <p style="font-size:12px;font-weight:600;color:var(--slate-500);margin-bottom:6px">Dismiss Alert</p>
-                <textarea id="quantaq-dismiss-input-${a.id}" rows="2" placeholder="Add a reason (optional — leave blank to skip)" style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
-                <div style="display:flex;gap:8px;margin-top:6px">
-                    <button class="btn btn-sm btn-primary" onclick="confirmDismissQuantAQAlert('${a.id}')">Dismiss</button>
-                    <button class="btn btn-sm" onclick="document.getElementById('quantaq-dismiss-panel-${a.id}').style.display='none'">Cancel</button>
-                </div>
-            </div>` : ''}
+            ${!isResolved && !a.acknowledgedBy ? (() => {
+                // Show a "clear sensor status" checkbox when the sensor
+                // currently carries this issue's status flag — so dismissing
+                // an alert that's been resolved in the field also wipes the
+                // matching status on the sensor in one action.
+                const _sensor = sensors.find(s => s.id === a.sensorSn);
+                const _hasStatus = _sensor && Array.isArray(_sensor.status) && _sensor.status.includes(a.issueType);
+                const clearStatusHtml = _hasStatus
+                    ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--slate-500);margin-top:8px;cursor:pointer">
+                            <input type="checkbox" id="quantaq-dismiss-clear-status-${a.id}" checked style="width:14px;height:14px">
+                            <span>Also clear "${escapeHtml(a.issueType)}" from ${escapeHtml(a.sensorSn)} status</span>
+                        </label>`
+                    : '';
+                return `<div id="quantaq-dismiss-panel-${a.id}" class="quantaq-action-panel" style="display:none">
+                    <p style="font-size:12px;font-weight:600;color:var(--slate-500);margin-bottom:6px">Dismiss Alert</p>
+                    <textarea id="quantaq-dismiss-input-${a.id}" rows="2" placeholder="Add a reason (optional — leave blank to skip)" style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
+                    ${clearStatusHtml}
+                    <div style="display:flex;gap:8px;margin-top:6px">
+                        <button class="btn btn-sm btn-primary" onclick="confirmDismissQuantAQAlert('${a.id}')">Dismiss</button>
+                        <button class="btn btn-sm" onclick="document.getElementById('quantaq-dismiss-panel-${a.id}').style.display='none'">Cancel</button>
+                    </div>
+                </div>`;
+            })() : ''}
             ${a.acknowledgedBy ? `<div id="quantaq-restore-panel-${a.id}" class="quantaq-action-panel" style="display:none">
                 <p style="font-size:12px;font-weight:600;color:var(--slate-500);margin-bottom:6px">Restore Alert</p>
                 <textarea id="quantaq-restore-input-${a.id}" rows="2" placeholder="Add a reason (optional — leave blank to skip)" style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
@@ -543,6 +558,8 @@ async function confirmDismissQuantAQAlert(alertId) {
     const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
     const input = document.getElementById('quantaq-dismiss-input-' + alertId);
     const noteText = input?.value?.trim() || '';
+    const clearCb = document.getElementById('quantaq-dismiss-clear-status-' + alertId);
+    const shouldClearStatus = clearCb?.checked === true;
 
     alert.acknowledgedBy = userName;
 
@@ -551,6 +568,7 @@ async function confirmDismissQuantAQAlert(alertId) {
     if (eventNote) {
         let line = `\n— Dismissed by ${userName} (${timestamp})`;
         if (noteText) line += `: ${noteText}`;
+        if (shouldClearStatus) line += ` [cleared "${alert.issueType}" status]`;
         eventNote.text += line;
         try {
             await db.updateNote(eventNote.id, { text: eventNote.text });
@@ -565,6 +583,29 @@ async function confirmDismissQuantAQAlert(alertId) {
         // Roll back the optimistic in-memory acknowledge so UI matches DB.
         alert.acknowledgedBy = null;
         if (typeof handleSaveError === 'function') handleSaveError(err);
+    }
+
+    // Strip the matching status from the sensor if the user opted in.
+    // We only ever touch the four QuantAQ-managed flags — manual statuses
+    // like "Online", "In Transit", "Service at Quant" are left alone.
+    if (shouldClearStatus) {
+        const sensor = (typeof sensors !== 'undefined') ? sensors.find(s => s.id === alert.sensorSn) : null;
+        if (sensor && Array.isArray(sensor.status) && sensor.status.includes(alert.issueType)) {
+            const next = sensor.status.filter(st => st !== alert.issueType);
+            // Strip Lost Connection → make sure Online is back. Sensor was
+            // reachable enough for a human to confirm the issue is over.
+            if (alert.issueType === 'Lost Connection' && !next.includes('Online')) next.unshift('Online');
+            // PM/Gas/SD cleared and the sensor has nothing else? fall back
+            // to Online — same convention the edge function uses.
+            const final = next.length > 0 ? next : ['Online'];
+            sensor.status = final;
+            try {
+                if (typeof persistSensor === 'function') persistSensor(sensor);
+                if (typeof buildSensorSidebar === 'function') buildSensorSidebar();
+            } catch (err) {
+                if (typeof handleSaveError === 'function') handleSaveError(err);
+            }
+        }
     }
 
     renderDashboardAlerts();

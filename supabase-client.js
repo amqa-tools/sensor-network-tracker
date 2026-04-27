@@ -317,6 +317,22 @@ const db = {
         if (error) throw error;
     },
 
+    // Replace the full set of tags on a note. Used by the edit-note flow:
+    // user can add/remove sensors/communities/contacts in the same modal,
+    // and we mirror their final selection by deleting+reinserting.
+    async replaceNoteTags(noteId, sensors, communities, contacts) {
+        const { error: delErr } = await supa.from('note_tags').delete().eq('note_id', noteId);
+        if (delErr) throw delErr;
+        const rows = [];
+        (sensors || []).forEach(id => { if (id) rows.push({ note_id: noteId, tag_type: 'sensor', tag_id: String(id) }); });
+        (communities || []).forEach(id => { if (id) rows.push({ note_id: noteId, tag_type: 'community', tag_id: String(id) }); });
+        (contacts || []).forEach(id => { if (id) rows.push({ note_id: noteId, tag_type: 'contact', tag_id: String(id) }); });
+        if (rows.length > 0) {
+            const { error } = await supa.from('note_tags').insert(rows);
+            if (error) throw error;
+        }
+    },
+
     async addNoteContactTags(noteId, contactIds) {
         const ids = (contactIds || []).filter(Boolean).map(String);
         if (!ids.length) return [];
@@ -426,6 +442,20 @@ const db = {
         }
         const { error } = await supa.from('comms').update(row).eq('id', id);
         if (error) throw error;
+    },
+
+    // Replace the full set of tags on a comm. Comms don't have sensor
+    // tags in the schema — only communities and contacts.
+    async replaceCommTags(commId, communities, contacts) {
+        const { error: delErr } = await supa.from('comm_tags').delete().eq('comm_id', commId);
+        if (delErr) throw delErr;
+        const rows = [];
+        (communities || []).forEach(id => { if (id) rows.push({ comm_id: commId, tag_type: 'community', tag_id: String(id) }); });
+        (contacts || []).forEach(id => { if (id) rows.push({ comm_id: commId, tag_type: 'contact', tag_id: String(id) }); });
+        if (rows.length > 0) {
+            const { error } = await supa.from('comm_tags').insert(rows);
+            if (error) throw error;
+        }
     },
 
     async deleteComm(id) {

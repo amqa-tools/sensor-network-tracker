@@ -4017,7 +4017,15 @@ function openAddNoteModal(contextId, contextType) {
     document.getElementById('note-form').reset();
     document.getElementById('note-context-id').value = contextId;
     document.getElementById('note-context-type').value = contextType;
+    document.getElementById('note-edit-id').value = '';
     document.getElementById('note-date-input').value = nowDatetime();
+    // Reset modal chrome to "Add Note" mode (in case it was just used for an edit).
+    const titleEl = document.getElementById('modal-add-note-title');
+    if (titleEl) titleEl.textContent = 'Add Note';
+    const submitBtn = document.getElementById('modal-add-note-submit');
+    if (submitBtn) submitBtn.textContent = 'Save Note';
+    const actionsGroup = document.getElementById('note-actions-group');
+    if (actionsGroup) actionsGroup.style.display = '';
 
     // Clear all chip containers
     document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
@@ -4107,7 +4115,6 @@ function saveNote(e) {
     e.preventDefault();
 
     const text = document.getElementById('note-text-input').value.trim();
-    const type = getNoteActionsType();
     const noteDate = document.getElementById('note-date-input').value || nowDatetime();
 
     const sensorTags = getChipValues('tag-sensors-container');
@@ -4121,6 +4128,28 @@ function saveNote(e) {
     // Contacts come from @mentions in the note body — the separate chip
     // input was removed so there's a single source of truth.
     const contactTags = parseMentionedContacts(text);
+
+    // --- Edit mode: update existing note in place ---
+    const editId = document.getElementById('note-edit-id')?.value || '';
+    if (editId) {
+        const existing = notes.find(n => n.id === editId);
+        if (!existing) { closeModal('modal-add-note'); return; }
+        existing.text = text;
+        existing.date = noteDate;
+        existing.taggedSensors = sensorTags;
+        existing.taggedCommunities = noteCommunityTags;
+        existing.taggedContacts = contactTags;
+        Promise.all([
+            db.updateNote(editId, { text, date: noteDate }),
+            db.replaceNoteTags(editId, sensorTags, noteCommunityTags, contactTags),
+        ]).catch(handleSaveError);
+        closeModal('modal-add-note');
+        showSuccessToast('Note updated');
+        refreshCurrentView();
+        return;
+    }
+
+    const type = getNoteActionsType();
 
     const note = {
         id: generateId('n'),
@@ -4198,7 +4227,13 @@ function saveNote(e) {
 function openCommModal(communityId, presetType) {
     document.getElementById('comm-form').reset();
     document.getElementById('comm-community-id').value = communityId;
+    document.getElementById('comm-edit-id').value = '';
     document.getElementById('comm-date-input').value = nowDatetime();
+    // Reset chrome to "Log Communication" mode in case it was just used for an edit.
+    const titleEl = document.getElementById('modal-comm-title');
+    if (titleEl) titleEl.textContent = 'Log Communication';
+    const submitBtn = document.getElementById('modal-comm-submit');
+    if (submitBtn) submitBtn.textContent = 'Save';
     if (presetType) {
         const sel = document.getElementById('comm-type-input');
         if (sel) {
@@ -4227,6 +4262,28 @@ function saveComm(e) {
 
     // Contacts come from @mentions in the summary — no more separate field.
     const taggedContacts = parseMentionedContacts(text);
+
+    // --- Edit mode: update existing comm in place ---
+    const editId = document.getElementById('comm-edit-id')?.value || '';
+    if (editId) {
+        const existing = comms.find(c => c.id === editId);
+        if (!existing) { closeModal('modal-comm'); return; }
+        existing.text = text;
+        existing.date = commDate;
+        existing.commType = commType;
+        existing.community = communityId || existing.community;
+        existing.taggedContacts = taggedContacts;
+        if (communityId) existing.taggedCommunities = [communityId];
+        const taggedCommunities = existing.taggedCommunities || (communityId ? [communityId] : []);
+        Promise.all([
+            db.updateComm(editId, { text, date: commDate, commType, community: communityId || null }),
+            db.replaceCommTags(editId, taggedCommunities, taggedContacts),
+        ]).catch(handleSaveError);
+        closeModal('modal-comm');
+        showSuccessToast('Communication updated');
+        refreshCurrentView();
+        return;
+    }
 
     const comm = {
         id: generateId('comm'),
@@ -4475,69 +4532,83 @@ async function saveTimelineFollowUp(noteId) {
     refreshCurrentView();
 }
 
+// Open the full Add-Note / Log-Communication modal in edit mode, prefilled
+// with the existing record's values. Lets the user edit subject/text/date/
+// tags in the same form they used to create it. Replaces an earlier
+// simple-textarea variant whose stray event listeners on the confirm modal
+// would silently swallow the next delete-confirm click — that's the cause
+// of the "syntax error / note didn't delete" the user has been seeing.
 function editTimelineItem(id, isNote) {
-    const item = isNote ? notes.find(n => n.id === id) : comms.find(c => c.id === id);
-    if (!item) return;
+    if (isNote) return openEditNoteModal(id);
+    return openEditCommModal(id);
+}
 
-    const label = isNote ? 'Edit Note' : 'Edit Communication';
-    const body = document.getElementById('modal-confirm-body');
-    const modal = document.getElementById('modal-confirm');
+function openEditNoteModal(noteId) {
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
 
-    document.getElementById('modal-confirm-title').textContent = label;
-    body.innerHTML = `<textarea id="edit-timeline-text" rows="6" style="width:100%;font-family:var(--font-sans);font-size:14px;padding:10px;border:1px solid var(--slate-200);border-radius:8px;resize:vertical;line-height:1.5"></textarea>`;
+    // Reset and pre-fill the modal in "add" mode first (re-uses the existing
+    // wiring for chip inputs, mention autocomplete, status list).
+    openAddNoteModal('', '');
 
-    // Set value directly (not via innerHTML) to avoid HTML entity issues
-    const textarea = document.getElementById('edit-timeline-text');
-    textarea.value = item.text || '';
+    // Switch to edit mode: title, submit text, hidden id, and hide the
+    // creation-time Action checkboxes (Move/Status Change/Troubleshooting/
+    // Site Work). Re-running those on edit would re-apply movements or
+    // re-merge statuses, which isn't what "edit" should do.
+    document.getElementById('note-edit-id').value = noteId;
+    const titleEl = document.getElementById('modal-add-note-title');
+    if (titleEl) titleEl.textContent = 'Edit Note';
+    const submitBtn = document.getElementById('modal-add-note-submit');
+    if (submitBtn) submitBtn.textContent = 'Save Changes';
+    const actionsGroup = document.getElementById('note-actions-group');
+    if (actionsGroup) actionsGroup.style.display = 'none';
+    document.getElementById('note-status-change-group').style.display = 'none';
+    document.getElementById('note-move-target-group').style.display = 'none';
+    document.getElementById('note-audit-link-group').style.display = 'none';
 
-    const okBtn = document.getElementById('modal-confirm-ok');
-    const cancelBtn = document.getElementById('modal-confirm-cancel');
-    okBtn.textContent = 'Done';
-    okBtn.className = 'btn btn-primary';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.display = '';
+    // Pre-fill text + date.
+    document.getElementById('note-text-input').value = note.text || '';
+    document.getElementById('note-date-input').value = note.date || nowDatetime();
 
-    // Wire up the save directly — bypass _confirmCallback entirely
-    _confirmCallback = null;
-    _confirmDismissCallback = null;
+    // Clear chips populated by openAddNoteModal's context guess, then add
+    // chips for every tag actually on the note.
+    document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
+    (note.taggedSensors || []).forEach(sId => prefillChip('tag-sensors-container', sId));
+    (note.taggedCommunities || []).forEach(cId => {
+        const c = COMMUNITIES.find(x => x.id === cId);
+        if (c) prefillChip('tag-communities-container', c.name);
+    });
 
-    const saveHandler = function() {
-        okBtn.removeEventListener('click', saveHandler);
-        const newText = document.getElementById('edit-timeline-text')?.value?.trim();
-        // Restore default modal handlers
-        okBtn.onclick = acceptConfirmModal;
-        cancelBtn.onclick = dismissConfirmModal;
-        document.querySelector('#modal-confirm .modal-close').onclick = dismissConfirmModal;
-        modal.classList.remove('open');
+    // Re-wire mention chip strip so any @mentioned contacts already in the
+    // body show up as visible chips below the textarea.
+    if (typeof wireAllMentionChipStrips === 'function') wireAllMentionChipStrips();
+    setTimeout(() => document.getElementById('note-text-input')?.focus(), 0);
+}
 
-        if (!newText || newText === (item.text || '').trim()) return;
+function openEditCommModal(commId) {
+    const comm = comms.find(c => c.id === commId);
+    if (!comm) return;
 
-        item.text = newText;
-        const writer = isNote
-            ? db.updateNote(id, { text: newText })
-            : db.updateComm(id, { text: newText });
-        writer.catch(handleSaveError);
+    openCommModal(comm.community || '', comm.commType || '');
 
-        refreshCurrentView();
-    };
+    document.getElementById('comm-edit-id').value = commId;
+    const titleEl = document.getElementById('modal-comm-title');
+    if (titleEl) titleEl.textContent = 'Edit Communication';
+    const submitBtn = document.getElementById('modal-comm-submit');
+    if (submitBtn) submitBtn.textContent = 'Save Changes';
 
-    // Remove the default onclick and use our handler
-    okBtn.onclick = null;
-    okBtn.addEventListener('click', saveHandler, { once: true });
-
-    // Cancel/close: restore default handlers and close
-    function cleanup() {
-        okBtn.removeEventListener('click', saveHandler);
-        okBtn.onclick = acceptConfirmModal;
-        cancelBtn.onclick = dismissConfirmModal;
-        document.querySelector('#modal-confirm .modal-close').onclick = dismissConfirmModal;
-        modal.classList.remove('open');
+    document.getElementById('comm-text-input').value = comm.text || '';
+    document.getElementById('comm-date-input').value = comm.date || nowDatetime();
+    if (comm.commType) {
+        const sel = document.getElementById('comm-type-input');
+        if (sel) {
+            const match = Array.from(sel.options).find(o => o.value === comm.commType);
+            if (match) sel.value = match.value;
+        }
     }
-    cancelBtn.onclick = cleanup;
-    document.querySelector('#modal-confirm .modal-close').onclick = cleanup;
 
-    modal.classList.add('open');
-    setTimeout(() => textarea.focus(), 50);
+    if (typeof wireAllMentionChipStrips === 'function') wireAllMentionChipStrips();
+    setTimeout(() => document.getElementById('comm-text-input')?.focus(), 0);
 }
 
 async function deleteTimelineItem(id, isNote) {
