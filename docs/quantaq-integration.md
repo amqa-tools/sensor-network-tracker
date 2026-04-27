@@ -113,4 +113,4 @@ Your `.env.local` needs `QUANTAQ_API_KEY` and the Supabase service role key. Tre
 - **Double-write.** The edge function is idempotent per (sensor, issue type) — it upserts rather than inserts. Don't "fix" this by adding a dedupe on top.
 - **Timestamps are UTC.** All the `detected_at` / `grace_expires_at` values are stored as UTC; the UI converts for display.
 - **`EXPECTED_OFFLINE` lives in two places.** If you add a new app status that means "intentionally offline," add it to both `quantaq.js` and `supabase/functions/quantaq-check/index.ts`.
-- **The anon key is not enough to call the function.** Edge function invocation requires a valid user session (RLS on the RPC wrapper). The browser uses the signed-in user's JWT.
+- **The anon key is not enough to call the function.** The edge function has an auth gate that requires either the service role key (cron's path) or a real user JWT (the UI button uses `supa.functions.invoke()`, which sends the signed-in user's session JWT automatically).

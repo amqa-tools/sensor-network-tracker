@@ -88,13 +88,10 @@ const ALERT_SEVERITY = {
 async function diagnoseQuantAQSensor(sn) {
     if (!sn || typeof sn !== 'string') { console.warn('diagnoseQuantAQSensor: pass a sensor id like "MOD-00465"'); return; }
     try {
-        const resp = await fetch(SUPABASE_URL + '/functions/v1/quantaq-check', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'diagnose', sn }),
+        const { data, error } = await supa.functions.invoke('quantaq-check', {
+            body: { mode: 'diagnose', sn },
         });
-        const data = await resp.json();
-        if (!resp.ok) { console.error('[QAQ diagnose]', resp.status, data); return data; }
+        if (error) { console.error('[QAQ diagnose]', error); return; }
         console.log('[QAQ diagnose]', sn, data);
         return data;
     } catch (err) {
@@ -116,15 +113,9 @@ async function runQuantAQCheck() {
     renderCheckButtons();
 
     try {
-        const resp = await fetch(SUPABASE_URL + '/functions/v1/quantaq-check', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-        });
-        const summary = await resp.json().catch(() => ({}));
-        if (!resp.ok || summary.error) {
-            throw new Error(summary.error || `HTTP ${resp.status}`);
-        }
+        const { data: summary, error } = await supa.functions.invoke('quantaq-check', { body: {} });
+        if (error) throw error;
+        if (summary && summary.error) throw new Error(summary.error);
 
         // Pull the fresh alerts/timestamps/cron info from Supabase so the UI
         // reflects what the scan just wrote.
@@ -136,13 +127,14 @@ async function runQuantAQCheck() {
             try { await loadAllData(); } catch (_) {}
         }
 
-        const parts = [`${summary.devicesSeen ?? '?'} devices`];
-        if (summary.newCritical) parts.push(`${summary.newCritical} new alerts`);
-        if (summary.newPending) parts.push(`${summary.newPending} pending`);
-        if (summary.promotedFromPending) parts.push(`${summary.promotedFromPending} promoted`);
-        if (summary.silentlyDismissed) parts.push(`${summary.silentlyDismissed} auto-cleared`);
-        if (summary.resolved) parts.push(`${summary.resolved} resolved`);
-        const secs = Math.round((summary.durationMs ?? (Date.now() - checkStartTime)) / 100) / 10;
+        const s = summary || {};
+        const parts = [`${s.devicesSeen ?? '?'} devices`];
+        if (s.newCritical) parts.push(`${s.newCritical} new alerts`);
+        if (s.newPending) parts.push(`${s.newPending} pending`);
+        if (s.promotedFromPending) parts.push(`${s.promotedFromPending} promoted`);
+        if (s.silentlyDismissed) parts.push(`${s.silentlyDismissed} auto-cleared`);
+        if (s.resolved) parts.push(`${s.resolved} resolved`);
+        const secs = Math.round((s.durationMs ?? (Date.now() - checkStartTime)) / 100) / 10;
         updateQuantAQStatus(`Check complete in ${secs}s: ${parts.join(', ')}`);
 
         renderDashboardAlerts();

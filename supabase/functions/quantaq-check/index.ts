@@ -771,6 +771,27 @@ async function runProxy(path: string): Promise<Response> {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  // Auth gate: accept the service role key (cron) or a real user JWT (UI button).
+  // Reject the public anon key and unauthenticated callers.
+  const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const supabaseUrlForAuth = Deno.env.get("SUPABASE_URL") || "";
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  let authorized = false;
+  if (token && serviceRoleKey && token === serviceRoleKey) {
+    authorized = true;
+  } else if (token && supabaseUrlForAuth && anonKey) {
+    const authClient = createClient(supabaseUrlForAuth, anonKey);
+    const { data: { user } } = await authClient.auth.getUser(token);
+    if (user) authorized = true;
+  }
+  if (!authorized) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   try {
     let body: any = {};
     try {
